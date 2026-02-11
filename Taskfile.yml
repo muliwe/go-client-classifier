@@ -1,0 +1,49 @@
+version: '3'
+
+vars:
+  GOBIN:
+    sh: go env GOPATH
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  run:
+    desc: Run the server
+    cmds:
+      - go run cmd/server/main.go
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./... -v
+
+  test:short:
+    desc: Run tests (short mode)
+    cmds:
+      - go test ./... -short
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./... && echo "Lint passed"
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+
+  check:
+    desc: Run all checks (fmt, lint, test)
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: test:short
+
+  setup:
+    desc: Install development tools
+    cmds:
+      - go install github.com/go-task/task/v3/cmd/task@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest

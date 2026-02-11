@@ -70,34 +70,65 @@ client → TLS listener → fingerprint collector → classifier → response
 ### Prerequisites
 
 - Go 1.26+
-- Python 3.12+
-- Git
+- `$GOPATH/bin` in PATH
 
 ### Installation
 
 ```bash
-# Initialize Go module
-go mod init github.com/muliwe/go-client-slassifier
+# Clone repository
+git clone https://github.com/muliwe/go-client-slassifier.git
+cd go-client-slassifier
 
-# Install dependencies
+# Install dependencies and dev tools
 go mod tidy
+go install github.com/go-task/task/v3/cmd/task@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+```
 
+### Development
+
+```bash
 # Run server
-go run cmd/server/main.go
+task run
+
+# Run tests
+task test
+
+# Run linter
+task lint
+
+# Format code
+task fmt
+
+# Run all checks (fmt, lint, test)
+task check
+
+# List all available tasks
+task --list
 ```
 
 ### Testing
 
 ```bash
-# Run integration tests
-go test ./tests/integration/...
+# Run all tests
+task test
+
+# Run tests (short mode)
+task test:short
 
 # Test with curl
 curl http://localhost:8080/
 
-# Test with browser
-# Open http://localhost:8080/ in your browser
+# Test health endpoint
+curl http://localhost:8080/health
 ```
+
+### Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Classify client as browser or bot |
+| `GET /health` | Health check |
 
 ## Log Format
 
@@ -124,6 +155,15 @@ Each request is logged as JSON:
 2. Which signals are most predictive?
 3. How do sophisticated bots (headless Chrome) behave?
 4. What are the false positive/negative rates?
+
+## Pre-commit Hooks
+
+Project uses git pre-commit hooks for code quality:
+- Format check (`go fmt`)
+- Linter (`golangci-lint`)
+- Tests (`go test`)
+
+Hooks are automatically run before each commit.
 
 ## License
 
