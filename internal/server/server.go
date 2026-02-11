@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/muliwe/go-client-slassifier/internal/classifier"
-	"github.com/muliwe/go-client-slassifier/internal/fingerprint"
-	"github.com/muliwe/go-client-slassifier/internal/logger"
+	"github.com/muliwe/go-client-classifier/internal/classifier"
+	"github.com/muliwe/go-client-classifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/logger"
 )
 
 // Config holds server configuration

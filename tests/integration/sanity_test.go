@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/muliwe/go-client-slassifier/internal/classifier"
-	"github.com/muliwe/go-client-slassifier/internal/fingerprint"
-	"github.com/muliwe/go-client-slassifier/internal/server"
+	"github.com/muliwe/go-client-classifier/internal/classifier"
+	"github.com/muliwe/go-client-classifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/server"
 )
 
 // Response matches the server response structure

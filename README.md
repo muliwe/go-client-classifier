@@ -78,8 +78,8 @@ client → TLS listener → fingerprint collector → classifier → response
 
 ```bash
 # Clone repository
-git clone https://github.com/muliwe/go-client-slassifier.git
-cd go-client-slassifier
+git clone https://github.com/muliwe/go-client-classifier.git
+cd go-client-classifier
 
 # Install dependencies and dev tools
 go mod tidy

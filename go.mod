@@ -1,4 +1,4 @@
-module github.com/muliwe/go-client-slassifier
+module github.com/muliwe/go-client-classifier
 
 go 1.26
 

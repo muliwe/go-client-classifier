@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/muliwe/go-client-slassifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 )
 
 // LogEntry represents a single log entry

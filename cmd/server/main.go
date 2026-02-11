@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/muliwe/go-client-slassifier/internal/server"
+	"github.com/muliwe/go-client-classifier/internal/server"
 )
 
 func main() {

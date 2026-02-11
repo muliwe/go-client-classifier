@@ -20,7 +20,7 @@ linters-settings:
   gofmt:
     simplify: true
   goimports:
-    local-prefixes: github.com/muliwe/go-client-slassifier
+    local-prefixes: github.com/muliwe/go-client-classifier
   misspell:
     locale: US
 

@@ -3,7 +3,7 @@ package classifier
 import (
 	"time"
 
-	"github.com/muliwe/go-client-slassifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 
 	"github.com/google/uuid"
 )
