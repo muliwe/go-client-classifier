@@ -10,6 +10,11 @@ tasks:
     cmds:
       - task --list
 
+  build:
+    desc: Build the server binary
+    cmds:
+      - go build -o bin/server ./cmd/server
+
   run:
     desc: Run the server
     cmds:

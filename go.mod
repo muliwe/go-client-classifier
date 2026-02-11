@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/go-task/task/v3 v3.48.0
 	github.com/golangci/golangci-lint v1.64.8
+	github.com/google/uuid v1.6.0
 )
 
 require (
@@ -135,7 +136,6 @@ require (
 	github.com/golangci/unconvert v0.0.0-20240309020433-c5143eacb3ed // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gordonklaus/ineffassign v0.1.0 // indirect

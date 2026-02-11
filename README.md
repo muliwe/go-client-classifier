@@ -2,6 +2,8 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
+> **Research Documentation**: See [docs/METHODOLOGY.md](docs/METHODOLOGY.md) for detailed methodology, signal descriptions, scoring algorithm, and references to related work.
+
 ## Project Goal
 
 Create a single HTTP endpoint that classifies clients as `browser` or `bot` based exclusively on:
@@ -88,7 +90,10 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 ### Development
 
 ```bash
-# Run server
+# Build binary
+task build
+
+# Run server (development)
 task run
 
 # Run tests
@@ -105,6 +110,19 @@ task check
 
 # List all available tasks
 task --list
+```
+
+### Build
+
+```bash
+# Build binary to bin/server
+task build
+
+# Or manually
+go build -o bin/server ./cmd/server
+
+# Run the binary
+./bin/server
 ```
 
 ### Testing
