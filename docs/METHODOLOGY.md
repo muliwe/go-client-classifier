@@ -880,4 +880,165 @@ Accept: */*
 
 ---
 
+## Appendix C: TLS Fingerprinting Implementation
+
+This appendix describes the current TLS fingerprinting implementation as of v0.3.0.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Incoming TLS Connection                            │
+└─────────────────────────────┬───────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     net.Listen("tcp", ":8443")                              │
+│                         Raw TCP Listener                                    │
+└─────────────────────────────┬───────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              fingerprintlistener.NewListener(tcpListener)                   │
+│                                                                             │
+│   Intercepts ClientHello before TLS handshake completes:                    │
+│   - Reads raw ClientHello bytes                                             │
+│   - Parses cipher suites, extensions, versions, groups                      │
+│   - Computes JA3 and JA4 hashes                                             │
+│   - Stores fingerprint in connection wrapper                                │
+└─────────────────────────────┬───────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   http.Server.ServeTLS(fpListener, "", "")                  │
+│                                                                             │
+│   TLS handshake completes, HTTP/2 or HTTP/1.1 negotiated                    │
+└─────────────────────────────┬───────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      http.Server.ConnContext                                │
+│                                                                             │
+│   func(ctx context.Context, c net.Conn) context.Context {                   │
+│       // Unwrap *tls.Conn to get underlying fingerprintlistener.Conn        │
+│       tlsConn := c.(*tls.Conn)                                              │
+│       fpConn := tlsConn.NetConn().(fingerprintlistener.Conn)                │
+│       fp := fpConn.Fingerprint()                                            │
+│       return context.WithValue(ctx, ContextKeyTLSFingerprint, fp)           │
+│   }                                                                         │
+└─────────────────────────────┬───────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         HTTP Handler                                        │
+│                                                                             │
+│   fp := ctx.Value(ContextKeyTLSFingerprint).(*tlsfingerprint.Fingerprint)   │
+│   - Access fp.CipherSuites, fp.Extensions, fp.SupportedVersions             │
+│   - Access fp.JA3Hash(), fp.JA4Hash()                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Library Used
+
+**github.com/psanford/tlsfingerprint** (v0.0.0-20251111180026-c742e470de9b)
+
+This library provides:
+- `fingerprintlistener.NewListener()` - wraps net.Listener to capture ClientHello
+- `fingerprintlistener.Conn` - connection interface with `Fingerprint()` method
+- `tlsfingerprint.Fingerprint` - struct containing parsed ClientHello data
+- Built-in JA3 and JA4 hash computation
+
+### Fingerprint Data Structure
+
+```go
+type Fingerprint struct {
+    Version           uint16       // Negotiated TLS version
+    RawVersion        uint16       // Raw version from ClientHello (0x0303 for TLS 1.2)
+    CipherSuites      []uint16     // Offered cipher suites
+    Extensions        []uint16     // TLS extension IDs
+    SupportedVersions []uint16     // From supported_versions extension
+    SupportedGroups   []uint16     // Elliptic curve groups (incl. GREASE)
+    SignatureSchemes  []uint16     // Signature algorithms
+    ALPNProtocols     []string     // Application layer protocols
+    // ... additional fields
+}
+```
+
+### JA3 Hash Computation
+
+JA3 format: `version,ciphers,extensions,curves,point_formats`
+
+Example for curl:
+```
+771,4866-4867-4865-49196-49200-159-52393-52392-52394-49195-49199-158-49188-49192-107-49187-49191-103-49162-49172-57-49161-49171-51-157-156-61-60-53-47-255,0-11-10-35-22-23-13-43-45-51,29-23-24,0
+```
+
+MD5 hash: `2e6c64f66822fc35b6a7a128b557f1de`
+
+### JA4 Hash Computation
+
+JA4 format: `protocol_version_ciphers_extensions`
+
+Three-part structure:
+1. `t13d2012h1` - protocol info (TLS 1.3, 20 ciphers, 12 extensions, HTTP/1.1)
+2. `2b729b4bf6f3` - truncated SHA256 of sorted cipher suites
+3. `36bf25f296df` - truncated SHA256 of sorted extensions
+
+Example for curl: `t13d2012h1_2b729b4bf6f3_36bf25f296df`
+
+### Scoring Integration
+
+TLS fingerprint signals contribute to browser/bot scoring:
+
+| Signal | Condition | Score |
+|--------|-----------|-------|
+| `has_modern_tls` | TLS 1.2 or 1.3 | +1 browser |
+| `high_cipher_count` | >= 15 cipher suites | +2 browser |
+| `has_session_support` | Session ticket extension present | +1 browser |
+| `has_multiple_groups` | >= 3 elliptic curve groups | +1 browser |
+| `has_tls_fingerprint` | ClientHello captured | (required for above) |
+| Extensions >= 10 | Extension count check | +1 browser |
+
+### Example Output
+
+**Chrome 144 (real browser):**
+```json
+{
+  "cipher_suites_count": 16,
+  "extensions_count": 18,
+  "supported_groups": ["GREASE", "0x11ec", "x25519", "secp256r1", "secp384r1"],
+  "ja3_hash": "9b0d79d10808bc0e509b4789f870a650",
+  "ja4_hash": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
+  "browser_score": 18,
+  "bot_score": 0
+}
+```
+
+**curl 8.16:**
+```json
+{
+  "cipher_suites_count": 20,
+  "extensions_count": 12,
+  "supported_groups": ["x25519", "secp256r1", "secp384r1"],
+  "ja3_hash": "2e6c64f66822fc35b6a7a128b557f1de",
+  "ja4_hash": "t13d2012h1_2b729b4bf6f3_36bf25f296df",
+  "browser_score": 6,
+  "bot_score": 9
+}
+```
+
+### Key Observations
+
+1. **GREASE detection**: Chrome includes GREASE values (0x0a0a, 0x1a1a, etc.) in supported_groups and extensions. This is a strong browser indicator.
+
+2. **Extension count**: Browsers typically have 15-20 extensions, while HTTP libraries have 10-15.
+
+3. **Cipher suite ordering**: While JA3 is order-dependent, JA4 sorts before hashing for stability across browser updates.
+
+4. **HTTP/2 correlation**: Browsers negotiate HTTP/2 via ALPN (`h2`), while curl defaults to HTTP/1.1.
+
+5. **Session tickets**: Both browsers and modern HTTP clients support session tickets, so this signal is weak alone but contributes to overall scoring.
+
+---
+
 See [CHANGELOG.md](../CHANGELOG.md) for version history.
