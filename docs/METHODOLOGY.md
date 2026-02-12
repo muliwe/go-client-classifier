@@ -12,6 +12,11 @@ Research documentation for transport-level HTTP client classification.
 6. [Limitations & Future Work](#limitations--future-work)
 7. [References](#references)
 
+**Appendices**
+- [Appendix A: Bot User-Agent Patterns](#appendix-a-bot-user-agent-patterns)
+- [Appendix B: Browser Header Patterns](#appendix-b-browser-header-patterns)
+- [Appendix C: TLS Fingerprinting Implementation](#appendix-c-tls-fingerprinting-implementation)
+
 ---
 
 ## Research Overview
