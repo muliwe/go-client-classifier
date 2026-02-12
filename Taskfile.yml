@@ -52,3 +52,11 @@ tasks:
     cmds:
       - go install github.com/go-task/task/v3/cmd/task@latest
       - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+  integration:
+    desc: Run integration tests against running server (curl-based)
+    vars:
+      BASE_URL: '{{.BASE_URL | default "http://localhost:8080"}}'
+    cmds:
+      - cmd: |
+          {{if eq OS "windows"}}powershell -ExecutionPolicy Bypass -File ./tools/shell/integration_test.ps1 {{.BASE_URL}}{{else}}./tools/shell/integration_test.sh {{.BASE_URL}}{{end}}

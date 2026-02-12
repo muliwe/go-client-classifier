@@ -40,7 +40,8 @@ client → TLS listener → fingerprint collector → classifier → response
 ├── tests/
 │   └── integration/     # Automated client tests
 ├── tools/
-│   └── python/          # Analytics tools
+│   ├── python/          # Analytics tools
+│   └── shell/           # Integration test scripts
 ├── logs/                # JSON traffic logs
 └── docs/                # Research documentation
 ```
@@ -141,12 +142,38 @@ curl http://localhost:8080/
 curl http://localhost:8080/health
 ```
 
+### Integration Tests
+
+Run integration tests against a running server using curl:
+
+```bash
+# Start the server first
+task run
+
+# In another terminal, run integration tests
+task integration
+
+# Or with custom base URL
+task integration BASE_URL=http://localhost:3000
+```
+
+The integration tests automatically detect the OS and use:
+- `tools/shell/integration_test.ps1` for Windows (PowerShell)
+- `tools/shell/integration_test.sh` for Unix (Linux/macOS)
+
+Tests verify:
+- `GET /health` — health check endpoint returns `{"status":"ok"}`
+- `GET /` — classify endpoint returns classification
+- `GET /debug` — debug endpoint returns fingerprint data
+- curl is correctly detected as bot
+
 ### Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Classify client as browser or bot |
 | `GET /health` | Health check |
+| `GET /debug` | Debug info with full fingerprint (dev only) |
 
 ## Log Format
 
