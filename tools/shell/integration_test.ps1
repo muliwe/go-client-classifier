@@ -1,14 +1,24 @@
 # Integration test script for Windows (PowerShell)
-# Usage: .\integration_test.ps1 [base_url]
+# Usage: .\integration_test.ps1 [base_url] [-SkipCertCheck]
 
 param(
-    [string]$BaseUrl = "http://localhost:8080"
+    [string]$BaseUrl = "http://localhost:8080",
+    [switch]$SkipCertCheck
 )
 
 $ErrorActionPreference = "Stop"
 
+# Determine curl flags based on TLS mode
+$curlFlags = "-s"
+if ($SkipCertCheck) {
+    $curlFlags = "-s -k"
+}
+
 Write-Host "=== Integration Tests ===" -ForegroundColor Cyan
 Write-Host "Base URL: $BaseUrl" -ForegroundColor Gray
+if ($SkipCertCheck) {
+    Write-Host "TLS Mode: Skip certificate verification" -ForegroundColor Yellow
+}
 Write-Host ""
 
 $passed = 0
@@ -25,9 +35,17 @@ function Test-Endpoint {
     Write-Host -NoNewline "Testing $Name... "
     
     try {
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
-        $statusCode = $response.StatusCode
-        $body = $response.Content
+        # Use curl for HTTPS with self-signed certs
+        if ($script:SkipCertCheck) {
+            $curlOutput = curl.exe -s -k -w "`n%{http_code}" $Url 2>$null
+            $lines = $curlOutput -split "`n"
+            $statusCode = [int]$lines[-1]
+            $body = ($lines[0..($lines.Length - 2)]) -join "`n"
+        } else {
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
+            $statusCode = $response.StatusCode
+            $body = $response.Content
+        }
         
         if ($statusCode -ne $ExpectedStatus) {
             Write-Host "FAILED" -ForegroundColor Red
@@ -62,7 +80,11 @@ function Test-CurlEndpoint {
     Write-Host -NoNewline "Testing $Name (curl)... "
     
     try {
-        $curlOutput = curl.exe -s -w "`n%{http_code}" $Url 2>$null
+        if ($script:SkipCertCheck) {
+            $curlOutput = curl.exe -s -k -w "`n%{http_code}" $Url 2>$null
+        } else {
+            $curlOutput = curl.exe -s -w "`n%{http_code}" $Url 2>$null
+        }
         $lines = $curlOutput -split "`n"
         $statusCode = $lines[-1]
         $body = ($lines[0..($lines.Length - 2)]) -join "`n"

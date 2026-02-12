@@ -74,6 +74,7 @@ client → TLS listener → fingerprint collector → classifier → response
 
 - Go 1.26+
 - `$GOPATH/bin` in PATH
+- TLS certificate and key (for HTTPS mode)
 
 ### Installation
 
@@ -88,14 +89,42 @@ go install github.com/go-task/task/v3/cmd/task@latest
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 ```
 
+### TLS Certificate Setup
+
+For TLS fingerprinting to work, the server must run in HTTPS mode. Place your certificate and key in the `certs/` directory:
+
+```
+certs/
+├── server.crt
+└── server.key
+```
+
+**Note**: The `certs/` directory is in `.gitignore` — certificates are not committed to the repository.
+
+To generate a self-signed certificate for local development:
+
+```bash
+# Create certs directory
+mkdir certs
+
+# Generate self-signed certificate (valid for 1 year)
+openssl req -x509 -newkey rsa:4096 -keyout certs/server.key -out certs/server.crt \
+  -days 365 -nodes -subj "/CN=localhost"
+```
+
+Add the certificate to your system's trusted certificates for browser testing without warnings.
+
 ### Development
 
 ```bash
 # Build binary
 task build
 
-# Run server (development)
+# Run server (HTTP mode, no TLS fingerprinting)
 task run
+
+# Run server with HTTPS (required for TLS fingerprinting)
+task run:tls
 
 # Run tests
 task test
@@ -135,11 +164,15 @@ task test
 # Run tests (short mode)
 task test:short
 
-# Test with curl
+# Test with curl (HTTP mode)
 curl http://localhost:8080/
+
+# Test with curl (HTTPS mode)
+curl https://localhost:8443/
 
 # Test health endpoint
 curl http://localhost:8080/health
+curl https://localhost:8443/health
 ```
 
 ### Integration Tests
@@ -147,14 +180,17 @@ curl http://localhost:8080/health
 Run integration tests against a running server using curl:
 
 ```bash
-# Start the server first
-task run
+# HTTP mode
+task run                    # Start server (terminal 1)
+task integration            # Run tests (terminal 2)
 
-# In another terminal, run integration tests
-task integration
+# HTTPS mode (TLS fingerprinting)
+task run:tls                # Start HTTPS server (terminal 1)
+task integration:tls        # Run tests with --insecure (terminal 2)
 
-# Or with custom base URL
+# Custom base URL
 task integration BASE_URL=http://localhost:3000
+task integration:tls BASE_URL=https://localhost:8443
 ```
 
 The integration tests automatically detect the OS and use:

@@ -20,6 +20,15 @@ func main() {
 		cfg.EnableDebug = true
 	}
 
+	// TLS configuration from environment
+	tlsCert := os.Getenv("TLS_CERT")
+	tlsKey := os.Getenv("TLS_KEY")
+	if tlsCert != "" && tlsKey != "" {
+		cfg.TLSEnabled = true
+		cfg.TLSCertFile = tlsCert
+		cfg.TLSKeyFile = tlsKey
+	}
+
 	srv, err := server.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,6 +25,11 @@ type Config struct {
 	EnableDebug   bool
 	LoggerConfig  logger.Config
 	ClassifierCfg classifier.Config
+
+	// TLS configuration
+	TLSEnabled  bool
+	TLSCertFile string
+	TLSKeyFile  string
 }
 
 // DefaultConfig returns sensible defaults
@@ -36,6 +42,7 @@ func DefaultConfig() Config {
 		EnableDebug:   true,
 		LoggerConfig:  logger.DefaultConfig(),
 		ClassifierCfg: classifier.DefaultConfig(),
+		TLSEnabled:    false,
 	}
 }
 
@@ -76,6 +83,15 @@ func New(cfg Config) (*Server, error) {
 		IdleTimeout:  cfg.IdleTimeout,
 	}
 
+	// Configure TLS if enabled
+	if cfg.TLSEnabled {
+		tlsConfig := &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"}, // Enable HTTP/2
+		}
+		httpServer.TLSConfig = tlsConfig
+	}
+
 	return &Server{
 		cfg:        cfg,
 		httpServer: httpServer,
@@ -91,14 +107,25 @@ func (s *Server) Start() error {
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("Bot Detector Server starting on %s", s.cfg.Addr)
+		protocol := "HTTP"
+		if s.cfg.TLSEnabled {
+			protocol = "HTTPS"
+		}
+		log.Printf("Bot Detector Server starting on %s (%s)", s.cfg.Addr, protocol)
 		log.Printf("Endpoints: / (classify), /health (health check)")
 		if s.cfg.EnableDebug {
 			log.Printf("Debug endpoint enabled: /debug")
 		}
 		log.Printf("Logs: %s", s.logger.LogPath())
 
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.cfg.TLSEnabled {
+			log.Printf("TLS Certificate: %s", s.cfg.TLSCertFile)
+			err = s.httpServer.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+		} else {
+			err = s.httpServer.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()

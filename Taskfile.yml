@@ -16,7 +16,16 @@ tasks:
       - go build -o bin/server ./cmd/server
 
   run:
-    desc: Run the server
+    desc: Run the server (HTTP mode)
+    cmds:
+      - go run cmd/server/main.go
+
+  run:tls:
+    desc: Run the server with HTTPS (TLS fingerprinting enabled)
+    env:
+      PORT: "8443"
+      TLS_CERT: "certs/bot.local.crt"
+      TLS_KEY: "certs/bot.local.key"
     cmds:
       - go run cmd/server/main.go
 
@@ -60,3 +69,11 @@ tasks:
     cmds:
       - cmd: |
           {{if eq OS "windows"}}powershell -ExecutionPolicy Bypass -File ./tools/shell/integration_test.ps1 {{.BASE_URL}}{{else}}./tools/shell/integration_test.sh {{.BASE_URL}}{{end}}
+
+  integration:tls:
+    desc: Run integration tests against HTTPS server (curl-based, skip cert verification)
+    vars:
+      BASE_URL: '{{.BASE_URL | default "https://localhost:8443"}}'
+    cmds:
+      - cmd: |
+          {{if eq OS "windows"}}powershell -ExecutionPolicy Bypass -File ./tools/shell/integration_test.ps1 {{.BASE_URL}} -SkipCertCheck{{else}}./tools/shell/integration_test.sh {{.BASE_URL}} --insecure{{end}}

@@ -1,10 +1,17 @@
 #!/bin/bash
 # Integration test script for Unix (Linux/macOS)
-# Usage: ./integration_test.sh [base_url]
+# Usage: ./integration_test.sh [base_url] [--insecure]
 
 set -e
 
 BASE_URL="${1:-http://localhost:8080}"
+CURL_FLAGS="-s"
+
+# Check for --insecure flag (skip TLS cert verification)
+if [ "$2" = "--insecure" ]; then
+    CURL_FLAGS="-s -k"
+    echo "TLS Mode: Skip certificate verification"
+fi
 
 echo "=== Integration Tests ==="
 echo "Base URL: $BASE_URL"
@@ -28,7 +35,7 @@ test_endpoint() {
     
     printf "Testing %s... " "$name"
     
-    response=$(curl -s -w "\n%{http_code}" "$url" 2>/dev/null)
+    response=$(curl $CURL_FLAGS -w "\n%{http_code}" "$url" 2>/dev/null)
     status_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
     

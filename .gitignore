@@ -61,6 +61,7 @@ htmlcov/
 .env.local
 
 # Certificates (for local TLS testing)
+certs/
 *.pem
 *.key
 *.crt
