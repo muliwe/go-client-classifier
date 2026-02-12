@@ -53,12 +53,15 @@ type HTTPFingerprint struct {
 
 // Signals contains extracted classification signals
 type Signals struct {
-	// TLS signals
+	// TLS signals (from ClientHello)
 	IsHTTP2           bool `json:"is_http2"`
 	HasModernTLS      bool `json:"has_modern_tls"`      // TLS 1.2+
 	HasALPN           bool `json:"has_alpn"`            // ALPN negotiated
-	HighCipherCount   bool `json:"high_cipher_count"`   // > 10 cipher suites
-	HasSessionSupport bool `json:"has_session_support"` // Session tickets
+	HighCipherCount   bool `json:"high_cipher_count"`   // > 10 cipher suites (browsers typically have 15-20)
+	HasSessionSupport bool `json:"has_session_support"` // Session tickets support
+	HasTLSFingerprint bool `json:"has_tls_fingerprint"` // JA3/JA4 fingerprint available
+	HasMultipleGroups bool `json:"has_multiple_groups"` // Multiple elliptic curve groups (browsers)
+	HasModernCiphers  bool `json:"has_modern_ciphers"`  // Has TLS 1.3 cipher suites
 
 	// HTTP signals
 	HasSecFetchHeaders bool `json:"has_sec_fetch_headers"` // Has Sec-Fetch-* headers
@@ -66,6 +69,7 @@ type Signals struct {
 	HasUserAgent       bool `json:"has_user_agent"`        // Has User-Agent
 	HasAccept          bool `json:"has_accept"`            // Has Accept header
 	HasAcceptEncoding  bool `json:"has_accept_encoding"`   // Has Accept-Encoding
+	HasSecClientHints  bool `json:"has_sec_ch_ua"`         // Has Sec-CH-UA headers
 
 	// Heuristic signals
 	UserAgentIsBot       bool `json:"ua_is_bot"`        // UA contains bot indicators
@@ -76,8 +80,9 @@ type Signals struct {
 	MissingTypicalHeader bool `json:"missing_typical_header"` // Missing expected headers
 
 	// Computed
-	BrowserScore int `json:"browser_score"` // Score towards browser classification
-	BotScore     int `json:"bot_score"`     // Score towards bot classification
+	BrowserScore   int    `json:"browser_score"`   // Score towards browser classification
+	BotScore       int    `json:"bot_score"`       // Score towards bot classification
+	ScoreBreakdown string `json:"score_breakdown"` // Detailed scoring explanation
 }
 
 // ClassificationResult contains the final classification

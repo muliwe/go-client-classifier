@@ -2,17 +2,27 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-> **Research Documentation**: See [docs/METHODOLOGY.md](docs/METHODOLOGY.md) for detailed methodology, signal descriptions, scoring algorithm, and references to related work.
+**Version**: 0.3.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ## Project Goal
 
 Create a single HTTP endpoint that classifies clients as `browser` or `bot` based exclusively on:
-- TLS handshake patterns
+- TLS handshake patterns (JA3/JA4 fingerprinting)
 - HTTP/2 negotiation behavior
 - Header structure and semantics
 - Request patterns
 
 **No JavaScript challenges, no rate limiting** — pure network fingerprinting.
+
+## Current Status
+
+Phase 1 (TLS Fingerprinting) complete:
+- Full ClientHello capture with custom TLS listener
+- JA3 and JA4 hash computation
+- TLS-based classification signals integrated into scoring
+- HTTPS server mode with configurable certificates
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Architecture
 
@@ -49,10 +59,13 @@ client → TLS listener → fingerprint collector → classifier → response
 ## Classification Signals
 
 ### TLS Level
+- Full ClientHello capture via custom TLS listener
+- JA3/JA4 fingerprint hashing
 - ALPN negotiation (h2, http/1.1)
-- Cipher suite count and complexity
-- TLS extensions count
-- Connection behavior
+- Cipher suite count and complexity (15+ suggests browser)
+- TLS extensions count (10+ suggests browser)
+- Supported versions, signature schemes, elliptic curve groups
+- Session ticket and early data support
 
 ### HTTP Level
 - HTTP/2 vs HTTP/1.1
@@ -213,20 +226,34 @@ Tests verify:
 
 ## Log Format
 
-Each request is logged as JSON:
+Each request is logged as JSON with full fingerprint data:
 
 ```json
 {
-  "timestamp": "2026-02-11T15:30:45Z",
+  "timestamp": "2026-02-12T12:40:35Z",
   "request_id": "uuid",
-  "classification": "bot",
-  "confidence": 0.85,
+  "classification": "browser",
+  "confidence": 0.99,
   "fingerprint": {
-    "tls": {...},
-    "http": {...}
+    "tls": {
+      "version": "TLS 1.3",
+      "cipher_suites_count": 16,
+      "extensions_count": 18,
+      "ja3_hash": "9b0d79d10808bc0e509b4789f870a650",
+      "ja4_hash": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
+      "supported_groups": ["GREASE", "x25519", "secp256r1", "secp384r1"]
+    },
+    "http": {
+      "version": "HTTP/2.0",
+      "header_count": 14
+    }
   },
-  "signals": {...},
-  "score": 4
+  "signals": {
+    "browser_score": 18,
+    "bot_score": 0,
+    "score_breakdown": "BROWSER[http2(+2) sec-fetch(+3) ...] BOT[]"
+  },
+  "score": 18
 }
 ```
 
@@ -245,6 +272,11 @@ Project uses git pre-commit hooks for code quality:
 - Tests (`go test`)
 
 Hooks are automatically run before each commit.
+
+## Documentation
+
+- [CHANGELOG.md](CHANGELOG.md) — version history and release notes
+- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references
 
 ## License
 

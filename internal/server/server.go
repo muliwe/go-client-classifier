@@ -5,11 +5,14 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/psanford/tlsfingerprint/fingerprintlistener"
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
@@ -52,6 +55,7 @@ type Server struct {
 	httpServer *http.Server
 	handler    *Handler
 	logger     *logger.Logger
+	listener   net.Listener
 }
 
 // New creates a new server instance
@@ -90,6 +94,24 @@ func New(cfg Config) (*Server, error) {
 			NextProtos: []string{"h2", "http/1.1"}, // Enable HTTP/2
 		}
 		httpServer.TLSConfig = tlsConfig
+
+		// Set ConnContext to inject TLS fingerprint into request context
+		// The connection is wrapped: tls.Conn -> fingerprintlistener.Conn -> net.Conn
+		// We need to unwrap tls.Conn first to get the fingerprint connection
+		httpServer.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
+			// Unwrap TLS connection to get the underlying fingerprint connection
+			if tlsConn, ok := c.(*tls.Conn); ok {
+				c = tlsConn.NetConn()
+			}
+
+			if fpConn, ok := c.(fingerprintlistener.Conn); ok {
+				fp := fpConn.Fingerprint()
+				if fp != nil {
+					return TLSFingerprintToContext(ctx, fp)
+				}
+			}
+			return ctx
+		}
 	}
 
 	return &Server{
@@ -109,7 +131,7 @@ func (s *Server) Start() error {
 	go func() {
 		protocol := "HTTP"
 		if s.cfg.TLSEnabled {
-			protocol = "HTTPS"
+			protocol = "HTTPS (TLS fingerprinting enabled)"
 		}
 		log.Printf("Bot Detector Server starting on %s (%s)", s.cfg.Addr, protocol)
 		log.Printf("Endpoints: / (classify), /health (health check)")
@@ -121,7 +143,7 @@ func (s *Server) Start() error {
 		var err error
 		if s.cfg.TLSEnabled {
 			log.Printf("TLS Certificate: %s", s.cfg.TLSCertFile)
-			err = s.httpServer.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+			err = s.startTLS()
 		} else {
 			err = s.httpServer.ListenAndServe()
 		}
@@ -140,12 +162,47 @@ func (s *Server) Start() error {
 		return fmt.Errorf("server shutdown failed: %w", err)
 	}
 
+	if s.listener != nil {
+		_ = s.listener.Close()
+	}
+
 	if err := s.logger.Close(); err != nil {
 		log.Printf("Error closing logger: %v", err)
 	}
 
 	log.Println("Server stopped")
 	return nil
+}
+
+// startTLS starts the server with TLS and fingerprint listener
+func (s *Server) startTLS() error {
+	// Load TLS certificate
+	cert, err := tls.LoadX509KeyPair(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load TLS certificate: %w", err)
+	}
+
+	// Create base TCP listener
+	tcpListener, err := net.Listen("tcp", s.cfg.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to create TCP listener: %w", err)
+	}
+
+	// Wrap with fingerprint listener to capture ClientHello
+	fpListener := fingerprintlistener.NewListener(tcpListener)
+	s.listener = fpListener
+
+	// Configure TLS on the http.Server (not on listener)
+	// This way ServeTLS wraps the connection, but we can unwrap in ConnContext
+	s.httpServer.TLSConfig = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+		NextProtos:   []string{"h2", "http/1.1"},
+	}
+
+	log.Printf("TLS fingerprinting active (JA3/JA4)")
+	// Use ServeTLS which handles TLS on top of our fingerprint listener
+	return s.httpServer.ServeTLS(fpListener, "", "")
 }
 
 // Close gracefully shuts down the server

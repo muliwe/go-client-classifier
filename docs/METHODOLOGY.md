@@ -160,8 +160,16 @@ Per Imperva 2025 Bad Bot Report:
 | `is_http2` | HTTP/2 protocol negotiated | ✓ (most browsers prefer H2) |
 | `has_modern_tls` | TLS 1.2 or 1.3 | ✓ |
 | `has_alpn` | ALPN negotiated | ✓ |
-| `cipher_suites_count` | Number of offered ciphers | High count suggests browser |
+| `cipher_suites_count` | Number of offered ciphers | High count (≥15) suggests browser |
+| `extensions_count` | Number of TLS extensions | High count (≥10) suggests browser |
 | `has_session_ticket` | Session resumption support | ✓ |
+| `has_multiple_groups` | ≥3 supported elliptic curve groups | ✓ |
+| `has_tls_fingerprint` | Full ClientHello captured | ✓ (required for JA3/JA4) |
+| `ja3_hash` | JA3 fingerprint hash | Client identification |
+| `ja4_hash` | JA4 fingerprint hash | Client identification (stable) |
+| `supported_versions` | TLS versions offered by client | Modern clients offer TLS 1.2+ |
+| `signature_schemes` | Signature algorithms supported | Variety suggests browser |
+| `supported_groups` | Elliptic curves (incl. GREASE) | GREASE presence suggests browser |
 
 #### HTTP-Level Signals
 
@@ -193,11 +201,15 @@ Current implementation uses the following weights:
 +2: is_http2
 +2: ua_is_browser (without bot patterns)
 +2: has_sec_ch_ua (client hints)
++2: high_cipher_count (>= 15 cipher suites)
 +1: has_accept_language
 +1: has_browser_headers
 +1: has_cookies
 +1: header_count >= 10
 +1: has_modern_tls
++1: has_session_ticket (TLS session resumption)
++1: has_multiple_groups (>= 3 supported groups)
++1: tls_extensions >= 10
 ```
 
 **Bot-positive signals:**
@@ -324,37 +336,56 @@ Classification: browser (confidence: 0.97)
 
 ```json
 {
-  "timestamp": "2026-02-11T15:30:45.123Z",
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "remote_addr": "192.168.1.100:54321",
-  "classification": "bot",
-  "confidence": 0.95,
+  "timestamp": "2026-02-12T12:40:35.460Z",
+  "request_id": "1156b9b3-04a1-4de7-a4bb-8fa4cc9d688b",
+  "classification": "browser",
+  "confidence": 0.99,
   "fingerprint": {
     "tls": {
       "version": "TLS 1.3",
       "cipher_suite": "TLS_AES_128_GCM_SHA256",
       "alpn": "h2",
+      "server_name": "localhost",
+      "cipher_suites_count": 16,
+      "extensions_count": 18,
+      "supported_versions": ["TLS 1.3", "raw: TLS 1.2"],
+      "signature_schemes": ["ecdsa_secp256r1_sha256", "rsa_pss_rsae_sha256", "..."],
+      "supported_groups": ["GREASE", "x25519", "secp256r1", "secp384r1"],
+      "has_session_ticket": true,
+      "has_early_data": false,
+      "ja3_hash": "9b0d79d10808bc0e509b4789f870a650",
+      "ja4_hash": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
       "available": true
     },
     "http": {
       "version": "HTTP/2.0",
       "method": "GET",
-      "path": "/",
-      "user_agent": "curl/8.0.1",
-      "header_count": 3,
-      "header_order": ["user-agent", "accept", "host"]
+      "path": "/debug",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...",
+      "header_count": 14,
+      "header_order": ["accept", "sec-fetch-mode", "sec-fetch-dest", "..."]
     }
   },
   "signals": {
     "is_http2": true,
-    "has_sec_fetch_headers": false,
-    "ua_is_bot": true,
-    "browser_score": 2,
-    "bot_score": 6
+    "has_modern_tls": true,
+    "has_alpn": true,
+    "high_cipher_count": true,
+    "has_session_support": true,
+    "has_tls_fingerprint": true,
+    "has_multiple_groups": true,
+    "has_modern_ciphers": true,
+    "has_sec_fetch_headers": true,
+    "has_accept_language": true,
+    "has_sec_ch_ua": true,
+    "ua_is_bot": false,
+    "ua_is_browser": true,
+    "browser_score": 18,
+    "bot_score": 0,
+    "score_breakdown": "BROWSER[http2(+2) sec-fetch(+3) accept-lang(+1) browser-headers(+1) browser-ua(+2) sec-ch-ua(+2) headers>=10(+1) modern-tls(+1) high-ciphers(+2) session-ticket(+1) multi-groups(+1) tls-ext>=10(+1)] BOT[]"
   },
-  "score": -4,
-  "reason": "Bot indicators: bot User-Agent pattern, missing browser headers",
-  "response_time_ms": 1
+  "score": 18,
+  "reason": "Browser indicators: has Sec-Fetch headers, uses HTTP/2, browser User-Agent, has browser-specific headers"
 }
 ```
 
@@ -364,15 +395,13 @@ Classification: browser (confidence: 0.97)
 
 ### Current Limitations
 
-1. **No TLS ClientHello parsing**: Standard Go TLS doesn't expose full ClientHello data needed for JA3/JA4 computation. Requires custom TLS listener.
+1. **HTTP/2 frame analysis**: Not implemented. Could extract SETTINGS, WINDOW_UPDATE, PRIORITY frame patterns.
 
-2. **HTTP/2 frame analysis**: Not implemented. Could extract SETTINGS, WINDOW_UPDATE, PRIORITY frame patterns.
+2. **No behavioral analysis**: Single-request classification only. No session/temporal patterns.
 
-3. **No behavioral analysis**: Single-request classification only. No session/temporal patterns.
+3. **Evasion vulnerability**: Sophisticated bots can spoof headers (except Sec-Fetch-*).
 
-4. **Evasion vulnerability**: Sophisticated bots can spoof headers (except Sec-Fetch-*).
-
-5. **No ML model**: Rule-based only. ML could improve accuracy.
+4. **No ML model**: Rule-based only. ML could improve accuracy.
 
 ### Future Work
 
@@ -380,17 +409,26 @@ Based on recent research (2025-2026), the following development roadmap addresse
 
 ---
 
-#### Phase 1: TLS Fingerprinting Enhancement
+#### Phase 1: TLS Fingerprinting Enhancement [COMPLETED]
 
 **Goal**: Implement JA4+ fingerprinting for robust client identification
 
-| Task | Priority | Reference |
-|------|----------|-----------|
-| [ ] Custom TLS listener to capture ClientHello | High | JA4+ spec [2] |
-| [ ] JA4 hash computation (sorted extensions) | High | FoxIO JA4 [2] |
-| [ ] JA4H (HTTP fingerprint) integration | Medium | JA4+ family |
-| [ ] JA4L (latency fingerprint) for timing analysis | Medium | JA4+ family |
-| [ ] Fingerprint database integration (known JA4 hashes) | Medium | Cloudflare [3] |
+| Task | Priority | Reference | Status |
+|------|----------|-----------|--------|
+| [x] Custom TLS listener to capture ClientHello | High | JA4+ spec [2] | Done |
+| [x] JA4 hash computation (sorted extensions) | High | FoxIO JA4 [2] | Done |
+| [x] JA3 hash computation (legacy compatibility) | High | JA3 spec [1] | Done |
+| [ ] JA4H (HTTP fingerprint) integration | Medium | JA4+ family | Planned |
+| [ ] JA4L (latency fingerprint) for timing analysis | Medium | JA4+ family | Planned |
+| [ ] Fingerprint database integration (known JA4 hashes) | Medium | Cloudflare [3] | Planned |
+
+**Implementation details (v0.3.0)**:
+- Integrated `github.com/psanford/tlsfingerprint` library with custom `fingerprintlistener`
+- Full ClientHello capture: cipher suites, extensions, supported versions, signature schemes, supported groups
+- JA3 and JA4 hash computation from raw ClientHello data
+- TLS fingerprint data injected into request context via `http.Server.ConnContext`
+- New TLS-based signals: `has_tls_fingerprint`, `has_multiple_groups`, `has_modern_ciphers`, `high_cipher_count`
+- Detailed score breakdown in debug output
 
 **Why**: Chrome's 2023 extension randomization broke JA3; JA4 provides stable fingerprints. Industry adoption is universal by 2026 [2].
 
@@ -842,14 +880,4 @@ Accept: */*
 
 ---
 
-## Changelog
-
-### v0.2.0 (2026-02-11)
-- Initial methodology documentation
-- Rule-based classifier implementation
-- HTTP signal extraction
-- JSON logging for analysis
-
-### v0.1.0 (2026-02-10)
-- Project setup
-- Basic User-Agent classification (sanity check)
+See [CHANGELOG.md](../CHANGELOG.md) for version history.

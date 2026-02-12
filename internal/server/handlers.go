@@ -11,7 +11,7 @@ import (
 	"github.com/muliwe/go-client-classifier/internal/logger"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 // Response represents the API response
 type Response struct {
