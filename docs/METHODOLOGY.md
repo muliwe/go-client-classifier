@@ -622,8 +622,8 @@ EFFORT                   │                    EFFORT
 | Classification Latency (p99) | <5ms | **~1ms** (measured) |
 | Classification Latency (avg) | <1ms | **~7µs** (unit tests) |
 | False Positive Rate | <1% | TBD |
-| Throughput (RPS) | >10K | **~16.5K** (localhost TLS) |
-| Throughput (RPM) | >600K | **~1M** (localhost TLS) |
+| Throughput (RPS) | >10K | **~14.5K** (localhost TLS) |
+| Throughput (RPM) | >600K | **~870K** (localhost TLS) |
 
 ---
 
@@ -1276,11 +1276,10 @@ Benchmark using `task bench:tls` against localhost with full TLS handshake and J
 
 | Concurrency | RPS | RPM | Avg Latency | Max Latency | Errors |
 |-------------|-----|-----|-------------|-------------|--------|
-| 10 | 7,900 | 472K | 1.2 ms | 20 ms | 0 |
-| 50 | 12,000 | 725K | 4.1 ms | 60 ms | 0 |
-| 100 | 16,500 | **993K** | 6.0 ms | 66 ms | 32 |
+| 10 | 9,600 | 576K | 1.0 ms | 30 ms | 0 |
+| 50 | 14,500 | **870K** | 3.4 ms | 53 ms | 0 |
 
-**Peak throughput: ~1 million RPM** at 100 concurrent connections with HTTPS/TLS.
+**Peak throughput: ~870K RPM** at 50 concurrent connections with HTTPS/TLS (zero errors).
 
 ### What's Included in Benchmark
 
@@ -1296,12 +1295,12 @@ The benchmark measures full request processing:
 
 ### Bottlenecks
 
-At high concurrency (c=100), errors appear due to:
+At very high concurrency, errors may appear due to:
 - OS-level connection limits
 - TLS handshake overhead
 - File I/O for logging
 
-Optimal throughput with zero errors: **~725K RPM at c=50**.
+Optimal throughput with zero errors: **~870K RPM at c=50**.
 
 ### Running Benchmarks
 
@@ -1324,7 +1323,7 @@ task bench URL=http://localhost:8080/ DURATION=10s CONCURRENCY=50
 - **Classification is not a bottleneck**: ~7µs per request in pure logic
 - **TLS dominates latency**: ~1ms avg with TLS vs ~7µs without
 - **Target met**: p99 latency well under 5ms target
-- **Scalable**: Can handle >700K RPM on single node
+- **Scalable**: Can handle ~870K RPM on single node (localhost)
 
 ---
 

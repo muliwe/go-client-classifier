@@ -55,9 +55,8 @@ Performance testing:
 - Handler `SetQuiet()` method to suppress console logging in tests
 
 Benchmark results (localhost, HTTPS with TLS fingerprinting):
-- 10 concurrent: ~7,900 RPS (~472K RPM), avg latency 1.2ms
-- 50 concurrent: ~12,000 RPS (~725K RPM), avg latency 4.1ms
-- 100 concurrent: ~16,500 RPS (~993K RPM), avg latency 6.0ms
+- 10 concurrent: ~9,600 RPS (~576K RPM), avg latency 1.0ms
+- 50 concurrent: ~14,500 RPS (~870K RPM), avg latency 3.4ms
 - Classification logic only: ~7µs avg (~8M theoretical RPM)
 
 Example JA4H fingerprints:

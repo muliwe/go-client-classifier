@@ -4,6 +4,17 @@ Academic research project for classifying automated HTTP clients (bots, LLMs, cr
 
 **Version**: 0.4.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
+### Performance Highlights
+
+| Metric | Value |
+|--------|-------|
+| Throughput | **~14,500 RPS** (~870K RPM) |
+| Avg Latency | **~1ms** (with TLS) |
+| Classification Logic | **~7µs** per request |
+| Concurrency | Tested up to 50 concurrent connections |
+
+*Benchmark: localhost, HTTPS with full TLS fingerprinting (JA3/JA4/JA4H)*
+
 ## Project Goal
 
 Create a single HTTP endpoint that classifies clients as `browser` or `bot` based exclusively on:
