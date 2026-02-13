@@ -48,6 +48,18 @@ Project structure:
 - Taskfile updated to exclude `cmd/server` from test runs
 - All linter errors fixed
 
+Performance testing:
+- New `tools/benchmark/` HTTP benchmark tool
+- New `task bench` and `task bench:tls` commands
+- Integration timing tests in `tests/integration/sanity_test.go`
+- Handler `SetQuiet()` method to suppress console logging in tests
+
+Benchmark results (localhost, HTTPS with TLS fingerprinting):
+- 10 concurrent: ~7,900 RPS (~472K RPM), avg latency 1.2ms
+- 50 concurrent: ~12,000 RPS (~725K RPM), avg latency 4.1ms
+- 100 concurrent: ~16,500 RPS (~993K RPM), avg latency 6.0ms
+- Classification logic only: ~7µs avg (~8M theoretical RPM)
+
 Example JA4H fingerprints:
 - curl: `ge11nn020000_a00508f53a24_000000000000_000000000000`
 - Chrome: `ge20nn14enus_7cf2b917f4b0_000000000000_000000000000`
