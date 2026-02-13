@@ -77,3 +77,21 @@ tasks:
     cmds:
       - cmd: |
           {{if eq OS "windows"}}powershell -ExecutionPolicy Bypass -File ./tools/shell/integration_test.ps1 {{.BASE_URL}} -SkipCertCheck{{else}}./tools/shell/integration_test.sh {{.BASE_URL}} --insecure{{end}}
+
+  bench:
+    desc: Run HTTP benchmark against server (HTTP mode)
+    vars:
+      URL: '{{.URL | default "http://localhost:8080/"}}'
+      DURATION: '{{.DURATION | default "10s"}}'
+      CONCURRENCY: '{{.CONCURRENCY | default "10"}}'
+    cmds:
+      - go run ./tools/benchmark -url={{.URL}} -duration={{.DURATION}} -c={{.CONCURRENCY}}
+
+  bench:tls:
+    desc: Run HTTP benchmark against HTTPS server
+    vars:
+      URL: '{{.URL | default "https://localhost:8443/"}}'
+      DURATION: '{{.DURATION | default "10s"}}'
+      CONCURRENCY: '{{.CONCURRENCY | default "10"}}'
+    cmds:
+      - go run ./tools/benchmark -url={{.URL}} -duration={{.DURATION}} -c={{.CONCURRENCY}} -insecure

@@ -34,6 +34,7 @@ type Handler struct {
 	collector  *fingerprint.Collector
 	classifier *classifier.Classifier
 	logger     *logger.Logger
+	quiet      bool // suppress console logging (useful for tests)
 }
 
 // NewHandler creates a new handler with dependencies
@@ -42,7 +43,13 @@ func NewHandler(c *fingerprint.Collector, cl *classifier.Classifier, l *logger.L
 		collector:  c,
 		classifier: cl,
 		logger:     l,
+		quiet:      false,
 	}
+}
+
+// SetQuiet enables or disables console logging
+func (h *Handler) SetQuiet(quiet bool) {
+	h.quiet = quiet
 }
 
 // HandleClassify handles the main classification endpoint
@@ -77,16 +84,18 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 		message = "You appear to be using an automated client"
 	}
 
-	// Log to console
-	log.Printf("[%s] %s %s - UA: %s - %s (%.2f) - %dms",
-		r.RemoteAddr,
-		r.Method,
-		r.URL.Path,
-		fp.HTTP.UserAgent,
-		result.Classification,
-		result.Confidence,
-		responseTime,
-	)
+	// Log to console (unless quiet mode)
+	if !h.quiet {
+		log.Printf("[%s] %s %s - UA: %s - %s (%.2f) - %dms",
+			r.RemoteAddr,
+			r.Method,
+			r.URL.Path,
+			fp.HTTP.UserAgent,
+			result.Classification,
+			result.Confidence,
+			responseTime,
+		)
+	}
 
 	// Send response
 	w.Header().Set("Content-Type", "application/json")

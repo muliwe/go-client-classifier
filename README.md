@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.3.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 0.4.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ## Project Goal
 
@@ -16,10 +16,12 @@ Create a single HTTP endpoint that classifies clients as `browser` or `bot` base
 
 ## Current Status
 
-Phase 1 (TLS Fingerprinting) complete:
+Phase 1 (TLS + HTTP Fingerprinting) complete:
 - Full ClientHello capture with custom TLS listener
 - JA3 and JA4 hash computation
-- TLS-based classification signals integrated into scoring
+- JA4H HTTP fingerprinting (method, version, cookies, headers, language)
+- TLS and HTTP-based classification signals integrated into scoring
+- Consistency checking between JA4H and HTTP signals (evasion detection)
 - HTTPS server mode with configurable certificates
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
@@ -48,8 +50,10 @@ client → TLS listener → fingerprint collector → classifier → response
 │   ├── logger/          # Structured JSON logging
 │   └── server/          # HTTP handlers
 ├── tests/
-│   └── integration/     # Automated client tests
+│   ├── integration/     # Automated client tests
+│   └── unit/            # Unit tests
 ├── tools/
+│   ├── benchmark/       # HTTP benchmark tool
 │   ├── python/          # Analytics tools
 │   └── shell/           # Integration test scripts
 ├── logs/                # JSON traffic logs
@@ -69,9 +73,11 @@ client → TLS listener → fingerprint collector → classifier → response
 
 ### HTTP Level
 - HTTP/2 vs HTTP/1.1
+- JA4H fingerprinting (HTTP fingerprint from JA4+ family)
 - Header order and structure
 - Browser-specific headers (sec-fetch-*, accept-language)
 - Header count and entropy
+- JA4H consistency checking (cross-signal validation)
 
 ## Research Workflow
 
@@ -205,6 +211,26 @@ task integration:tls        # Run tests with --insecure (terminal 2)
 task integration BASE_URL=http://localhost:3000
 task integration:tls BASE_URL=https://localhost:8443
 ```
+
+### Benchmark
+
+Run HTTP performance benchmark against a running server:
+
+```bash
+# Start server
+task run:tls                # HTTPS mode (terminal 1)
+
+# Run benchmark (terminal 2)
+task bench:tls              # Default: 10s, 10 concurrent connections
+
+# Custom parameters
+task bench:tls DURATION=30s CONCURRENCY=50
+
+# HTTP mode
+task bench URL=http://localhost:8080/ DURATION=10s CONCURRENCY=10
+```
+
+Benchmark output includes RPS, RPM, and latency statistics (avg/min/max).
 
 The integration tests automatically detect the OS and use:
 - `tools/shell/integration_test.ps1` for Windows (PowerShell)

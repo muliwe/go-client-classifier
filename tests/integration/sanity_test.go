@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
@@ -27,9 +28,18 @@ type HealthResponse struct {
 
 // createTestHandler creates a handler for testing without file logging
 func createTestHandler() *server.Handler {
+	return createTestHandlerWithLogging(false)
+}
+
+// createTestHandlerWithLogging creates a handler with optional console logging
+func createTestHandlerWithLogging(enableConsoleLog bool) *server.Handler {
 	collector := fingerprint.NewCollector()
 	clf := classifier.New(classifier.DefaultConfig())
-	return server.NewHandler(collector, clf, nil) // nil logger for tests
+	handler := server.NewHandler(collector, clf, nil) // nil file logger
+	if !enableConsoleLog {
+		handler.SetQuiet(true)
+	}
+	return handler
 }
 
 func TestClassify_CurlDetection(t *testing.T) {
@@ -354,5 +364,217 @@ func TestClassify_AICrawlerDetection(t *testing.T) {
 				t.Errorf("Expected '%s' for %s, got '%s'", expectedClass, tc.name, resp.Classification)
 			}
 		})
+	}
+}
+
+// TestClassificationTiming measures request processing latency
+func TestClassificationTiming(t *testing.T) {
+	handler := createTestHandler()
+
+	testCases := []struct {
+		name    string
+		setup   func(*http.Request)
+		maxTime time.Duration
+	}{
+		{
+			name: "minimal_request",
+			setup: func(req *http.Request) {
+				// No headers - minimal processing
+			},
+			maxTime: 5 * time.Millisecond,
+		},
+		{
+			name: "curl_request",
+			setup: func(req *http.Request) {
+				req.Header.Set("User-Agent", "curl/8.0.1")
+				req.Header.Set("Accept", "*/*")
+			},
+			maxTime: 5 * time.Millisecond,
+		},
+		{
+			name: "browser_request",
+			setup: func(req *http.Request) {
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+				req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+				req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+				req.Header.Set("Sec-Fetch-Dest", "document")
+				req.Header.Set("Sec-Fetch-Mode", "navigate")
+				req.Header.Set("Sec-Fetch-Site", "none")
+				req.Header.Set("Sec-Fetch-User", "?1")
+				req.Header.Set("Sec-CH-UA", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
+				req.Header.Set("Sec-CH-UA-Mobile", "?0")
+				req.Header.Set("Sec-CH-UA-Platform", `"Windows"`)
+				req.Header.Set("Cookie", "session=abc123; prefs=dark")
+				req.Header.Set("Referer", "https://example.com/")
+			},
+			maxTime: 5 * time.Millisecond,
+		},
+		{
+			name: "ai_crawler_request",
+			setup: func(req *http.Request) {
+				req.Header.Set("User-Agent", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)")
+				req.Header.Set("Accept", "*/*")
+				req.Header.Set("Accept-Encoding", "gzip, deflate")
+			},
+			maxTime: 5 * time.Millisecond,
+		},
+	}
+
+	// Warm-up run
+	warmupReq := httptest.NewRequest("GET", "/", nil)
+	warmupW := httptest.NewRecorder()
+	handler.HandleClassify(warmupW, warmupReq)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Run multiple iterations for more accurate timing
+			const iterations = 100
+			var totalDuration time.Duration
+
+			for i := 0; i < iterations; i++ {
+				req := httptest.NewRequest("GET", "/", nil)
+				tc.setup(req)
+				w := httptest.NewRecorder()
+
+				start := time.Now()
+				handler.HandleClassify(w, req)
+				totalDuration += time.Since(start)
+
+				if w.Code != http.StatusOK {
+					t.Fatalf("Expected status 200, got %d", w.Code)
+				}
+			}
+
+			avgDuration := totalDuration / iterations
+			t.Logf("%s: avg=%v (total=%v over %d iterations)", tc.name, avgDuration, totalDuration, iterations)
+
+			if avgDuration > tc.maxTime {
+				t.Errorf("Average latency %v exceeds max %v", avgDuration, tc.maxTime)
+			}
+		})
+	}
+}
+
+// TestDebugEndpointTiming measures debug endpoint latency (more data to serialize)
+func TestDebugEndpointTiming(t *testing.T) {
+	handler := createTestHandler()
+
+	req := httptest.NewRequest("GET", "/debug", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Cookie", "session=test123")
+
+	// Warm-up
+	warmupW := httptest.NewRecorder()
+	handler.HandleDebug(warmupW, req)
+
+	const iterations = 100
+	var totalDuration time.Duration
+
+	for i := 0; i < iterations; i++ {
+		w := httptest.NewRecorder()
+
+		start := time.Now()
+		handler.HandleDebug(w, req)
+		totalDuration += time.Since(start)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d", w.Code)
+		}
+	}
+
+	avgDuration := totalDuration / iterations
+	t.Logf("debug endpoint: avg=%v (total=%v over %d iterations)", avgDuration, totalDuration, iterations)
+
+	// Debug endpoint has more JSON to serialize, allow 10ms
+	maxTime := 10 * time.Millisecond
+	if avgDuration > maxTime {
+		t.Errorf("Average latency %v exceeds max %v", avgDuration, maxTime)
+	}
+}
+
+// TestOverallTimingBenchmark provides summary timing stats
+func TestOverallTimingBenchmark(t *testing.T) {
+	handler := createTestHandler()
+
+	scenarios := []struct {
+		name  string
+		setup func(*http.Request)
+	}{
+		{"empty", func(r *http.Request) {}},
+		{"curl", func(r *http.Request) {
+			r.Header.Set("User-Agent", "curl/8.0.1")
+		}},
+		{"python", func(r *http.Request) {
+			r.Header.Set("User-Agent", "python-requests/2.31.0")
+			r.Header.Set("Accept", "*/*")
+		}},
+		{"browser_minimal", func(r *http.Request) {
+			r.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0.0.0")
+			r.Header.Set("Accept-Language", "en-US")
+		}},
+		{"browser_full", func(r *http.Request) {
+			r.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0")
+			r.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+			r.Header.Set("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
+			r.Header.Set("Accept-Encoding", "gzip, deflate, br")
+			r.Header.Set("Sec-Fetch-Dest", "document")
+			r.Header.Set("Sec-Fetch-Mode", "navigate")
+			r.Header.Set("Sec-Fetch-Site", "same-origin")
+			r.Header.Set("Sec-CH-UA", `"Chrome";v="120"`)
+			r.Header.Set("Cookie", "sid=abc; pref=1; track=xyz")
+			r.Header.Set("Referer", "https://example.com/page")
+		}},
+		{"gptbot", func(r *http.Request) {
+			r.Header.Set("User-Agent", "Mozilla/5.0 (compatible; GPTBot/1.0)")
+		}},
+	}
+
+	const iterations = 500
+
+	t.Logf("\n=== Classification Timing Summary (%d iterations each) ===", iterations)
+
+	var overallTotal time.Duration
+	var overallCount int
+
+	for _, s := range scenarios {
+		var total time.Duration
+		var min, max time.Duration = time.Hour, 0
+
+		for i := 0; i < iterations; i++ {
+			req := httptest.NewRequest("GET", "/", nil)
+			s.setup(req)
+			w := httptest.NewRecorder()
+
+			start := time.Now()
+			handler.HandleClassify(w, req)
+			elapsed := time.Since(start)
+
+			total += elapsed
+			if elapsed < min {
+				min = elapsed
+			}
+			if elapsed > max {
+				max = elapsed
+			}
+		}
+
+		avg := total / iterations
+		overallTotal += total
+		overallCount += iterations
+
+		t.Logf("%-20s avg=%-10v min=%-10v max=%-10v", s.name, avg, min, max)
+	}
+
+	overallAvg := overallTotal / time.Duration(overallCount)
+	t.Logf("\n%-20s avg=%v (total requests: %d)", "OVERALL", overallAvg, overallCount)
+
+	// Overall p99 target from methodology: <5ms
+	if overallAvg > 5*time.Millisecond {
+		t.Errorf("Overall average %v exceeds target 5ms", overallAvg)
 	}
 }
