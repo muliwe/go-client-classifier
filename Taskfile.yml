@@ -32,12 +32,12 @@ tasks:
   test:
     desc: Run all tests
     cmds:
-      - go test ./... -v
+      - go test ./internal/... ./tests/... -v
 
   test:short:
     desc: Run tests (short mode)
     cmds:
-      - go test ./... -short
+      - go test ./internal/... ./tests/... -short
 
   lint:
     desc: Run golangci-lint

@@ -29,26 +29,27 @@ type TLSFingerprint struct {
 
 // HTTPFingerprint contains HTTP-level signals
 type HTTPFingerprint struct {
-	Version       string            `json:"version"`        // HTTP version (HTTP/1.1, HTTP/2)
-	Method        string            `json:"method"`         // Request method
-	Path          string            `json:"path"`           // Request path
-	Headers       map[string]string `json:"headers"`        // All headers (lowercased keys)
-	HeaderOrder   []string          `json:"header_order"`   // Order of headers as received
-	HeaderCount   int               `json:"header_count"`   // Total header count
-	UserAgent     string            `json:"user_agent"`     // User-Agent header
-	Accept        string            `json:"accept"`         // Accept header
-	AcceptLang    string            `json:"accept_lang"`    // Accept-Language header
-	AcceptEnc     string            `json:"accept_enc"`     // Accept-Encoding header
-	Connection    string            `json:"connection"`     // Connection header
-	SecFetchSite  string            `json:"sec_fetch_site"` // Sec-Fetch-Site header
-	SecFetchMode  string            `json:"sec_fetch_mode"` // Sec-Fetch-Mode header
-	SecFetchDest  string            `json:"sec_fetch_dest"` // Sec-Fetch-Dest header
-	SecFetchUser  string            `json:"sec_fetch_user"` // Sec-Fetch-User header
-	SecChUA       string            `json:"sec_ch_ua"`      // Sec-CH-UA header
-	HasCookies    bool              `json:"has_cookies"`    // Has Cookie header
-	HasReferer    bool              `json:"has_referer"`    // Has Referer header
-	ContentType   string            `json:"content_type"`   // Content-Type header
-	ContentLength int64             `json:"content_length"` // Content-Length value
+	Version       string            `json:"version"`             // HTTP version (HTTP/1.1, HTTP/2)
+	Method        string            `json:"method"`              // Request method
+	Path          string            `json:"path"`                // Request path
+	Headers       map[string]string `json:"headers"`             // All headers (lowercased keys)
+	HeaderOrder   []string          `json:"header_order"`        // Order of headers as received
+	HeaderCount   int               `json:"header_count"`        // Total header count
+	UserAgent     string            `json:"user_agent"`          // User-Agent header
+	Accept        string            `json:"accept"`              // Accept header
+	AcceptLang    string            `json:"accept_lang"`         // Accept-Language header
+	AcceptEnc     string            `json:"accept_enc"`          // Accept-Encoding header
+	Connection    string            `json:"connection"`          // Connection header
+	SecFetchSite  string            `json:"sec_fetch_site"`      // Sec-Fetch-Site header
+	SecFetchMode  string            `json:"sec_fetch_mode"`      // Sec-Fetch-Mode header
+	SecFetchDest  string            `json:"sec_fetch_dest"`      // Sec-Fetch-Dest header
+	SecFetchUser  string            `json:"sec_fetch_user"`      // Sec-Fetch-User header
+	SecChUA       string            `json:"sec_ch_ua"`           // Sec-CH-UA header
+	HasCookies    bool              `json:"has_cookies"`         // Has Cookie header
+	HasReferer    bool              `json:"has_referer"`         // Has Referer header
+	ContentType   string            `json:"content_type"`        // Content-Type header
+	ContentLength int64             `json:"content_length"`      // Content-Length value
+	JA4HHash      string            `json:"ja4h_hash,omitempty"` // JA4H HTTP fingerprint hash
 }
 
 // Signals contains extracted classification signals
@@ -70,6 +71,17 @@ type Signals struct {
 	HasAccept          bool `json:"has_accept"`            // Has Accept header
 	HasAcceptEncoding  bool `json:"has_accept_encoding"`   // Has Accept-Encoding
 	HasSecClientHints  bool `json:"has_sec_ch_ua"`         // Has Sec-CH-UA headers
+
+	// JA4H signals (HTTP fingerprint)
+	HasJA4HFingerprint   bool   `json:"has_ja4h_fingerprint"`   // JA4H fingerprint available
+	JA4HLanguageCode     string `json:"ja4h_language_code"`     // Language code from JA4H (e.g., "enus", "0000")
+	JA4HMissingLanguage  bool   `json:"ja4h_missing_language"`  // Language code is "0000" (no Accept-Language)
+	JA4HLowHeaderCount   bool   `json:"ja4h_low_header_count"`  // Header count from JA4H < 5
+	JA4HHighHeaderCount  bool   `json:"ja4h_high_header_count"` // Header count from JA4H >= 10
+	JA4HHasCookies       bool   `json:"ja4h_has_cookies"`       // JA4H indicates cookies present
+	JA4HHasReferer       bool   `json:"ja4h_has_referer"`       // JA4H indicates referer present
+	JA4HIsHTTP2          bool   `json:"ja4h_is_http2"`          // JA4H indicates HTTP/2
+	JA4HConsistentSignal bool   `json:"ja4h_consistent_signal"` // JA4H signals match HTTP signals
 
 	// Heuristic signals
 	UserAgentIsBot       bool `json:"ua_is_bot"`        // UA contains bot indicators

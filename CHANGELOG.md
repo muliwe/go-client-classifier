@@ -2,6 +2,56 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.4.0 (2026-02-13)
+
+### JA4H HTTP Fingerprinting Implementation
+
+Core implementation:
+- Added JA4H (HTTP fingerprint) computation from JA4+ family
+- Custom implementation using existing `HeaderOrder` from collector
+- Full JA4H format: `{method}{version}{cookie}{referer}{headers}{lang}_{hash_b}_{hash_c}_{hash_d}`
+
+JA4H components:
+- **JA4H_a**: Human-readable part (method, HTTP version, cookie/referer flags, header count, language)
+- **JA4H_b**: SHA256 hash of sorted header names and values (12 hex chars)
+- **JA4H_c**: SHA256 hash of sorted cookie names (12 hex chars)
+- **JA4H_d**: SHA256 hash of sorted cookie name=value pairs (12 hex chars)
+
+New classification signals from JA4H:
+- `has_ja4h_fingerprint` - JA4H computed successfully
+- `ja4h_language_code` - extracted language (e.g., "enus", "0000")
+- `ja4h_missing_language` - language code is "0000" (bot indicator)
+- `ja4h_low_header_count` - header count < 5 (bot indicator)
+- `ja4h_high_header_count` - header count >= 10 (browser indicator)
+- `ja4h_has_cookies` - cookies present in request
+- `ja4h_has_referer` - referer header present
+- `ja4h_is_http2` - HTTP/2 detected from JA4H
+- `ja4h_consistent_signal` - JA4H signals match HTTP signals (inconsistency = evasion)
+
+Scoring integration:
+- Browser: +1 for high header count, +1 for referer, +1 for consistent signals
+- Bot: +1 for missing language, +1 for low header count, +2 for inconsistent signals
+
+Classifier updates:
+- Updated `browserReason()` and `botReason()` to include JA4H indicators
+- AI crawler detection now included in bot reasons
+
+Testing:
+- Comprehensive unit tests for JA4H computation (`tests/unit/ja4h_test.go`)
+- Signal extraction tests (`tests/unit/signals_test.go`)
+- Classifier tests with JA4H scenarios (`tests/unit/classifier_test.go`)
+- Server and logger tests (`tests/unit/server_test.go`, `tests/unit/logger_test.go`)
+- Stub tests in internal packages for `go test ./...` discovery
+
+Project structure:
+- Tests moved to `tests/unit/` directory
+- Taskfile updated to exclude `cmd/server` from test runs
+- All linter errors fixed
+
+Example JA4H fingerprints:
+- curl: `ge11nn020000_a00508f53a24_000000000000_000000000000`
+- Chrome: `ge20nn14enus_7cf2b917f4b0_000000000000_000000000000`
+
 ## v0.3.0 (2026-02-12)
 
 ### HTTPS Server with TLS Fingerprinting

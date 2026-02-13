@@ -16,6 +16,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix A: Bot User-Agent Patterns](#appendix-a-bot-user-agent-patterns)
 - [Appendix B: Browser Header Patterns](#appendix-b-browser-header-patterns)
 - [Appendix C: TLS Fingerprinting Implementation](#appendix-c-tls-fingerprinting-implementation)
+- [Appendix D: JA4H HTTP Fingerprinting Implementation](#appendix-d-ja4h-http-fingerprinting-implementation)
 
 ---
 
@@ -185,6 +186,12 @@ Per Imperva 2025 Bad Bot Report:
 | `has_sec_ch_ua` | Client hints present | ✓✓ |
 | `header_count` | Total header count | High (≥10) suggests browser |
 | `accept_header` | Accept header value | `*/*` suggests bot |
+| `ja4h_hash` | JA4H HTTP fingerprint | Client identification |
+| `ja4h_missing_language` | JA4H language code is "0000" | Bot indicator |
+| `ja4h_low_header_count` | JA4H header count < 5 | Bot indicator |
+| `ja4h_high_header_count` | JA4H header count >= 10 | ✓ |
+| `ja4h_has_referer` | JA4H referer flag is 'r' | ✓ |
+| `ja4h_consistent_signal` | JA4H matches HTTP signals | ✓ (inconsistency = evasion) |
 
 #### User-Agent Analysis
 
@@ -215,6 +222,9 @@ Current implementation uses the following weights:
 +1: has_session_ticket (TLS session resumption)
 +1: has_multiple_groups (>= 3 supported groups)
 +1: tls_extensions >= 10
++1: ja4h_high_header_count (>= 10 headers from JA4H)
++1: ja4h_has_referer (referer present from JA4H)
++1: ja4h_consistent_signal (JA4H matches HTTP signals)
 ```
 
 **Bot-positive signals:**
@@ -222,10 +232,13 @@ Current implementation uses the following weights:
 +3: ua_is_bot (known bot patterns)
 +2: low_header_count (< 5 headers)
 +2: missing_user_agent
++2: ja4h_inconsistent (JA4H signals don't match HTTP — evasion indicator)
 +1: missing_typical_headers
 +1: http/1.1 (without H2)
 +1: accept = "*/*" (generic)
 +1: missing_accept_language (without sec-fetch)
++1: ja4h_missing_language (language code "0000" from JA4H)
++1: ja4h_low_header_count (< 5 headers from JA4H)
 ```
 
 ---
@@ -297,6 +310,7 @@ Classification: browser (confidence: 0.97)
 │  │ - Cipher     │  │ - User-Agent                     │ │
 │  │ - ALPN       │  │ - Sec-Fetch-*                    │ │
 │  │ - SNI        │  │ - Accept-*                       │ │
+│  │ - JA3/JA4    │  │ - JA4H (HTTP fingerprint)        │ │
 │  └──────────────┘  └──────────────────────────────────┘ │
 └─────────────────────┬───────────────────────────────────┘
                       │
@@ -305,6 +319,8 @@ Classification: browser (confidence: 0.97)
 │               Signal Extractor                          │
 │  - Pattern matching (bot UA patterns)                   │
 │  - Boolean signal extraction                            │
+│  - JA4H signal parsing                                  │
+│  - Consistency checking (JA4H vs HTTP)                  │
 │  - Score calculation                                    │
 └─────────────────────┬───────────────────────────────────┘
                       │
@@ -320,7 +336,7 @@ Classification: browser (confidence: 0.97)
                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │                JSON Logger                              │
-│  - Full fingerprint                                     │
+│  - Full fingerprint (TLS + HTTP + JA4H)                 │
 │  - All signals                                          │
 │  - Classification result                                │
 │  - Response time                                        │
@@ -368,7 +384,8 @@ Classification: browser (confidence: 0.97)
       "path": "/debug",
       "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...",
       "header_count": 14,
-      "header_order": ["accept", "sec-fetch-mode", "sec-fetch-dest", "..."]
+      "header_order": ["accept", "sec-fetch-mode", "sec-fetch-dest", "..."],
+      "ja4h_hash": "ge20nr14enus_7cf2b917f4b0_a1b2c3d4e5f6_f6e5d4c3b2a1"
     }
   },
   "signals": {
@@ -385,12 +402,21 @@ Classification: browser (confidence: 0.97)
     "has_sec_ch_ua": true,
     "ua_is_bot": false,
     "ua_is_browser": true,
-    "browser_score": 18,
+    "has_ja4h_fingerprint": true,
+    "ja4h_language_code": "enus",
+    "ja4h_missing_language": false,
+    "ja4h_low_header_count": false,
+    "ja4h_high_header_count": true,
+    "ja4h_has_cookies": false,
+    "ja4h_has_referer": true,
+    "ja4h_is_http2": true,
+    "ja4h_consistent_signal": true,
+    "browser_score": 21,
     "bot_score": 0,
-    "score_breakdown": "BROWSER[http2(+2) sec-fetch(+3) accept-lang(+1) browser-headers(+1) browser-ua(+2) sec-ch-ua(+2) headers>=10(+1) modern-tls(+1) high-ciphers(+2) session-ticket(+1) multi-groups(+1) tls-ext>=10(+1)] BOT[]"
+    "score_breakdown": "BROWSER[http2(+2) sec-fetch(+3) accept-lang(+1) browser-headers(+1) browser-ua(+2) sec-ch-ua(+2) headers>=10(+1) modern-tls(+1) high-ciphers(+2) session-ticket(+1) multi-groups(+1) tls-ext>=10(+1) ja4h-headers>=10(+1) ja4h-referer(+1) ja4h-consistent(+1)] BOT[]"
   },
-  "score": 18,
-  "reason": "Browser indicators: has Sec-Fetch headers, uses HTTP/2, browser User-Agent, has browser-specific headers"
+  "score": 21,
+  "reason": "Browser indicators: has Sec-Fetch headers, uses HTTP/2, browser User-Agent, has browser-specific headers, consistent JA4H signals"
 }
 ```
 
@@ -423,7 +449,7 @@ Based on recent research (2025-2026), the following development roadmap addresse
 | [x] Custom TLS listener to capture ClientHello | High | JA4+ spec [2] | Done |
 | [x] JA4 hash computation (sorted extensions) | High | FoxIO JA4 [2] | Done |
 | [x] JA3 hash computation (legacy compatibility) | High | JA3 spec [1] | Done |
-| [ ] JA4H (HTTP fingerprint) integration | Medium | JA4+ family | Planned |
+| [x] JA4H (HTTP fingerprint) integration | Medium | JA4+ family | Done |
 | [ ] JA4L (latency fingerprint) for timing analysis | Medium | JA4+ family | Planned |
 | [ ] Fingerprint database integration (known JA4 hashes) | Medium | Cloudflare [3] | Planned |
 
@@ -1043,6 +1069,162 @@ TLS fingerprint signals contribute to browser/bot scoring:
 4. **HTTP/2 correlation**: Browsers negotiate HTTP/2 via ALPN (`h2`), while curl defaults to HTTP/1.1.
 
 5. **Session tickets**: Both browsers and modern HTTP clients support session tickets, so this signal is weak alone but contributes to overall scoring.
+
+---
+
+## Appendix D: JA4H HTTP Fingerprinting Implementation
+
+*Added: 2026-02-13 (v0.4.0)*
+
+### Overview
+
+JA4H is part of the JA4+ fingerprinting suite developed by FoxIO. While JA3/JA4 fingerprint TLS connections, JA4H fingerprints HTTP requests themselves — method, version, headers, cookies, and language preferences.
+
+Reference: [FoxIO JA4+ Technical Details](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md)
+
+### JA4H Format
+
+Full format: `JA4H_a_JA4H_b_JA4H_c_JA4H_d`
+
+**JA4H_a (human-readable):** `{method}{version}{cookie}{referer}{headers}{lang}`
+- `method`: ge (GET), po (POST), pu (PUT), de (DELETE), pa (PATCH), he (HEAD), op (OPTIONS), co (CONNECT), tr (TRACE)
+- `version`: 10 (HTTP/1.0), 11 (HTTP/1.1), 20 (HTTP/2), 30 (HTTP/3)
+- `cookie`: c (has cookies), n (no cookies)
+- `referer`: r (has referer), n (no referer)
+- `headers`: 2-digit count of headers (00-99)
+- `lang`: 4-char language code (e.g., "enus", "engb", "0000" if missing)
+
+**JA4H_b:** First 12 characters of SHA256(sorted header name:value pairs)
+
+**JA4H_c:** First 12 characters of SHA256(sorted cookie names)
+
+**JA4H_d:** First 12 characters of SHA256(sorted cookie name=value pairs)
+
+### Implementation Details
+
+```go
+// internal/fingerprint/ja4h.go
+func JA4H(req *http.Request) string {
+    a := JA4H_a(req)  // Human-readable component
+    b := JA4H_b(req)  // Header hash
+    c := JA4H_c(req)  // Cookie names hash
+    d := JA4H_d(req)  // Cookie values hash
+    return fmt.Sprintf("%s_%s_%s_%s", a, b, c, d)
+}
+```
+
+Key implementation notes:
+- Uses `HeaderOrder` from our existing collector to preserve original header order
+- Excludes pseudo-headers (`:method`, `:path`, etc.) from hash computation
+- Handles missing `Accept-Language` as "0000" (strong bot indicator)
+- Cookie hashes return "000000000000" when no cookies present
+
+### Signal Extraction
+
+From JA4H_a component, we extract classification signals:
+
+| Signal | Description | Classification Impact |
+|--------|-------------|----------------------|
+| `ja4h_missing_language` | Language code is "0000" | +1 bot (bots often omit Accept-Language) |
+| `ja4h_low_header_count` | Header count < 5 | +1 bot (minimal request) |
+| `ja4h_high_header_count` | Header count >= 10 | +1 browser (rich headers) |
+| `ja4h_has_cookies` | Cookie flag is 'c' | +0 (neutral, tracked for analysis) |
+| `ja4h_has_referer` | Referer flag is 'r' | +1 browser (navigation context) |
+| `ja4h_consistent_signal` | JA4H signals match HTTP signals | +1 browser / +2 bot if inconsistent |
+
+### Consistency Checking
+
+JA4H provides redundant signals that should match our existing HTTP signal extraction:
+
+```go
+func checkJA4HConsistency(ja4hHasCookies, httpHasCookies bool,
+                          ja4hHasReferer, httpHasReferer bool,
+                          ja4hIsHTTP2, httpIsHTTP2 bool) bool {
+    return ja4hHasCookies == httpHasCookies &&
+           ja4hHasReferer == httpHasReferer &&
+           ja4hIsHTTP2 == httpIsHTTP2
+}
+```
+
+**Inconsistency indicates evasion attempts** — a client manipulating headers to appear more legitimate while actual request characteristics don't match.
+
+### Example Fingerprints
+
+**curl (minimal HTTP client):**
+```
+ge11nn020000_a00508f53a24_000000000000_000000000000
+```
+Breakdown:
+- `ge` = GET method
+- `11` = HTTP/1.1
+- `n` = no cookies
+- `n` = no referer
+- `02` = 2 headers (Host, User-Agent)
+- `0000` = no Accept-Language
+
+**Chrome browser:**
+```
+ge20nr14enus_7cf2b917f4b0_a1b2c3d4e5f6_f6e5d4c3b2a1
+```
+Breakdown:
+- `ge` = GET method
+- `20` = HTTP/2
+- `n` = no cookies (first visit)
+- `r` = has referer (navigation)
+- `14` = 14 headers
+- `enus` = Accept-Language: en-US
+
+**Python requests:**
+```
+ge11nn040000_b3c4d5e6f7a8_000000000000_000000000000
+```
+- 4 headers, no language — typical of HTTP libraries
+
+### Classifier Integration
+
+The classifier now uses JA4H signals in determining browser/bot reasons:
+
+```go
+// Browser indicators
+if s.JA4HConsistentSignal && s.JA4HHighHeaderCount {
+    reasons = append(reasons, "ja4h-browser-profile")
+}
+
+// Bot indicators  
+if s.JA4HMissingLanguage {
+    reasons = append(reasons, "ja4h-no-language")
+}
+if s.JA4HLowHeaderCount {
+    reasons = append(reasons, "ja4h-minimal-headers")
+}
+if !s.JA4HConsistentSignal {
+    reasons = append(reasons, "ja4h-inconsistent")
+}
+```
+
+### Testing
+
+Unit tests cover:
+- JA4H computation for various HTTP methods
+- Header hash stability
+- Cookie handling (single, multiple, none)
+- Language code extraction (en-US, en-GB, missing)
+- Edge cases (empty requests, HTTP/2 pseudo-headers)
+
+```bash
+# Run JA4H-specific tests
+task test -- -run TestJA4H
+
+# All tests including JA4H
+task test
+```
+
+### Future Work
+
+1. **JA4H database**: Build corpus of known JA4H fingerprints for common clients
+2. **JA4H_b clustering**: Group clients by header patterns regardless of values
+3. **Cross-correlation**: Compare JA4+JA4H for comprehensive client profiling
+4. **Temporal analysis**: Track JA4H changes across requests for session analysis
 
 ---
 

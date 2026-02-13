@@ -27,10 +27,15 @@ func NewCollector() *Collector {
 
 // Collect extracts fingerprint from an HTTP request
 func (c *Collector) Collect(r *http.Request) Fingerprint {
-	return Fingerprint{
+	fp := Fingerprint{
 		TLS:  c.collectTLS(r),
 		HTTP: c.collectHTTP(r),
 	}
+
+	// Compute JA4H fingerprint
+	fp.HTTP.JA4HHash = JA4H(r)
+
+	return fp
 }
 
 // collectTLS extracts TLS-level fingerprint

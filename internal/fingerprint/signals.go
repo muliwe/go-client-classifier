@@ -119,6 +119,12 @@ func ExtractSignals(fp Fingerprint) Signals {
 	s.HasAcceptEncoding = fp.HTTP.AcceptEnc != ""
 	s.HasSecClientHints = fp.HTTP.SecChUA != ""
 
+	// JA4H signals (HTTP fingerprint)
+	s.HasJA4HFingerprint = fp.HTTP.JA4HHash != ""
+	if s.HasJA4HFingerprint {
+		extractJA4HSignals(&s, fp.HTTP.JA4HHash, fp)
+	}
+
 	// User-Agent analysis
 	uaLower := strings.ToLower(fp.HTTP.UserAgent)
 	s.UserAgentIsBot = containsAny(uaLower, botPatterns)
@@ -134,6 +140,96 @@ func ExtractSignals(fp Fingerprint) Signals {
 	s.BrowserScore, s.BotScore, s.ScoreBreakdown = calculateScores(s, fp)
 
 	return s
+}
+
+// extractJA4HSignals parses JA4H fingerprint and extracts signals
+// JA4H format: {method}{version}{cookie}{referer}{header_count}{language}_{hash_b}_{hash_c}_{hash_d}
+// Example: ge20cn14enus_7cf2b917f4b0_000000000000_000000000000
+func extractJA4HSignals(s *Signals, ja4h string, fp Fingerprint) {
+	// Split by underscore to get parts
+	parts := strings.Split(ja4h, "_")
+	if len(parts) < 1 || len(parts[0]) < 12 {
+		return
+	}
+
+	ja4hA := parts[0]
+
+	// Extract version (positions 2-3): "11", "20", "30"
+	if len(ja4hA) >= 4 {
+		version := ja4hA[2:4]
+		s.JA4HIsHTTP2 = version == "20" || version == "30"
+	}
+
+	// Extract cookie flag (position 4): "c" or "n"
+	if len(ja4hA) >= 5 {
+		s.JA4HHasCookies = ja4hA[4:5] == "c"
+	}
+
+	// Extract referer flag (position 5): "r" or "n"
+	if len(ja4hA) >= 6 {
+		s.JA4HHasReferer = ja4hA[5:6] == "r"
+	}
+
+	// Extract header count (positions 6-7)
+	if len(ja4hA) >= 8 {
+		headerCountStr := ja4hA[6:8]
+		var headerCount int
+		if _, err := parseHeaderCount(headerCountStr, &headerCount); err == nil {
+			s.JA4HLowHeaderCount = headerCount < 5
+			s.JA4HHighHeaderCount = headerCount >= 10
+		}
+	}
+
+	// Extract language code (positions 8-11)
+	if len(ja4hA) >= 12 {
+		s.JA4HLanguageCode = ja4hA[8:12]
+		s.JA4HMissingLanguage = s.JA4HLanguageCode == "0000"
+	}
+
+	// Check consistency between JA4H signals and HTTP signals
+	// Inconsistencies may indicate fingerprint manipulation
+	s.JA4HConsistentSignal = checkJA4HConsistency(s, fp)
+}
+
+// parseHeaderCount parses 2-digit header count string
+func parseHeaderCount(s string, result *int) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	*result = n
+	return n, nil
+}
+
+// checkJA4HConsistency verifies JA4H signals match HTTP signals
+// Returns true if signals are consistent, false if there are discrepancies
+func checkJA4HConsistency(s *Signals, fp Fingerprint) bool {
+	consistent := true
+
+	// HTTP/2 consistency
+	if s.JA4HIsHTTP2 != s.IsHTTP2 {
+		consistent = false
+	}
+
+	// Cookie consistency
+	if s.JA4HHasCookies != fp.HTTP.HasCookies {
+		consistent = false
+	}
+
+	// Referer consistency
+	if s.JA4HHasReferer != fp.HTTP.HasReferer {
+		consistent = false
+	}
+
+	// Accept-Language consistency
+	// If JA4H says "0000" (no language), HasAcceptLanguage should be false
+	if s.JA4HMissingLanguage && s.HasAcceptLanguage {
+		consistent = false
+	}
+
+	return consistent
 }
 
 // calculateScores computes browser and bot scores based on signals
@@ -225,6 +321,27 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		}
 	}
 
+	// JA4H fingerprint signals (browser-positive)
+	if s.HasJA4HFingerprint {
+		// High header count from JA4H - browsers send many headers
+		if s.JA4HHighHeaderCount {
+			browserScore++
+			browserReasons = append(browserReasons, "ja4h-headers>=10(+1)")
+		}
+
+		// Has referer - often present in browser navigation
+		if s.JA4HHasReferer {
+			browserScore++
+			browserReasons = append(browserReasons, "ja4h-referer(+1)")
+		}
+
+		// Consistent signals - no fingerprint manipulation detected
+		if s.JA4HConsistentSignal {
+			browserScore++
+			browserReasons = append(browserReasons, "ja4h-consistent(+1)")
+		}
+	}
+
 	// ==========================================
 	// Bot-positive signals
 	// ==========================================
@@ -295,6 +412,27 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		if !s.HasSessionSupport && fp.TLS.Available {
 			botScore++
 			botReasons = append(botReasons, "no-session(+1)")
+		}
+	}
+
+	// JA4H fingerprint signals (bot-positive)
+	if s.HasJA4HFingerprint {
+		// Missing language in JA4H - bots often don't send Accept-Language
+		if s.JA4HMissingLanguage {
+			botScore++
+			botReasons = append(botReasons, "ja4h-no-lang(+1)")
+		}
+
+		// Low header count from JA4H
+		if s.JA4HLowHeaderCount {
+			botScore++
+			botReasons = append(botReasons, "ja4h-low-headers(+1)")
+		}
+
+		// Inconsistent signals - possible fingerprint manipulation/evasion
+		if !s.JA4HConsistentSignal {
+			botScore += 2
+			botReasons = append(botReasons, "ja4h-inconsistent(+2)")
 		}
 	}
 

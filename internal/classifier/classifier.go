@@ -84,6 +84,12 @@ func (c *Classifier) browserReason(s fingerprint.Signals) string {
 	if s.HasBrowserHeaders {
 		reasons = append(reasons, "has browser-specific headers")
 	}
+	if s.HasJA4HFingerprint && s.JA4HConsistentSignal {
+		reasons = append(reasons, "consistent JA4H fingerprint")
+	}
+	if s.JA4HHighHeaderCount {
+		reasons = append(reasons, "high header count (JA4H)")
+	}
 
 	if len(reasons) == 0 {
 		return "Classified as browser based on overall signal score"
@@ -106,6 +112,9 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 	if s.UserAgentIsBot {
 		reasons = append(reasons, "bot User-Agent pattern")
 	}
+	if s.UserAgentIsAICrawler {
+		reasons = append(reasons, "AI/LLM crawler pattern")
+	}
 	if s.LowHeaderCount {
 		reasons = append(reasons, "low header count")
 	}
@@ -117,6 +126,15 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 	}
 	if s.MissingTypicalHeader {
 		reasons = append(reasons, "missing typical headers")
+	}
+	if s.HasJA4HFingerprint && !s.JA4HConsistentSignal {
+		reasons = append(reasons, "inconsistent JA4H fingerprint")
+	}
+	if s.JA4HMissingLanguage {
+		reasons = append(reasons, "no Accept-Language (JA4H)")
+	}
+	if s.JA4HLowHeaderCount {
+		reasons = append(reasons, "low header count (JA4H)")
 	}
 
 	if len(reasons) == 0 {
