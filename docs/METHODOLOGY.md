@@ -474,16 +474,18 @@ Based on recent research (2025-2026), the following development roadmap addresse
 
 #### Phase 2: HTTP/2 Deep Inspection
 
-**Goal**: Extract HTTP/2 frame-level signals per Akamai methodology
+**Goal**: Extract HTTP/2 frame-level signals per Akamai methodology.
+
+**Implementation approach — nginx modules, not Go libraries**: HTTP/2 statistics (SETTINGS, WINDOW_UPDATE, PRIORITY frames) will be collected at the **nginx** layer using existing modules (e.g. [Xetera/nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)), with fingerprint data passed to the Go backend via custom headers (e.g. `X-FP-H2`). This avoids implementing low-level HTTP/2 frame parsing in Go: there are no mature, production-ready libraries for passive H2 fingerprinting in the Go ecosystem, while nginx already terminates TLS and parses H2 frames; extending it with fingerprint modules is a well-established approach used in CDNs and described in research (Akamai [4]). The nginx→Go integration is documented in [docs/nginx.md](nginx.md).
 
 | Task | Priority | Reference |
 |------|----------|-----------|
-| [ ] HTTP/2 SETTINGS frame capture | High | Akamai [4] |
+| [ ] HTTP/2 SETTINGS frame capture | High | Akamai [4], nginx-http2-fingerprint |
 | [ ] WINDOW_UPDATE pattern analysis | Medium | Akamai [4] |
 | [ ] PRIORITY frame fingerprinting | Medium | Akamai [4] |
 | [ ] H2/H3 ratio tracking (per-client behavioral) | Medium | Cloudflare signals |
 
-**Why**: HTTP/2 implementation details (initial window size, max concurrent streams, header table size) create passive fingerprints that are hard to spoof [4].
+**Why**: HTTP/2 implementation details (initial window size, max concurrent streams, header table size) create passive fingerprints that are hard to spoof [4]. Using nginx at the edge for H2 fingerprinting is a rational choice when no equivalent Go libraries exist and avoids reimplementing protocol parsing.
 
 ---
 
@@ -670,7 +672,7 @@ EFFORT                   │                    EFFORT
 
 4. **Passive Fingerprinting of HTTP/2 Clients** (Akamai, BlackHat EU 2017)
    - https://blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf
-   - HTTP/2 SETTINGS frame fingerprinting
+   - HTTP/2 SETTINGS frame fingerprinting; rationale for extracting H2 stats at the proxy (nginx) layer rather than in application code
 
 5. **Fetch Metadata Request Headers** (W3C)
    - https://w3c.github.io/webappsec-fetch-metadata/
@@ -799,6 +801,10 @@ EFFORT                   │                    EFFORT
     - https://github.com/psanford/tlsfingerprint
     - Go implementation for TLS ClientHello fingerprinting
     - Used in this project for JA3/JA4 hash computation
+
+29. **nginx-http2-fingerprint** (nginx module)
+    - https://github.com/Xetera/nginx-http2-fingerprint
+    - Passive HTTP/2 fingerprinting (SETTINGS/priority) as nginx module; used for planned H2 statistics collection at the edge instead of Go-side parsing (no mature H2 fingerprinting libs in Go). See [Phase 2: HTTP/2 Deep Inspection](#phase-2-http2-deep-inspection) and [docs/nginx.md](nginx.md).
 
 ---
 

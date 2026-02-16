@@ -35,6 +35,8 @@ Phase 1 (TLS + HTTP Fingerprinting) complete:
 - Consistency checking between JA4H and HTTP signals (evasion detection)
 - HTTPS server mode with configurable certificates
 
+**Planned**: HTTP/2 frame-level statistics (SETTINGS, WINDOW_UPDATE, PRIORITY) will be collected via **nginx modules** in front of the Go backend, rather than implementing low-level H2 parsing in Go — mature HTTP/2 fingerprinting libraries for Go are not available, while nginx with add-on modules (e.g. [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)) provides proven passive fingerprinting at the edge. See [docs/nginx.md](docs/nginx.md) and [Methodology → Phase 2](docs/METHODOLOGY.md#phase-2-http2-deep-inspection) for rationale and references.
+
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Architecture
@@ -314,6 +316,7 @@ Hooks are automatically run before each commit.
 
 - [CHANGELOG.md](CHANGELOG.md) — version history and release notes
 - [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references
+- [docs/nginx.md](docs/nginx.md) — nginx setup for TLS termination, HTTP/2 fingerprint extraction, JA3; planned collection of HTTP/2 statistics via nginx modules
 
 ## License
 
