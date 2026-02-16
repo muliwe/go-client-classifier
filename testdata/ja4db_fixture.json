@@ -1,4 +1,1 @@
-[
-  {"application": null, "library": "Python", "ja4_fingerprint": "t13i181000_85036bcba153_d41ae481755e"},
-  {"application": "Chromium Browser", "library": null, "ja4_fingerprint": "t13d1516h2_8daaf6152771_02713d6af862"}
-]
+[{"application":null,"library":"Python","ja4_fingerprint":"t13i181000_85036bcba153_d41ae481755e"},{"application":"Chromium Browser","library":null,"ja4_fingerprint":"t13d1516h2_8daaf6152771_02713d6af862"},{"application":"Chrome","library":"python-requests","ja4_fingerprint":"t13d1516h2_8daaf6152771_d8a2da3f94cd"}]

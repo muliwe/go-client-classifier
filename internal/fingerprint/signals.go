@@ -366,14 +366,14 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "headers>=10(+1)")
 	}
 
-	// Modern TLS
-	if s.HasModernTLS {
+	// Modern TLS - only count as browser signal when UA is not already a known bot (curl, etc. have modern TLS too)
+	if !s.UserAgentIsBot && s.HasModernTLS {
 		browserScore++
 		browserReasons = append(browserReasons, "modern-tls(+1)")
 	}
 
-	// TLS fingerprint signals (from ClientHello)
-	if s.HasTLSFingerprint {
+	// TLS fingerprint signals (from ClientHello) - only when UA is not bot; CLI libraries also have rich TLS
+	if !s.UserAgentIsBot && s.HasTLSFingerprint {
 		// High cipher suite count - browsers offer 15-20 cipher suites
 		if s.HighCipherCount {
 			browserScore += 2
@@ -413,8 +413,8 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 			browserReasons = append(browserReasons, "ja4h-referer(+1)")
 		}
 
-		// Consistent signals - no fingerprint manipulation detected
-		if s.JA4HConsistentSignal {
+		// Consistent signals - no fingerprint manipulation detected; skip for bot UA (minimal headers can be "consistent" too)
+		if !s.UserAgentIsBot && s.JA4HConsistentSignal {
 			browserScore++
 			browserReasons = append(browserReasons, "ja4h-consistent(+1)")
 		}
@@ -454,8 +454,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "no-ua(+2)")
 	}
 
-	// HTTP/1.1 without H2 - many bots don't support HTTP/2
-	if !s.IsHTTP2 && fp.HTTP.Version == "HTTP/1.1" {
+	// HTTP/1.1 without H2 when TLS was available - many bots don't support HTTP/2.
+	// Skip when TLS is not available (e.g. raw HTTP pipeline without nginx): HTTP/2 wasn't an option.
+	if fp.TLS.Available && !s.IsHTTP2 && fp.HTTP.Version == "HTTP/1.1" {
 		botScore++
 		botReasons = append(botReasons, "http1.1(+1)")
 	}
@@ -520,8 +521,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "h2-ua-inconsistent(+2)")
 	}
 
-	// TLS vs User-Agent inconsistency (Appendix G): UA claims browser but JA3/JA4 is known library (curl, Go, Python, etc.)
-	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary {
+	// TLS vs User-Agent inconsistency (Appendix G): UA claims browser but JA3/JA4 is known library (curl, Go, Python, etc.).
+	// Only penalize when TLS is library and NOT also known browser (same fingerprint can appear in both ja4db sets).
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary && !s.TLSKnownBrowser {
 		botScore += 2
 		botReasons = append(botReasons, "tls-ua-inconsistent(+2)")
 	}

@@ -606,3 +606,110 @@ func TestCalculateScores_H2UAConsistent_NoPenalty(t *testing.T) {
 		t.Error("Breakdown should NOT contain h2-ua-inconsistent when H2 is browser-like")
 	}
 }
+
+// TestCalculateScores_HTTP11_NoTLS_NoPenalty: raw HTTP pipeline (no TLS) + HTTP/1.1 → no http1.1(+1) penalty
+func TestCalculateScores_HTTP11_NoTLS_NoPenalty(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{Available: false},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:      "HTTP/1.1",
+			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/144.0.0.0 Safari/537.36",
+			Accept:       "text/html,application/xhtml+xml",
+			AcceptLang:   "ru-RU,ru;q=0.9",
+			AcceptEnc:    "gzip, deflate, br",
+			SecFetchSite: "none",
+			SecFetchMode: "navigate",
+			SecFetchDest: "document",
+			SecChUA:      `"Chromium";v="144"`,
+			HeaderCount:  12,
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.ScoreBreakdown != "" && strings.Contains(s.ScoreBreakdown, "http1.1(+1)") {
+		t.Error("Raw HTTP (no TLS) + HTTP/1.1 should NOT get http1.1(+1) penalty")
+	}
+}
+
+// TestCalculateScores_HTTP11_TLSAvailable_Penalty: TLS available + HTTP/1.1 (e.g. curl) → http1.1(+1)
+func TestCalculateScores_HTTP11_TLSAvailable_Penalty(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available: true,
+			JA3Hash:   "e7d705a3286e19ea42f587b344ee6865", // cURL
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:   "HTTP/1.1",
+			UserAgent: "curl/7.68.0",
+			Accept:    "*/*",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !strings.Contains(s.ScoreBreakdown, "http1.1(+1)") {
+		t.Error("TLS available + HTTP/1.1 should get http1.1(+1) in breakdown")
+	}
+}
+
+// TestCalculateScores_BotUA_NoTLSBrowserPoints: bot UA (curl) with rich TLS → no browser points for TLS/ja4h-consistent
+func TestCalculateScores_BotUA_NoTLSBrowserPoints(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:         true,
+			Version:           "TLS 1.3",
+			CipherSuitesCount: 16,
+			ExtensionsCount:   18,
+			HasSessionTicket:  true,
+			SupportedGroups:   []string{"x25519", "secp256r1", "secp384r1"},
+			JA3Hash:           "e7d705a3286e19ea42f587b344ee6865",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:     "HTTP/1.1",
+			UserAgent:   "curl/8.0.1",
+			Accept:      "*/*",
+			HeaderCount: 5,
+			JA4HHash:    "ge11nn050000_abc123_000000000000_000000000000",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.UserAgentIsBot {
+		t.Fatal("curl must be detected as bot")
+	}
+	// Bot UA must not receive browser points for TLS or ja4h-consistent
+	if strings.Contains(s.ScoreBreakdown, "modern-tls(+1)") ||
+		strings.Contains(s.ScoreBreakdown, "high-ciphers(+2)") ||
+		strings.Contains(s.ScoreBreakdown, "session-ticket(+1)") ||
+		strings.Contains(s.ScoreBreakdown, "multi-groups(+1)") ||
+		strings.Contains(s.ScoreBreakdown, "tls-ext>=10(+1)") ||
+		strings.Contains(s.ScoreBreakdown, "ja4h-consistent(+1)") {
+		t.Errorf("Bot UA (curl) must not get TLS/ja4h browser points; breakdown: %s", s.ScoreBreakdown)
+	}
+	if s.BrowserScore > 0 {
+		t.Errorf("Bot UA with rich TLS should have 0 browser score, got %d", s.BrowserScore)
+	}
+}
+
+// TestCalculateScores_TLSUA_BothSets_NoPenalty: browser UA + JA4 in both library and browser set (e.g. real Chrome in ja4db) → no tls-ua-inconsistent
+func TestCalculateScores_TLSUA_BothSets_NoPenalty(t *testing.T) {
+	// JA4 from fixture: Chrome + python-requests → same hash in knownLibraryJA4 and knownBrowserJA4
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available: true,
+			JA4Hash:   "t13d1516h2_8daaf6152771_d8a2da3f94cd",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/144.0.0.0 Safari/537.36",
+			Accept:      "text/html",
+			AcceptLang:  "ru-RU,ru;q=0.9",
+			HeaderCount: 10,
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.UserAgentIsBrowser {
+		t.Fatal("UA should be classified as browser")
+	}
+	if !s.TLSKnownLibrary || !s.TLSKnownBrowser {
+		t.Fatalf("Fixture JA4 should be in both sets (library=%v browser=%v); ensure ja4db_fixture has Chrome+python-requests entry", s.TLSKnownLibrary, s.TLSKnownBrowser)
+	}
+	if strings.Contains(s.ScoreBreakdown, "tls-ua-inconsistent") {
+		t.Errorf("Browser UA + TLS in both library and browser set must NOT get tls-ua-inconsistent; breakdown: %s", s.ScoreBreakdown)
+	}
+}

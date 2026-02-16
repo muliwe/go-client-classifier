@@ -55,6 +55,22 @@ When TLS is terminated at nginx and the Go server receives requests via `proxy_p
 **Testing**
 - Stub `testdata/ja4db_fixture.json` for unit/integration; `JA4DB_SKIP_DOWNLOAD=1` and `JA4DB_PATH` set in TestMain so no network in tests. Removed large ja4db.json from test trees.
 
+### Scoring fixes: TLS/UA overlap, raw HTTP/1.1, bot UA TLS weights
+
+**TLS vs User-Agent (tls-ua-inconsistent)**
+- We only add +2 bot when the fingerprint is in the known-library set *and* not in the known-browser set. The same JA4 can appear in both ja4db categories (e.g. real Chrome); in that case we do not penalize, so real browsers are no longer falsely scored as inconsistent.
+
+**HTTP/1.1 without H2**
+- +1 bot is applied only when TLS was available (client could have negotiated HTTP/2). For raw HTTP pipelines (no TLS, e.g. direct to app without nginx) we do not add `http1.1(+1)`.
+
+**Bot User-Agent and TLS/JA4H browser points**
+- When the User-Agent is already classified as bot (curl, Python, etc.), we no longer award browser points for TLS (modern-tls, high-ciphers, session-ticket, multi-groups, tls-ext≥10) or for ja4h-consistent. Primitive CLI clients have modern TLS stacks too; without this, curl received 6–7 browser points and the net score was only slightly negative.
+
+**Tests and docs**
+- New unit tests: `TestCalculateScores_HTTP11_NoTLS_NoPenalty`, `TestCalculateScores_HTTP11_TLSAvailable_Penalty`, `TestCalculateScores_BotUA_NoTLSBrowserPoints`, `TestCalculateScores_TLSUA_BothSets_NoPenalty`.
+- `testdata/ja4db_fixture.json`: added entry with JA4 in both library and browser set (Chrome + python-requests) for the “both sets, no penalty” test.
+- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) Appendix G “Our current implementation”: updated TLS vs UA (4), added HTTP/1.1 and bot-UA TLS/ja4h bullets; table “HTTP/1.1 without H2” clarified.
+
 ## v0.4.0 (2026-02-13)
 
 ### JA4H HTTP Fingerprinting Implementation
