@@ -25,31 +25,34 @@ type TLSFingerprint struct {
 	JA4Hash            string   `json:"ja4_hash,omitempty"`  // JA4 fingerprint hash
 	CertificateRequest bool     `json:"certificate_request"` // Client cert requested
 	Available          bool     `json:"available"`           // TLS info was available
+	FromProxy          bool     `json:"from_proxy"`          // TLS data came from trusted proxy headers (e.g. nginx)
 }
 
 // HTTPFingerprint contains HTTP-level signals
 type HTTPFingerprint struct {
-	Version       string            `json:"version"`             // HTTP version (HTTP/1.1, HTTP/2)
-	Method        string            `json:"method"`              // Request method
-	Path          string            `json:"path"`                // Request path
-	Headers       map[string]string `json:"headers"`             // All headers (lowercased keys)
-	HeaderOrder   []string          `json:"header_order"`        // Order of headers as received
-	HeaderCount   int               `json:"header_count"`        // Total header count
-	UserAgent     string            `json:"user_agent"`          // User-Agent header
-	Accept        string            `json:"accept"`              // Accept header
-	AcceptLang    string            `json:"accept_lang"`         // Accept-Language header
-	AcceptEnc     string            `json:"accept_enc"`          // Accept-Encoding header
-	Connection    string            `json:"connection"`          // Connection header
-	SecFetchSite  string            `json:"sec_fetch_site"`      // Sec-Fetch-Site header
-	SecFetchMode  string            `json:"sec_fetch_mode"`      // Sec-Fetch-Mode header
-	SecFetchDest  string            `json:"sec_fetch_dest"`      // Sec-Fetch-Dest header
-	SecFetchUser  string            `json:"sec_fetch_user"`      // Sec-Fetch-User header
-	SecChUA       string            `json:"sec_ch_ua"`           // Sec-CH-UA header
-	HasCookies    bool              `json:"has_cookies"`         // Has Cookie header
-	HasReferer    bool              `json:"has_referer"`         // Has Referer header
-	ContentType   string            `json:"content_type"`        // Content-Type header
-	ContentLength int64             `json:"content_length"`      // Content-Length value
-	JA4HHash      string            `json:"ja4h_hash,omitempty"` // JA4H HTTP fingerprint hash
+	Version       string               `json:"version"`                  // HTTP version (HTTP/1.1, HTTP/2)
+	Method        string               `json:"method"`                   // Request method
+	Path          string               `json:"path"`                     // Request path
+	Headers       map[string]string    `json:"headers"`                  // All headers (lowercased keys)
+	HeaderOrder   []string             `json:"header_order"`             // Order of headers as received
+	HeaderCount   int                  `json:"header_count"`             // Total header count
+	UserAgent     string               `json:"user_agent"`               // User-Agent header
+	Accept        string               `json:"accept"`                   // Accept header
+	AcceptLang    string               `json:"accept_lang"`              // Accept-Language header
+	AcceptEnc     string               `json:"accept_enc"`               // Accept-Encoding header
+	Connection    string               `json:"connection"`               // Connection header
+	SecFetchSite  string               `json:"sec_fetch_site"`           // Sec-Fetch-Site header
+	SecFetchMode  string               `json:"sec_fetch_mode"`           // Sec-Fetch-Mode header
+	SecFetchDest  string               `json:"sec_fetch_dest"`           // Sec-Fetch-Dest header
+	SecFetchUser  string               `json:"sec_fetch_user"`           // Sec-Fetch-User header
+	SecChUA       string               `json:"sec_ch_ua"`                // Sec-CH-UA header
+	HasCookies    bool                 `json:"has_cookies"`              // Has Cookie header
+	HasReferer    bool                 `json:"has_referer"`              // Has Referer header
+	ContentType   string               `json:"content_type"`             // Content-Type header
+	ContentLength int64                `json:"content_length"`           // Content-Length value
+	JA4HHash      string               `json:"ja4h_hash,omitempty"`      // JA4H HTTP fingerprint hash
+	H2Fingerprint string               `json:"h2_fingerprint,omitempty"` // HTTP/2 fingerprint (e.g. from nginx X-FP-H2)
+	H2Parsed      *H2FingerprintParsed `json:"h2_parsed,omitempty"`      // Parsed H2 fingerprint (SETTINGS, window, priority)
 }
 
 // Signals contains extracted classification signals
@@ -61,6 +64,8 @@ type Signals struct {
 	HighCipherCount   bool `json:"high_cipher_count"`   // > 10 cipher suites (browsers typically have 15-20)
 	HasSessionSupport bool `json:"has_session_support"` // Session tickets support
 	HasTLSFingerprint bool `json:"has_tls_fingerprint"` // JA3/JA4 fingerprint available
+	TLSKnownLibrary   bool `json:"tls_known_library"`   // JA3/JA4 matches known library/bot list (for TLS vs UA consistency)
+	TLSKnownBrowser   bool `json:"tls_known_browser"`   // JA3/JA4 matches known browser list (for TLS vs UA consistency)
 	HasMultipleGroups bool `json:"has_multiple_groups"` // Multiple elliptic curve groups (browsers)
 	HasModernCiphers  bool `json:"has_modern_ciphers"`  // Has TLS 1.3 cipher suites
 
@@ -82,6 +87,19 @@ type Signals struct {
 	JA4HHasReferer       bool   `json:"ja4h_has_referer"`       // JA4H indicates referer present
 	JA4HIsHTTP2          bool   `json:"ja4h_is_http2"`          // JA4H indicates HTTP/2
 	JA4HConsistentSignal bool   `json:"ja4h_consistent_signal"` // JA4H signals match HTTP signals
+
+	// Proxy / HTTP/2 fingerprint (e.g. from nginx TLS termination)
+	TLSFromProxy                 bool   `json:"tls_from_proxy"`                   // TLS data from trusted proxy headers
+	HasHTTP2Fingerprint          bool   `json:"has_http2_fingerprint"`            // HTTP/2 fingerprint present
+	HasHTTP2FingerprintFromProxy bool   `json:"has_http2_fingerprint_from_proxy"` // HTTP/2 fingerprint from X-FP-H2
+	H2SettingsParsed             bool   `json:"h2_settings_parsed"`               // H2 fingerprint string parsed (SETTINGS, window, priority)
+	H2InitialWindowSize          uint32 `json:"h2_initial_window_size"`           // SETTINGS INITIAL_WINDOW_SIZE (0 if not parsed)
+	H2PriorityPresent            bool   `json:"h2_priority_present"`              // PRIORITY segment non-empty (browsers send, libs often omit)
+	H2WindowUpdatePresent        bool   `json:"h2_window_update_present"`         // WINDOW_UPDATE segment non-zero (flow control; real clients send)
+	H2MaxFrameSizeBrowserLike    bool   `json:"h2_max_frame_size_browser_like"`   // SETTINGS MAX_FRAME_SIZE (id 5) is 16384 or 16777215
+	H2PseudoHeaderOrderPresent   bool   `json:"h2_pseudo_header_order_present"`   // fourth segment non-empty (pseudo-header order/flags; full fingerprint)
+	H2JA4Inconsistent            bool   `json:"h2_ja4_inconsistent"`              // JA4 ALPN (h2/h1) disagrees with actual HTTP/2 (Appendix G)
+	TLSALPNVsHTTPInconsistent    bool   `json:"tls_alpn_vs_http_inconsistent"`    // ALPN (h2/http/1.1) disagrees with request HTTP version (direct TLS only; Appendix G)
 
 	// Heuristic signals
 	UserAgentIsBot       bool `json:"ua_is_bot"`        // UA contains bot indicators

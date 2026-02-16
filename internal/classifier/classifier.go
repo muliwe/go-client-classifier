@@ -90,6 +90,9 @@ func (c *Classifier) browserReason(s fingerprint.Signals) string {
 	if s.JA4HHighHeaderCount {
 		reasons = append(reasons, "high header count (JA4H)")
 	}
+	if s.HasHTTP2Fingerprint {
+		reasons = append(reasons, "HTTP/2 fingerprint present")
+	}
 
 	if len(reasons) == 0 {
 		return "Classified as browser based on overall signal score"
@@ -129,6 +132,18 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 	}
 	if s.HasJA4HFingerprint && !s.JA4HConsistentSignal {
 		reasons = append(reasons, "inconsistent JA4H fingerprint")
+	}
+	if s.TLSKnownLibrary && s.UserAgentIsBrowser {
+		reasons = append(reasons, "TLS fingerprint matches known library (TLS vs UA inconsistent)")
+	}
+	if s.TLSKnownBrowser && s.UserAgentIsBot {
+		reasons = append(reasons, "TLS fingerprint matches browser but UA claims bot (TLS vs UA inconsistent)")
+	}
+	if s.H2JA4Inconsistent {
+		reasons = append(reasons, "HTTP/2 vs JA4 ALPN inconsistent")
+	}
+	if s.TLSALPNVsHTTPInconsistent {
+		reasons = append(reasons, "TLS ALPN vs HTTP version mismatch")
 	}
 	if s.JA4HMissingLanguage {
 		reasons = append(reasons, "no Accept-Language (JA4H)")

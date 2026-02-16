@@ -18,6 +18,8 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix C: TLS Fingerprinting Implementation](#appendix-c-tls-fingerprinting-implementation)
 - [Appendix D: JA4H HTTP Fingerprinting Implementation](#appendix-d-ja4h-http-fingerprinting-implementation)
 - [Appendix E: Performance Benchmarks](#appendix-e-performance-benchmarks)
+- [Appendix F: Nginx TLS Termination and Proxy Header Reuse](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)
+- [Appendix G: Cross-validation of transport vs application fingerprints](#appendix-g-cross-validation-of-transport-vs-application-fingerprints)
 
 ---
 
@@ -226,6 +228,12 @@ Current implementation uses the following weights:
 +1: ja4h_high_header_count (>= 10 headers from JA4H)
 +1: ja4h_has_referer (referer present from JA4H)
 +1: ja4h_consistent_signal (JA4H matches HTTP signals)
++1: has_http2_fingerprint (H2 fingerprint present, e.g. from proxy X-FP-H2)
++1: h2_settings_parsed + browser-like INITIAL_WINDOW_SIZE (parsed H2 fingerprint with common browser window size)
++1: h2_settings_parsed + h2_priority_present (PRIORITY segment non-empty; browsers send, libs often omit)
++1: h2_settings_parsed + h2_window_update_present (WINDOW_UPDATE segment non-zero; flow control, real clients)
++1: h2_settings_parsed + h2_max_frame_size_browser_like (SETTINGS MAX_FRAME_SIZE 16384 or 16777215)
++1: h2_settings_parsed + h2_pseudo_header_order_present (fourth segment non-empty; full fingerprint)
 ```
 
 **Bot-positive signals:**
@@ -295,11 +303,22 @@ Classification: browser (confidence: 0.97)
 
 ## Implementation Details
 
-### Architecture
+### Deployment: two data-flow variants
+
+**A) Direct TLS (Go terminates HTTPS)**  
+`client → Go TLS listener (:8443) → ConnContext + r.TLS → collector → signals → classifier → response`  
+TLS and HTTP/2 are observed directly; JA3/JA4 from ClientHello, H2 from the same connection when implemented.
+
+**B) Via nginx (TLS termination at edge)**  
+`client → nginx (443, TLS + JA3 module + H2 fingerprint module) → proxy_pass HTTP → Go (:8080) → collector reads X-FP-* + X-Internal-Proxy: 1 → same signals/classifier → response`  
+TLS and H2 fingerprint are taken from trusted proxy headers (X-FP-TLS-*, X-FP-JA3, X-FP-H2); no ClientHello in Go. See [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse) and [docs/nginx.md](nginx.md).
+
+### Architecture (collector internals)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    HTTP Request                         │
+│                   HTTP Request                          │
+│        (direct TLS conn or from proxy with X-FP-*)      │
 └─────────────────────┬───────────────────────────────────┘
                       │
                       ▼
@@ -312,6 +331,7 @@ Classification: browser (confidence: 0.97)
 │  │ - ALPN       │  │ - Sec-Fetch-*                    │ │
 │  │ - SNI        │  │ - Accept-*                       │ │
 │  │ - JA3/JA4    │  │ - JA4H (HTTP fingerprint)        │ │
+│  │ or X-FP-*    │  │ - H2 fingerprint (X-FP-H2, v0.5) │ │
 │  └──────────────┘  └──────────────────────────────────┘ │
 └─────────────────────┬───────────────────────────────────┘
                       │
@@ -346,8 +366,8 @@ Classification: browser (confidence: 0.97)
 
 ### Data Flow
 
-1. **Request received** → TLS connection state captured
-2. **Fingerprint collection** → Extract TLS and HTTP signals
+1. **Request received** → TLS connection state captured (direct Go TLS) **or** TLS/H2 from X-FP-* headers (when behind trusted proxy, X-Internal-Proxy: 1).
+2. **Fingerprint collection** → Extract TLS and HTTP signals: from ConnContext + r.TLS (direct), or from proxy headers (X-FP-TLS-Version, X-FP-JA3, X-FP-H2, etc.) when proxy path is used.
 3. **Signal extraction** → Convert raw data to boolean/numeric signals
 4. **Score calculation** → Apply weights, compute net score
 5. **Classification** → Compare against threshold
@@ -427,7 +447,7 @@ Classification: browser (confidence: 0.97)
 
 ### Current Limitations
 
-1. **HTTP/2 frame analysis**: Not implemented. Could extract SETTINGS, WINDOW_UPDATE, PRIORITY frame patterns.
+1. **HTTP/2 frame-level capture**: Not implemented in Go. HTTP/2 fingerprint is **consumed from proxy** (e.g. nginx X-FP-H2) in v0.5.0 and used in classification; SETTINGS/WINDOW_UPDATE/PRIORITY capture is done at nginx via modules. Native Go H2 frame parsing is not planned (see Phase 2, [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
 
 2. **No behavioral analysis**: Single-request classification only. No session/temporal patterns.
 
@@ -476,14 +496,20 @@ Based on recent research (2025-2026), the following development roadmap addresse
 
 **Goal**: Extract HTTP/2 frame-level signals per Akamai methodology.
 
-**Implementation approach — nginx modules, not Go libraries**: HTTP/2 statistics (SETTINGS, WINDOW_UPDATE, PRIORITY frames) will be collected at the **nginx** layer using existing modules (e.g. [Xetera/nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)), with fingerprint data passed to the Go backend via custom headers (e.g. `X-FP-H2`). This avoids implementing low-level HTTP/2 frame parsing in Go: there are no mature, production-ready libraries for passive H2 fingerprinting in the Go ecosystem, while nginx already terminates TLS and parses H2 frames; extending it with fingerprint modules is a well-established approach used in CDNs and described in research (Akamai [4]). The nginx→Go integration is documented in [docs/nginx.md](nginx.md).
+**Implementation approach — nginx modules, not Go libraries**: HTTP/2 fingerprint data is collected at the **nginx** layer using existing modules (e.g. [Xetera/nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)) and passed to the Go backend via `X-FP-H2`; **consumption in Go is implemented in v0.5.0** (see [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)). Extended statistics (SETTINGS, WINDOW_UPDATE, PRIORITY) remain a deployment concern on nginx. This avoids implementing low-level HTTP/2 frame parsing in Go: there are no mature, production-ready libraries for passive H2 fingerprinting in the Go ecosystem, while nginx already terminates TLS and parses H2 frames; extending it with fingerprint modules is a well-established approach used in CDNs and described in research (Akamai [4]). The nginx→Go integration is documented in [docs/nginx.md](nginx.md).
 
-| Task | Priority | Reference |
-|------|----------|-----------|
-| [ ] HTTP/2 SETTINGS frame capture | High | Akamai [4], nginx-http2-fingerprint |
-| [ ] WINDOW_UPDATE pattern analysis | Medium | Akamai [4] |
-| [ ] PRIORITY frame fingerprinting | Medium | Akamai [4] |
-| [ ] H2/H3 ratio tracking (per-client behavioral) | Medium | Cloudflare signals |
+| Task | Priority | Reference | Status |
+|------|----------|-----------|--------|
+| [x] HTTP/2 fingerprint consumption from proxy (X-FP-H2) in Go | High | Appendix F, [29] | Done (v0.5.0) |
+| [x] HTTP/2 SETTINGS + PRIORITY in fingerprint at nginx | High | Akamai [4], [29] | Done by module (deploy nginx) |
+| [x] Flow control / window in fingerprint | Medium | Akamai [4], [29] | Done by module (in $http2_fingerprint) |
+| [ ] H2/H3 ratio tracking (per-client behavioral) | Medium | Cloudflare signals | Planned |
+
+*Note*: [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint) implements Akamai’s method: one variable `$http2_fingerprint` includes SETTINGS (incl. INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour (RFC 7540 §10.8). Deploy nginx with the module to use; no separate WINDOW_UPDATE variable — it is part of the combined fingerprint.
+
+**Implementation details (v0.5.0)**:
+- Collector reuses `X-FP-H2` when `X-Internal-Proxy: 1`; TLS and H2 from proxy headers (see [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
+- New signals: `has_http2_fingerprint`, `has_http2_fingerprint_from_proxy`, `tls_from_proxy`; +1 browser score for H2 fingerprint.
 
 **Why**: HTTP/2 implementation details (initial window size, max concurrent streams, header table size) create passive fingerprints that are hard to spoof [4]. Using nginx at the edge for H2 fingerprinting is a rational choice when no equivalent Go libraries exist and avoids reimplementing protocol parsing.
 
@@ -495,7 +521,7 @@ Based on recent research (2025-2026), the following development roadmap addresse
 
 | Task | Priority | Reference | Status |
 |------|----------|-----------|--------|
-| [x] Spatial inconsistency detection (cross-signal) | High | FP-Inconsistent [7] | Partial (v0.4.0) |
+| [x] Spatial inconsistency detection (cross-signal) | High | FP-Inconsistent [7] | Done (v0.4.0) |
 | [ ] Temporal inconsistency tracking (same client, different FPs) | High | FP-Inconsistent [7] | Planned |
 | [ ] TLS/HTTP version mismatch detection | Medium | FP-Inconsistent [7] | Planned |
 | [ ] Header-UA consistency validation | Medium | Radware [10] | Planned |
@@ -506,6 +532,8 @@ Based on recent research (2025-2026), the following development roadmap addresse
 - Inconsistency adds +2 to bot score (evasion indicator)
 
 **Why**: FP-Inconsistent (2024) reduced evasion rates by 44-48% while maintaining 96.84% true-negative rate. Evasive bots produce inconsistent fingerprints across signals [7].
+
+Methodologies for cross-checking "complex" fingerprints (TLS JA3/JA4, HTTP/2, JA4H) with ordinary HTTP headers are summarized in [Appendix G: Cross-validation of transport vs application fingerprints](#appendix-g-cross-validation-of-transport-vs-application-fingerprints).
 
 ---
 
@@ -804,7 +832,27 @@ EFFORT                   │                    EFFORT
 
 29. **nginx-http2-fingerprint** (nginx module)
     - https://github.com/Xetera/nginx-http2-fingerprint
-    - Passive HTTP/2 fingerprinting (SETTINGS/priority) as nginx module; used for planned H2 statistics collection at the edge instead of Go-side parsing (no mature H2 fingerprinting libs in Go). See [Phase 2: HTTP/2 Deep Inspection](#phase-2-http2-deep-inspection) and [docs/nginx.md](nginx.md).
+    - Passive HTTP/2 fingerprinting (SETTINGS/priority) as nginx module; used for planned H2 statistics collection at the edge instead of Go-side parsing (no mature H2 fingerprinting libs in Go). See [Phase 2: HTTP/2 Deep Inspection](#phase-2-http2-deep-inspection), [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse), and [docs/nginx.md](nginx.md).
+
+30. **Fingerproxy** (Go reverse proxy)
+    - https://github.com/wi1dcard/fingerproxy
+    - Captures JA3, JA4, and HTTP/2 fingerprints and forwards to backends via headers (X-JA3-Fingerprint, X-JA4-Fingerprint, X-HTTP2-Fingerprint). Production use (e.g. Subscan.io). Rationale for proxy-side fingerprint collection and header forwarding.
+
+31. **Finch** (fingerprint-based actions)
+    - https://github.com/0x4D31/finch
+    - Real-time actions (block, reroute, tarpit) based on JA3, JA4, QUIC, JA4H, HTTP/2 fingerprints. Alternative to in-app fingerprint parsing.
+
+32. **Scrapfly HTTP/2 Fingerprint**
+    - https://scrapfly.io/web-scraping-tools/http2-fingerprint
+    - Format SETTINGS|WINDOW_UPDATE|PRIORITY|...; browser vs library differences; used for bot detection. See Appendix F (HTTP/2 scoring).
+
+33. **HTTP/2 fingerprinting** (lwt hiker)
+    - https://lwthiker.com/networks/2022/06/17/http2-fingerprinting.html
+    - Browsers send PRIORITY; libraries often omit; SETTINGS/window differ (e.g. curl). See Appendix F (HTTP/2 scoring).
+
+34. **When Handshakes Tell the Truth: Detecting Web Bad Bots via TLS Fingerprints** (arXiv:2602.09606)
+    - https://arxiv.org/abs/2602.09606
+    - JA4-based bot detection; 98.63% accuracy, AUC 0.998; TLS vs HTTP correlation. See [Cross-validation of transport vs application fingerprints](#cross-validation-of-transport-vs-application-fingerprints).
 
 ---
 
@@ -941,13 +989,13 @@ Accept: */*
 
 ## Appendix C: TLS Fingerprinting Implementation
 
-This appendix describes the current TLS fingerprinting implementation as of v0.3.0.
+This appendix describes the **direct TLS** path (Go terminates HTTPS). When TLS is terminated at nginx, the collector uses X-FP-* headers instead of ConnContext; see [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse).
 
-### Architecture
+### Architecture (direct TLS only)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Incoming TLS Connection                            │
+│                    Incoming TLS Connection (to Go)                          │
 └─────────────────────────────┬───────────────────────────────────────────────┘
                               │
                               ▼
@@ -1330,6 +1378,179 @@ task bench URL=http://localhost:8080/ DURATION=10s CONCURRENCY=50
 - **TLS dominates latency**: ~1ms avg with TLS vs ~7µs without
 - **Target met**: p99 latency well under 5ms target
 - **Scalable**: Can handle ~870K RPM on single node (localhost)
+
+---
+
+## Appendix F: Nginx TLS Termination and Proxy Header Reuse
+
+*Added: 2026-02-16 (v0.5.0)*
+
+### Overview
+
+When TLS is terminated at a reverse proxy (e.g. nginx with SSL and optional fingerprint modules), the Go backend receives plain HTTP from the proxy and has no direct access to the client TLS handshake or HTTP/2 frames. To preserve fingerprint data for classification, the proxy forwards it via trusted HTTP headers; the collector reuses these headers when a trusted-proxy marker is present.
+
+This approach is consistent with industry practice: CDNs and anti-bot services capture TLS and HTTP/2 fingerprints at the edge and pass them to backends for policy enforcement (see References below). Doing the same with nginx allows reusing mature fingerprint modules (JA3, HTTP/2) without reimplementing protocol parsing in Go.
+
+### Trusted proxy detection
+
+The backend treats a request as coming from a trusted TLS-terminating proxy only when:
+
+- The `X-Internal-Proxy` header is exactly `"1"`.
+- The proxy is the only component that can set this header (e.g. internal network, or external headers stripped before reaching the app).
+
+**Security**: Fingerprint headers must never be trusted from untrusted clients. RFC 9440 and gateway best practices (e.g. [2]) state that backends should only accept client identity/fingerprint data from configured trusted proxies and should strip or ignore such headers when they originate from the public internet. See [docs/nginx.md](nginx.md) for deployment notes.
+
+### Headers consumed (when trusted proxy)
+
+| Header | Source (nginx) | Used as |
+|--------|----------------|--------|
+| `X-Internal-Proxy` | Set by proxy to `1` | Trusted-proxy marker |
+| `X-FP-TLS-Version` | `$ssl_protocol` | TLS version (e.g. TLSv1.3) |
+| `X-FP-TLS-Cipher` | `$ssl_cipher` | Cipher suite name |
+| `X-FP-TLS-ALPN` | `$ssl_alpn_protocol` | Negotiated protocol (h2, http/1.1) |
+| `X-FP-TLS-SNI` | `$ssl_server_name` | SNI |
+| `X-FP-JA3` | JA3 module (e.g. nginx-ssl-ja3) | JA3 hash |
+| `X-FP-H2` | HTTP/2 fingerprint module (e.g. nginx-http2-fingerprint) | HTTP/2 fingerprint string |
+
+When `X-Internal-Proxy` is not `"1"`, all `X-FP-*` headers are ignored for fingerprint construction; TLS data is taken only from `r.TLS` and ConnContext (direct TLS to Go).
+
+### New fingerprint and signal fields (v0.5.0)
+
+- **TLS**: `FromProxy` — set when TLS was built from proxy headers (no ClientHello in Go; JA4 and cipher/extension counts are then unavailable).
+- **HTTP**: `H2Fingerprint` — HTTP/2 fingerprint value when provided by proxy (`X-FP-H2`). **`H2Parsed`** — when present, the backend parses the Akamai/nginx-http2-fingerprint format (`SETTINGS|WINDOW_UPDATE|PRIORITY|pseudo-header order`) into structured fields: SETTINGS map (RFC 7540 ids), INITIAL_WINDOW_SIZE (id 4), MAX_FRAME_SIZE (id 5), WINDOW_UPDATE, PRIORITY, PseudoHeaderOrder (fourth segment); see `internal/fingerprint/h2fingerprint.go`.
+- **Signals**: `tls_from_proxy`, `has_http2_fingerprint`, `has_http2_fingerprint_from_proxy`, `h2_settings_parsed`, `h2_initial_window_size`, `h2_priority_present`, `h2_window_update_present`, `h2_max_frame_size_browser_like`, `h2_pseudo_header_order_present` — used in scoring, logging, and research.
+
+### Scoring impact
+
+- **HTTP/2 fingerprint**: If `has_http2_fingerprint` is true, the browser score is increased by **+1** (`h2-fp`). HTTP/2 SETTINGS/frame-level fingerprints correlate with real browser and client implementations and are hard to spoof from script (no JS API for raw H2 frames); see Akamai [4], NST Browser [6], and recent anti-bot literature.
+- **Parsed H2 + browser-like INITIAL_WINDOW_SIZE**: When the H2 fingerprint string is successfully parsed (`h2_settings_parsed`) and SETTINGS INITIAL_WINDOW_SIZE (id 4) is one of the values commonly seen in real browsers (65535, 65536, 131072, 1048576, 2097152 per RFC 7540 and Akamai fingerprinting), the browser score is increased by **+1** (`h2-init-window`). Unusual or library-typical window sizes do not receive this bonus. See `internal/fingerprint/h2fingerprint.go` (`IsBrowserLikeH2InitialWindow`). curl and many HTTP/2 libraries use different window sizes than browsers (Scrapfly [32], lwt hiker [33]).
+- **Parsed H2 + PRIORITY present**: When the fingerprint is parsed and the PRIORITY segment is non-empty (`h2_priority_present`), the browser score is increased by **+1** (`h2-priority`). Browsers typically send PRIORITY frames; many HTTP/2 client libraries omit or handle them differently (lwt hiker [33], Scrapfly format [32]).
+- **Parsed H2 + WINDOW_UPDATE present**: When the connection-level WINDOW_UPDATE segment (second segment) is non-zero (`h2_window_update_present`), **+1** (`h2-window-update`). Real clients use flow control; this correlates with browser behavior (Akamai [4], Scrapfly [32]).
+- **Parsed H2 + browser-like MAX_FRAME_SIZE**: When SETTINGS id 5 (MAX_FRAME_SIZE) is 16384 (RFC default) or 16777215 (max), **+1** (`h2-max-frame`). Browsers typically use these values (RFC 7540/9113).
+- **Parsed H2 + pseudo-header order present**: When the fourth segment (pseudo-header order or flags, e.g. `m,p,a,s` in nginx module) is non-empty (`h2_pseudo_header_order_present`), **+1** (`h2-pseudo-headers`). Full fingerprint format typical of browsers (Scrapfly format [32]).
+- **TLS from proxy**: Existing TLS-based signals (e.g. `has_modern_tls`, `is_http2` via ALPN, `has_tls_fingerprint` when JA3 is present) still apply; full JA4 and cipher/extension counts are not used when `FromProxy` is true because nginx does not forward them in the current setup.
+
+### HTTP/2 scoring rules and best practices (publications)
+
+Rules above are aligned with the following sources:
+
+| Rule | Source | Note |
+|------|--------|------|
+| H2 fingerprint presence | Akamai [4], NST Browser [6] | SETTINGS/WINDOW_UPDATE/PRIORITY identify client; no JS API to spoof. |
+| Browser-like INITIAL_WINDOW_SIZE | Akamai [4], RFC 7540, Scrapfly [32] | Browsers use characteristic values; curl/libs differ. |
+| PRIORITY segment present | lwt hiker [33], Scrapfly [32] | Browsers send PRIORITY; libraries often omit. |
+| WINDOW_UPDATE segment non-zero | Akamai [4], Scrapfly [32] | Flow control; real clients send connection-level WINDOW_UPDATE. |
+| Browser-like MAX_FRAME_SIZE (id 5) | RFC 7540/9113 | Default 16384, max 16777215; browsers use these. |
+| Fourth segment (pseudo-header order) | Scrapfly [32], nginx module | Full fingerprint; browsers send characteristic order. |
+| Consistency (spatial/temporal) | FP-Inconsistent [7] | Inconsistent attributes indicate evasion; we use JA4H consistency, H2 fits same idea. |
+
+### Rationale (why proxy headers instead of Go-only)
+
+1. **No mature H2 fingerprinting in Go**: Production-ready libraries for passive HTTP/2 frame fingerprinting (SETTINGS, PRIORITY, etc.) are not available in the Go ecosystem; nginx modules (e.g. [29]) already implement this at the edge.
+2. **Reuse of nginx SSL/H2 stack**: nginx already parses TLS and HTTP/2; adding fingerprint modules avoids duplicating protocol logic and keeps a single place for certificate and ALPN handling.
+3. **Alignment with CDN/research practice**: Passive HTTP/2 fingerprinting at the proxy is described in Akamai’s work [4]; TLS and HTTP/2 fingerprint forwarding to backends is used by Fingerproxy [30], Finch [31], and similar tools (2024–2025).
+4. **Trusted-header pattern**: Forwarding identity/fingerprint from a trusted proxy via headers is a standard pattern (e.g. RFC 9440 Client-Cert, gateway mTLS/header docs [2]).
+
+### References (2024–2026 and foundational)
+
+- **[4] Passive Fingerprinting of HTTP/2 Clients** (Akamai, Black Hat EU 2017) — HTTP/2 SETTINGS/frame fingerprinting at the proxy; basis for nginx-http2-fingerprint and similar modules.  
+  https://blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf
+
+- **[2] Trusted headers for TLS-terminating reverse proxies** (PingIdentity, 2025) — Backends should only trust client identity/certificate headers from configured trusted proxies; strip or ignore from untrusted sources.  
+  https://backstage.pingidentity.com/docs/ig/2025.3/gateway-guide/oauth2-rs-introspect-mtls-header.html
+
+- **[29] nginx-http2-fingerprint** — Passive HTTP/2 fingerprinting (SETTINGS/priority) as nginx module; supplies values for variables/headers (e.g. `X-FP-H2`).  
+  https://github.com/Xetera/nginx-http2-fingerprint
+
+- **[30] Fingerproxy** — HTTPS reverse proxy that captures JA3, JA4, and HTTP/2 fingerprints and forwards them to backends via headers (X-JA3-Fingerprint, X-JA4-Fingerprint, X-HTTP2-Fingerprint). Production use (e.g. Subscan.io).  
+  https://github.com/wi1dcard/fingerproxy
+
+- **[31] Finch** — Real-time fingerprint-based actions (JA3, JA4, QUIC, JA4H, HTTP/2); supports block, reroute, tarpit.  
+  https://github.com/0x4D31/finch
+
+- **RFC 9440** — Client-Cert and Client-Cert-Chain HTTP header fields for TLS-terminating reverse proxies (TTRPs); standardizes secure forwarding of client certificate information.  
+  https://httpwg.org/specs/rfc9440.html
+
+- **[6] HTTP/2 fingerprinting and bypass** (NST Browser, 2025) — SETTINGS frame and transport-layer fingerprinting; cannot be spoofed via browser APIs; used in anti-bot/scraping.  
+  https://www.nstbrowser.io/blog/http-2-bypass
+
+- **TLS fingerprinting in 2026** (proxies.sx, 2026) — JA4+ adoption; inter-request and ML-based detection; fingerprinting at edge/proxy.  
+  https://www.proxies.sx/use-cases/privacy/tls-fingerprint
+
+- **[32] Scrapfly HTTP/2 Fingerprint** — Format and components: SETTINGS, WINDOW_UPDATE, PRIORITY, pseudo-header order; used to detect scrapers/bots; browser vs library differences.  
+  https://scrapfly.io/web-scraping-tools/http2-fingerprint
+
+- **[33] HTTP/2 fingerprinting** (lwt hiker) — Browsers send PRIORITY; libraries often omit; SETTINGS/window differ (e.g. curl); impersonation requires matching frame behaviour.  
+  https://lwthiker.com/networks/2022/06/17/http2-fingerprinting.html
+
+### Configuration and deployment
+
+See [docs/nginx.md](nginx.md) for nginx build, module list, and example `proxy_set_header` configuration. The Go server uses the same header names (`X-FP-*`, `X-Internal-Proxy`) so that a single nginx config can drive both logging and classification.
+
+---
+
+## Appendix G: Cross-validation of transport vs application fingerprints
+
+Methodologies for checking consistency between "complex" fingerprints (TLS JA3/JA4, HTTP/2, JA4H) and ordinary HTTP headers are widely used in anti-bot systems; mismatches indicate spoofing or evasive bots.
+
+### Spatial vs temporal inconsistency
+
+- **Spatial**: Two attributes in the *same* request contradict each other (e.g. User-Agent says Chrome, TLS fingerprint says curl; or JA4H says HTTP/1.1, ALPN says h2).  
+- **Temporal**: The *same* attribute changes across requests from the same client (e.g. JA3 differs between requests that should be the same browser).  
+
+FP-Inconsistent [7] uses both: data-driven rules on attribute pairs (spatial) and same-attribute-over-time (temporal). Evasive bots that alter fingerprints often produce invalid combinations; detection targets those combinations. Our project implements **spatial** consistency (JA4H vs HTTP; H2 vs ALPN/version is implicit).
+
+### TLS (JA3/JA4) vs HTTP / User-Agent
+
+| Check | Description | Source |
+|-------|-------------|--------|
+| TLS fingerprint vs User-Agent | Declared browser (UA) should match TLS ClientHello profile (JA3/JA4). Chrome UA with curl-like JA4 → bot. | DataDome, Cloudflare, mitmproxy [4], proxies.sx [34], JA4 in Action |
+| TLS vs HTTP version | ALPN (h2 / http/1.1) should match request protocol; TLS JA4 includes ALPN. Mismatch → impersonation. | FoxIO JA4+, TrueGuard JA4/JA4T |
+| JA4T vs claimed OS | TCP fingerprint (JA4T) should match User-Agent OS (e.g. "Windows" vs Linux TCP options). | TrueGuard [34], gen0sec JA4+ |
+
+Cloudflare and others compare TLS fingerprint to the declared User-Agent; mismatches trigger challenges or 403. Multi-layer correlation (TLS + headers + behavior) makes single-signal spoofing insufficient.
+
+### JA4H vs HTTP headers
+
+| Check | Description | Source |
+|-------|-------------|--------|
+| JA4H vs HTTP cookies/referer/version | JA4H encodes method, version, cookie, referer, header count, language. These must match actual request headers. | FoxIO JA4H [2], ThreatRelay, gen0sec |
+| JA4H language vs Accept-Language | JA4H "0000" vs present Accept-Language (or vice versa) → inconsistency. | Our implementation (v0.4.0) |
+
+JA4H is an HTTP *structural* fingerprint (order, presence, counts). Cross-validating JA4H-derived flags with the same facts from raw headers catches header manipulation. We do this in Phase 3 (JA4H consistent signal; inconsistency → +2 bot).
+
+### HTTP/2 fingerprint vs HTTP headers / TLS
+
+| Check | Description | Source |
+|-------|-------------|--------|
+| H2 fingerprint vs protocol | If request is HTTP/2 (ALPN h2 or H2 fingerprint present), other signals (e.g. JA4H version "20") should agree. | Akamai [4], Scrapfly [32] |
+| H2 vs User-Agent | Real browsers send characteristic H2 SETTINGS/PRIORITY; spoofed UA with library-like H2 → mismatch. | lwt hiker [33], curl_cffi impersonation FAQ |
+| H2 + TLS + headers | Full signature must be coherent (e.g. Chrome UA + Chrome-like JA4 + Chrome-like H2). | Browserless, curl_cffi |
+
+HTTP/2 fingerprint reflects the real client stack; it cannot be set via JavaScript. We implement H2 vs UA (browser UA + library-like H2 → +2 bot) and H2 vs JA4 (JA4 ALPN vs actual protocol); see Our current implementation below.
+
+### References for this section
+
+- **[7] FP-Inconsistent** (arXiv:2406.07647) — Spatial (pair of attributes in one request) and temporal (same attribute over time) inconsistency; data-driven rules; 44–48% evasion reduction, 96.84% TNR.  
+  https://arxiv.org/abs/2406.07647  
+- **DataDome** — TLS fingerprinting reinforces protection; TLS vs declared User-Agent.  
+  https://datadome.co/engineering/how-tls-fingerprinting-reinforces-datadomes-protection/  
+- **JA4 in Action** (Medium) — Detecting bots/fake browsers via JA4; TLS vs UA consistency.  
+  https://medium.com/@belghitishakantar/ja4-in-action-detecting-bots-malware-and-fake-browsers-at-the-tls-level-3ccd890fbce9  
+- **[34] When Handshakes Tell the Truth** (arXiv:2602.09606) — Bot detection via TLS (JA4) fingerprints; 98.63% accuracy, AUC 0.998; features ja4_b, cipher_count, ext_count.  
+  https://arxiv.org/abs/2602.09606  
+- **Browser Polygraph** (Kalantari et al., 2024) — Predict whether fingerprint attributes are consistent with *reported User-Agent*; ML-based.  
+- **curl_cffi / lwt hiker** — Impersonation requires matching TLS *and* HTTP/2 (and often pseudo-header order); mismatches reveal automation.  
+  https://curl-cffi.readthedocs.io/en/latest/impersonate/faq.html  
+
+### Our current implementation
+
+- **Done**: JA4H vs HTTP (cookies, referer, version, language) — spatial consistency; inconsistency → +2 bot.  
+- **Done**: H2 vs User-Agent — when UA looks like a browser but the HTTP/2 fingerprint is library-like (e.g. no PRIORITY, non-browser INITIAL_WINDOW_SIZE or WINDOW_UPDATE), we add +2 bot (`h2-ua-inconsistent`). Uses existing H2 parsed signals; no new data collection.  
+- **Done**: TLS vs User-Agent — (1) When UA looks like a browser but JA3/JA4 is in a known-library set (curl, Python requests, Go, Node.js), we add +2 bot (`tls-ua-inconsistent`). (2) When UA looks like a browser and JA3/JA4 is in a known-browser set (Chrome, etc.), we add +1 browser (`tls-ua-consistent`). (3) When UA claims bot/library but JA3/JA4 is in the known-browser set, we add +2 bot (`tls-ua-inconsistent`). JA3 maps are static in `internal/fingerprint/tls_client_map.go`; JA4 set is loaded from file (default `internal/fingerprint/data/ja4db.json`, download from ja4db.com on first start if missing). Env: `JA4DB_PATH`, `JA4DB_SKIP_DOWNLOAD` (tests). Extend from ja3.me, JA3.ZONE, ja4db.com.  
+- **Done**: H2 vs JA4 — when JA4 is present, we parse ALPN from Part A (h2/h1/h3). If JA4 says h2 but the request is not HTTP/2 (or says h1 but it is HTTP/2), we add +2 bot (`h2-ja4-inconsistent`). See `JA4ALPN()` in `tls_client_map.go`.
+- **Done**: TLS/HTTP version mismatch — with direct TLS (not from proxy), we require ALPN to match the observed HTTP version: ALPN `h2` ↔ `HTTP/2.0`, ALPN `http/1.1` ↔ non‑HTTP/2. Mismatch → +2 bot (`tls-alpn-http-inconsistent`). When TLS is from proxy, ALPN reflects client↔proxy; the request to the backend may be HTTP/1.1, so we do not apply this check.
+- **Planned**: Temporal inconsistency (same attribute changes across requests from same client).
 
 ---
 

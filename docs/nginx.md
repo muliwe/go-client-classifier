@@ -19,8 +19,8 @@ Goals:
 client
   ↓
 nginx
-  ├─ 443  → TLS termination + fingerprint → Go HTTP :8080
-  └─ 8444 → TLS passthrough               → Go HTTPS :8443
+  ├─ 443  → TLS termination + JA3 + H2 fingerprint → X-FP-* headers → Go HTTP :8080 (collector uses headers)
+  └─ 8444 → TLS passthrough                        → Go HTTPS :8443 (direct TLS to Go)
 ```
 
 ---
@@ -63,7 +63,7 @@ cd nginx
 git clone https://github.com/Xetera/nginx-http2-fingerprint.git
 ```
 
-This module implements passive HTTP/2 fingerprinting (SETTINGS/priority).
+This module implements [Akamai’s passive HTTP/2 fingerprinting](https://blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf): one variable `$http2_fingerprint` contains SETTINGS (incl. INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour (RFC 7540 §10.8). Forward it to the backend as `X-FP-H2`.
 
 ## 3. JA3 module (optional)
 
@@ -253,6 +253,8 @@ X-FP-H2
 
 # Reading fingerprint in Go
 
+The collector uses these headers when `X-Internal-Proxy` is `"1"` (see [METHODOLOGY.md](METHODOLOGY.md) Appendix F). JA3 and H2 are also used for cross-validation (TLS vs User-Agent, H2 vs UA; see Appendix G).
+
 ```go
 if r.Header.Get("X-Internal-Proxy") == "1" {
     tlsVersion := r.Header.Get("X-FP-TLS-Version")
@@ -303,15 +305,11 @@ These values should be stored in a dataset for later analysis.
 
 ---
 
-# Plans: HTTP/2 statistics via nginx
+# HTTP/2 fingerprint: what the module provides
 
-Going forward, extended HTTP/2 statistics (SETTINGS, WINDOW_UPDATE, PRIORITY, etc.) will be collected via nginx modules rather than Go libraries. Reasons:
+The [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint) module exposes a single variable `$http2_fingerprint` that already encodes SETTINGS (including INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour per Akamai’s method — no separate variables for WINDOW_UPDATE or other frames. Pass it to the Go backend as `X-FP-H2`. The Go server parses this string (format `SETTINGS|WINDOW_UPDATE|PRIORITY|...`) into structured fields (SETTINGS map, initial window, priority) for logging and signals; see [METHODOLOGY.md](METHODOLOGY.md) Phase 2 and Appendix F.
 
-- **No ready solutions in Go**: there are no mature libraries for passive HTTP/2 frame-level fingerprinting in the Go ecosystem; parsing frames manually in the application would be a workaround and duplicate logic.
-- **nginx already parses HTTP/2**: with TLS termination nginx handles H2 and has access to frames; modules (e.g. [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)) extract the fingerprint and expose it via variables/headers.
-- **Approach aligns with CDN practice and research**: passive H2 fingerprinting at the edge is described in Akamai’s work (Black Hat EU 2017) and is implemented at the proxy layer.
-
-Full rationale and references are in [METHODOLOGY.md](METHODOLOGY.md) (Phase 2: HTTP/2 Deep Inspection).
+Any future “extended” H2 statistics (e.g. separate variables per frame type) would still be collected via nginx modules rather than Go: there are no mature passive HTTP/2 fingerprinting libraries in Go, and nginx already parses H2 at the edge.
 
 ---
 

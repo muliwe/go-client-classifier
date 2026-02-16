@@ -2,18 +2,18 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.4.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 0.5.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
-| Metric | Value |
-|--------|-------|
-| Throughput | **~14,500 RPS** (~870K RPM) |
-| Avg Latency | **~1ms** (with TLS) |
-| Classification Logic | **~7µs** per request |
-| Concurrency | Tested up to 50 concurrent connections |
+Benchmarks: localhost, 30s, 50 concurrent connections; Go server only (no nginx in front).
 
-*Benchmark: localhost, HTTPS with full TLS fingerprinting (JA3/JA4/JA4H)*
+| Mode | RPS | RPM | Latency avg |
+|------|-----|-----|--------------|
+| HTTP (no TLS) | **~11,550** | ~693K | ~4.3 ms |
+| HTTPS (TLS fingerprinting, JA3/JA4/JA4H) | **~8,210** | ~493K | ~6.1 ms |
+
+Classification logic: **~7µs** per request. Benchmarks with nginx (TLS termination + X-FP-* at edge) will be added later.
 
 ## Project Goal
 
@@ -27,9 +27,8 @@ Create a single HTTP endpoint that classifies clients as `browser` or `bot` base
 
 ## Current Status
 
-Phase 1 (TLS + HTTP Fingerprinting) complete:
-- Full ClientHello capture with custom TLS listener
-- JA3 and JA4 hash computation
+Phase 1 (TLS + HTTP Fingerprinting) and Phase 2/3 (HTTP/2 + cross-validation) in place:
+- Full ClientHello capture with custom TLS listener; JA3 and JA4 hash computation
 - JA4H HTTP fingerprinting (method, version, cookies, headers, language)
 - TLS and HTTP-based classification signals integrated into scoring
 - Consistency checking between JA4H and HTTP signals (evasion detection)
@@ -41,9 +40,16 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Architecture
 
+**Direct TLS (Go terminates HTTPS):**
 ```
-client → TLS listener → fingerprint collector → classifier → response
+client → TLS listener (Go) → fingerprint collector → classifier → response
 ```
+
+**Via nginx (TLS termination at edge, fingerprint via headers):**
+```
+client → nginx (TLS + JA3 + H2 fingerprint) → proxy_pass → Go (HTTP :8080, X-FP-* headers) → collector → classifier → response
+```
+See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 
 ### Tech Stack
 
@@ -69,6 +75,8 @@ client → TLS listener → fingerprint collector → classifier → response
 │   ├── benchmark/       # HTTP benchmark tool
 │   ├── python/          # Analytics tools
 │   └── shell/           # Integration test scripts
+├── testdata/            # Test stubs (e.g. ja4db_fixture.json for tests)
+├── internal/fingerprint/data/  # JA4 DB path (ja4db.json downloaded on first start if missing)
 ├── logs/                # JSON traffic logs
 └── docs/                # Research documentation
 ```
@@ -85,12 +93,10 @@ client → TLS listener → fingerprint collector → classifier → response
 - Session ticket and early data support
 
 ### HTTP Level
-- HTTP/2 vs HTTP/1.1
+- HTTP/2 vs HTTP/1.1; HTTP/2 fingerprint (SETTINGS, PRIORITY, window) when provided by proxy
 - JA4H fingerprinting (HTTP fingerprint from JA4+ family)
-- Header order and structure
-- Browser-specific headers (sec-fetch-*, accept-language)
-- Header count and entropy
-- JA4H consistency checking (cross-signal validation)
+- Header order and structure; browser-specific headers (sec-fetch-*, accept-language); header count and entropy
+- **Cross-signal consistency**: JA4H vs HTTP; TLS vs User-Agent (known library/browser JA3/JA4); H2 vs JA4 (ALPN); TLS ALPN vs HTTP version (direct TLS)
 
 ## Research Workflow
 
@@ -186,6 +192,25 @@ go build -o bin/server ./cmd/server
 # Run the binary
 ./bin/server
 ```
+
+### Optional: JA4 dictionary (deploy)
+
+The server uses a JA4 fingerprint database (ja4db.com) for TLS vs User-Agent consistency. **If the file is absent, the server downloads it itself** on first use (saved to `internal/fingerprint/data/ja4db.json` when running from repo root). No manual step is required for basic runs.
+
+For **deployment**, you can optionally download the dictionary manually (e.g. to avoid first-request latency or when the host has no outbound HTTPS):
+
+```bash
+# From repo root; creates internal/fingerprint/data/ja4db.json
+curl -o internal/fingerprint/data/ja4db.json "https://ja4db.com/api/read/"
+```
+
+Or with PowerShell:
+
+```powershell
+Invoke-WebRequest -Uri "https://ja4db.com/api/read/" -OutFile "internal/fingerprint/data/ja4db.json" -UseBasicParsing
+```
+
+Ensure the directory exists (`mkdir -p internal/fingerprint/data` or `New-Item -ItemType Directory -Force -Path internal/fingerprint/data`). Override path with env **`JA4DB_PATH`** if you place the file elsewhere.
 
 ### Testing
 
@@ -316,7 +341,7 @@ Hooks are automatically run before each commit.
 
 - [CHANGELOG.md](CHANGELOG.md) — version history and release notes
 - [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references
-- [docs/nginx.md](docs/nginx.md) — nginx setup for TLS termination, HTTP/2 fingerprint extraction, JA3; planned collection of HTTP/2 statistics via nginx modules
+- [docs/nginx.md](docs/nginx.md) — nginx setup for TLS termination, HTTP/2 fingerprint (X-FP-H2), JA3 (X-FP-JA3); Go consumes headers and uses H2/JA3 in cross-validation (Appendix G)
 
 ## License
 

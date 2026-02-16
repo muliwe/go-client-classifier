@@ -2,6 +2,59 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.5.0 (2026-02-16)
+
+### Nginx TLS termination: proxy header reuse in signal collector
+
+When TLS is terminated at nginx and the Go server receives requests via `proxy_pass`, the collector now reuses fingerprint data from trusted proxy headers instead of requiring a direct TLS connection.
+
+**Trusted proxy detection**
+- If `X-Internal-Proxy` is `"1"`, the request is treated as coming from a trusted TLS-terminating proxy (e.g. nginx with fingerprint modules).
+- TLS and HTTP/2 data are read from the `X-FP-*` headers; other sources (e.g. `r.TLS`, ConnContext) are ignored for TLS when proxy mode is active.
+
+**Headers consumed (when trusted proxy)**
+- `X-FP-TLS-Version` → TLS version (e.g. TLSv1.3)
+- `X-FP-TLS-Cipher` → cipher suite name
+- `X-FP-TLS-ALPN` → negotiated protocol (h2, http/1.1)
+- `X-FP-TLS-SNI` → server name
+- `X-FP-JA3` → JA3 hash (from nginx-ssl-ja3 or similar)
+- `X-FP-H2` → HTTP/2 fingerprint (from nginx-http2-fingerprint or similar)
+
+**New fingerprint fields**
+- `TLS.FromProxy`: true when TLS data came from proxy headers.
+- `HTTP.H2Fingerprint`: HTTP/2 fingerprint value when provided by proxy (X-FP-H2).
+
+**New classification signals**
+- `tls_from_proxy`: TLS info came from trusted proxy headers (no ClientHello in Go).
+- `has_http2_fingerprint`: HTTP/2 fingerprint present (from proxy or future native H2).
+- `has_http2_fingerprint_from_proxy`: HTTP/2 fingerprint was supplied via X-FP-H2.
+
+**Scoring**
+- When `has_http2_fingerprint` is true, +1 browser score (H2 fingerprint correlates with real clients; see Methodology Appendix F).
+- TLS signals (modern TLS, ALPN h2) still apply when populated from proxy headers; JA3 from proxy is used for `has_tls_fingerprint` where applicable. Full JA4/cipher counts are not available from nginx in the current setup.
+
+**Security**
+- Proxy headers are only used when `X-Internal-Proxy` is exactly `"1"`. Backends must be deployed so that only the trusted proxy can set this header (e.g. internal network, stripped from external traffic). See [METHODOLOGY.md](docs/METHODOLOGY.md) Appendix F and RFC 9440 / trusted header practices.
+
+**Documentation**
+- [docs/nginx.md](docs/nginx.md) — nginx configuration and header usage.
+- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) Appendix F — Nginx TLS termination and proxy header reuse (rationale, references 2025–2026).
+
+### Cross-validation: TLS vs UA, H2 vs JA4, ALPN vs HTTP version (Appendix G)
+
+**TLS vs User-Agent**
+- Known library JA3/JA4 (curl, Python requests, Go, Node.js) and known browser JA3/JA4 (Chrome, etc.) in `internal/fingerprint/tls_client_map.go`. Browser UA + library TLS → +2 bot (`tls-ua-inconsistent`); browser UA + browser TLS → +1 browser (`tls-ua-consistent`); bot UA + browser TLS → +2 bot.
+- JA4 set loaded from file (default `internal/fingerprint/data/ja4db.json`); if file missing on first use, downloaded from ja4db.com. Env: `JA4DB_PATH`, `JA4DB_SKIP_DOWNLOAD` (tests never download).
+
+**H2 vs JA4**
+- ALPN parsed from JA4 Part A (h2/h1/h3). If JA4 says h2 but request is not HTTP/2 (or h1 but HTTP/2) → +2 bot (`h2-ja4-inconsistent`).
+
+**TLS ALPN vs HTTP version**
+- With direct TLS (not from proxy): ALPN must match observed HTTP version (h2 ↔ HTTP/2.0, http/1.1 ↔ non‑HTTP/2). Mismatch → +2 bot (`tls-alpn-http-inconsistent`). Skipped when TLS is from proxy.
+
+**Testing**
+- Stub `testdata/ja4db_fixture.json` for unit/integration; `JA4DB_SKIP_DOWNLOAD=1` and `JA4DB_PATH` set in TestMain so no network in tests. Removed large ja4db.json from test trees.
+
 ## v0.4.0 (2026-02-13)
 
 ### JA4H HTTP Fingerprinting Implementation

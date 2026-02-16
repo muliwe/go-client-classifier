@@ -25,11 +25,21 @@ func NewCollector() *Collector {
 	return &Collector{}
 }
 
-// Collect extracts fingerprint from an HTTP request
+// Collect extracts fingerprint from an HTTP request.
+// When the request comes from a trusted proxy (X-Internal-Proxy: 1), TLS and
+// HTTP/2 data are taken from X-FP-* headers instead of r.TLS / context.
 func (c *Collector) Collect(r *http.Request) Fingerprint {
 	fp := Fingerprint{
 		TLS:  c.collectTLS(r),
 		HTTP: c.collectHTTP(r),
+	}
+
+	// HTTP/2 fingerprint from proxy (e.g. nginx X-FP-H2); parse for structured signals
+	if IsTrustedProxy(r) {
+		if h2 := r.Header.Get(HeaderFPH2); h2 != "" {
+			fp.HTTP.H2Fingerprint = h2
+			fp.HTTP.H2Parsed = ParseH2Fingerprint(h2)
+		}
 	}
 
 	// Compute JA4H fingerprint
@@ -38,10 +48,16 @@ func (c *Collector) Collect(r *http.Request) Fingerprint {
 	return fp
 }
 
-// collectTLS extracts TLS-level fingerprint
+// collectTLS extracts TLS-level fingerprint.
+// When X-Internal-Proxy is "1", TLS data is read from X-FP-* headers (nginx
+// TLS termination); otherwise from r.TLS and ConnContext.
 func (c *Collector) collectTLS(r *http.Request) TLSFingerprint {
 	fp := TLSFingerprint{
 		Available: false,
+	}
+
+	if IsTrustedProxy(r) {
+		return c.collectTLSFromProxy(r)
 	}
 
 	if r.TLS == nil {
@@ -79,6 +95,42 @@ func (c *Collector) collectTLS(r *http.Request) TLSFingerprint {
 	}
 
 	return fp
+}
+
+// collectTLSFromProxy builds TLS fingerprint from trusted proxy headers
+// (e.g. nginx with ssl_ja3 and proxy_set_header X-FP-*).
+func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
+	fp := TLSFingerprint{
+		Available: true,
+		FromProxy: true,
+	}
+	v := r.Header.Get(HeaderFPTLSVersion)
+	if v != "" {
+		fp.Version = normalizeTLSVersionFromProxy(v)
+	}
+	fp.CipherSuite = r.Header.Get(HeaderFPTLSCipher)
+	fp.ALPN = r.Header.Get(HeaderFPTLSALPN)
+	fp.ServerName = r.Header.Get(HeaderFPTLSSNI)
+	fp.JA3Hash = r.Header.Get(HeaderFPJA3)
+	// JA4, cipher count, extensions, etc. are not available from nginx in current setup
+	return fp
+}
+
+// normalizeTLSVersionFromProxy maps proxy TLS version strings to our format
+// (e.g. "TLSv1.3" -> "TLS 1.3").
+func normalizeTLSVersionFromProxy(s string) string {
+	switch s {
+	case "TLSv1.0":
+		return "TLS 1.0"
+	case "TLSv1.1":
+		return "TLS 1.1"
+	case "TLSv1.2":
+		return "TLS 1.2"
+	case "TLSv1.3":
+		return "TLS 1.3"
+	default:
+		return s
+	}
 }
 
 // getClientHelloFingerprint retrieves the ClientHello fingerprint from request context
@@ -236,6 +288,7 @@ func (c *Collector) collectHTTP(r *http.Request) HTTPFingerprint {
 	fp.HasCookies = r.Header.Get("Cookie") != ""
 	fp.HasReferer = r.Header.Get("Referer") != ""
 
+	// H2Fingerprint is set in Collect() when IsTrustedProxy and X-FP-H2 present
 	return fp
 }
 

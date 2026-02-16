@@ -99,13 +99,55 @@ var browserPatterns = []string{
 func ExtractSignals(fp Fingerprint) Signals {
 	s := Signals{}
 
-	// TLS signals (from ClientHello fingerprint)
-	s.IsHTTP2 = fp.HTTP.Version == "HTTP/2.0" || fp.TLS.ALPN == "h2"
+	// Proxy / HTTP/2 fingerprint (e.g. nginx TLS termination)
+	s.TLSFromProxy = fp.TLS.FromProxy
+	s.HasHTTP2Fingerprint = fp.HTTP.H2Fingerprint != ""
+	s.HasHTTP2FingerprintFromProxy = fp.TLS.FromProxy && fp.HTTP.H2Fingerprint != ""
+	if fp.HTTP.H2Parsed != nil && fp.HTTP.H2Parsed.ParsedOK {
+		s.H2SettingsParsed = true
+		s.H2InitialWindowSize = fp.HTTP.H2Parsed.InitialWindow
+		s.H2PriorityPresent = strings.TrimSpace(fp.HTTP.H2Parsed.Priority) != ""
+		s.H2WindowUpdatePresent = fp.HTTP.H2Parsed.WindowUpdate > 0
+		s.H2MaxFrameSizeBrowserLike = IsBrowserLikeH2MaxFrameSize(fp.HTTP.H2Parsed.MaxFrameSize)
+		s.H2PseudoHeaderOrderPresent = strings.TrimSpace(fp.HTTP.H2Parsed.PseudoHeaderOrder) != ""
+	}
+
+	// TLS/HTTP/2: needed for H2 vs JA4 check below
+	s.IsHTTP2 = fp.HTTP.Version == "HTTP/2.0" || fp.TLS.ALPN == "h2" || fp.HTTP.H2Fingerprint != ""
+
+	// H2 vs JA4: JA4 Part A contains ALPN (h2/h1); must agree with actual protocol (Appendix G)
+	if fp.TLS.JA4Hash != "" {
+		alpn := JA4ALPN(fp.TLS.JA4Hash)
+		if alpn == "h2" && !s.IsHTTP2 {
+			s.H2JA4Inconsistent = true
+		}
+		if alpn == "h1" && s.IsHTTP2 {
+			s.H2JA4Inconsistent = true
+		}
+	}
+
+	// TLS/HTTP version mismatch (Appendix G): with direct TLS, ALPN must match observed HTTP version
+	if !fp.TLS.FromProxy && fp.TLS.ALPN != "" {
+		switch fp.TLS.ALPN {
+		case "h2":
+			if fp.HTTP.Version != "HTTP/2.0" {
+				s.TLSALPNVsHTTPInconsistent = true
+			}
+		case "http/1.1":
+			if fp.HTTP.Version == "HTTP/2.0" {
+				s.TLSALPNVsHTTPInconsistent = true
+			}
+		}
+	}
+
+	// TLS signals (from ClientHello or from proxy headers)
 	s.HasModernTLS = fp.TLS.Version == "TLS 1.2" || fp.TLS.Version == "TLS 1.3"
 	s.HasALPN = fp.TLS.ALPN != ""
 	s.HighCipherCount = fp.TLS.CipherSuitesCount > 10 // Browsers typically have 15-20
 	s.HasSessionSupport = fp.TLS.HasSessionTicket     // Session resumption
 	s.HasTLSFingerprint = fp.TLS.JA3Hash != "" || fp.TLS.JA4Hash != ""
+	s.TLSKnownLibrary = IsKnownLibraryTLS(fp.TLS.JA3Hash, fp.TLS.JA4Hash)
+	s.TLSKnownBrowser = IsKnownBrowserTLS(fp.TLS.JA3Hash, fp.TLS.JA4Hash)
 	s.HasMultipleGroups = len(fp.TLS.SupportedGroups) >= 3 // Browsers support multiple curves
 	s.HasModernCiphers = fp.TLS.Version == "TLS 1.3" && fp.TLS.CipherSuitesCount > 0
 
@@ -244,6 +286,42 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	if s.IsHTTP2 {
 		browserScore += 2
 		browserReasons = append(browserReasons, "http2(+2)")
+	}
+
+	// HTTP/2 fingerprint present (from proxy or future native) - correlates with real clients
+	if s.HasHTTP2Fingerprint {
+		browserScore++
+		browserReasons = append(browserReasons, "h2-fp(+1)")
+	}
+
+	// Parsed H2 fingerprint with browser-like INITIAL_WINDOW_SIZE (SETTINGS id 4)
+	if s.H2SettingsParsed && IsBrowserLikeH2InitialWindow(s.H2InitialWindowSize) {
+		browserScore++
+		browserReasons = append(browserReasons, "h2-init-window(+1)")
+	}
+
+	// PRIORITY segment present: browsers send PRIORITY frames, many HTTP/2 libraries omit them
+	if s.H2SettingsParsed && s.H2PriorityPresent {
+		browserScore++
+		browserReasons = append(browserReasons, "h2-priority(+1)")
+	}
+
+	// WINDOW_UPDATE present (connection-level): real clients use flow control; correlates with browser behavior
+	if s.H2SettingsParsed && s.H2WindowUpdatePresent {
+		browserScore++
+		browserReasons = append(browserReasons, "h2-window-update(+1)")
+	}
+
+	// MAX_FRAME_SIZE (SETTINGS id 5) browser-like (16384 default or 16777215 max)
+	if s.H2SettingsParsed && s.H2MaxFrameSizeBrowserLike {
+		browserScore++
+		browserReasons = append(browserReasons, "h2-max-frame(+1)")
+	}
+
+	// Fourth segment (pseudo-header order / flags) present: full fingerprint typical of browsers
+	if s.H2SettingsParsed && s.H2PseudoHeaderOrderPresent {
+		browserScore++
+		browserReasons = append(browserReasons, "h2-pseudo-headers(+1)")
 	}
 
 	// Sec-Fetch-* headers - strong browser indicator (cannot be spoofed via JS)
@@ -436,11 +514,69 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		}
 	}
 
+	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.HasHTTP2Fingerprint && isH2LibraryLike(s) {
+		botScore += 2
+		botReasons = append(botReasons, "h2-ua-inconsistent(+2)")
+	}
+
+	// TLS vs User-Agent inconsistency (Appendix G): UA claims browser but JA3/JA4 is known library (curl, Go, Python, etc.)
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary {
+		botScore += 2
+		botReasons = append(botReasons, "tls-ua-inconsistent(+2)")
+	}
+
+	// TLS vs User-Agent: browser UA + known browser TLS → consistency bonus
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownBrowser {
+		browserScore++
+		browserReasons = append(browserReasons, "tls-ua-consistent(+1)")
+	}
+
+	// TLS vs User-Agent: bot UA but JA3/JA4 is known browser (e.g. spoofed UA, real browser TLS)
+	if s.UserAgentIsBot && s.TLSKnownBrowser {
+		botScore += 2
+		botReasons = append(botReasons, "tls-ua-inconsistent(+2)")
+	}
+
+	// H2 vs JA4 inconsistency (Appendix G): JA4 says h2 but request is HTTP/1.1, or JA4 says h1 but we have HTTP/2
+	if s.H2JA4Inconsistent {
+		botScore += 2
+		botReasons = append(botReasons, "h2-ja4-inconsistent(+2)")
+	}
+
+	// TLS/HTTP version mismatch (Appendix G): ALPN (h2/http/1.1) disagrees with request HTTP version (direct TLS only)
+	if s.TLSALPNVsHTTPInconsistent {
+		botScore += 2
+		botReasons = append(botReasons, "tls-alpn-http-inconsistent(+2)")
+	}
+
 	// Build breakdown string
 	breakdown = "BROWSER[" + strings.Join(browserReasons, " ") + "] "
 	breakdown += "BOT[" + strings.Join(botReasons, " ") + "]"
 
 	return browserScore, botScore, breakdown
+}
+
+// isH2LibraryLike returns true when H2 fingerprint is parsed but lacks key browser-like traits
+// (e.g. no PRIORITY, non-browser window size). Used for H2 vs UA cross-validation (Appendix G).
+func isH2LibraryLike(s Signals) bool {
+	if !s.H2SettingsParsed {
+		return false
+	}
+	// Library-like if any key browser indicator is missing
+	if !s.H2PriorityPresent {
+		return true
+	}
+	if !IsBrowserLikeH2InitialWindow(s.H2InitialWindowSize) {
+		return true
+	}
+	if !s.H2WindowUpdatePresent {
+		return true
+	}
+	if !s.H2MaxFrameSizeBrowserLike {
+		return true
+	}
+	return false
 }
 
 // containsAny checks if string contains any of the substrings

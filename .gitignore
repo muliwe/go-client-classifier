@@ -68,3 +68,7 @@ certs/
 !testdata/*.pem
 !testdata/*.key
 !testdata/*.crt
+
+# JA4 DB (downloaded on first start if missing)
+internal/fingerprint/data/ja4db.json
+!internal/fingerprint/data/.gitkeep
