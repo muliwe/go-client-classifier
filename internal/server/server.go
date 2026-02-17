@@ -3,12 +3,15 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -241,14 +244,63 @@ func (s *Server) runTLS() error {
 		log.Printf("PROXY protocol enabled on %s (real client IP from nginx stream)", s.cfg.TLSAddr)
 	}
 	fpListener := fingerprintlistener.NewListener(listener)
-	s.listener = fpListener
+	// Wrap so Accept() errors from a single connection (EOF, reset) don't kill Serve()
+	s.listener = &acceptRetryListener{inner: fpListener}
 	s.tlsServer.TLSConfig = &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
 		NextProtos:   []string{"h2", "http/1.1"},
 	}
 	log.Printf("TLS fingerprinting active (JA3/JA4) on %s", s.cfg.TLSAddr)
-	return s.tlsServer.ServeTLS(fpListener, "", "")
+	return s.tlsServer.ServeTLS(s.listener, "", "")
+}
+
+// acceptRetryListener wraps a net.Listener so that the TLS server never exits on its own:
+// only net.ErrClosed (listener closed at shutdown) is returned; all other errors are
+// logged and Accept() is retried. This covers EOF, connection reset, timeouts, PROXY
+// parse errors, and any other per-connection or transient failure from the chain
+// (fingerprintlistener, proxyproto, etc.).
+type acceptRetryListener struct {
+	inner net.Listener
+}
+
+func (l *acceptRetryListener) Accept() (net.Conn, error) {
+	for {
+		conn, err := l.inner.Accept()
+		if err == nil {
+			return conn, nil
+		}
+		if errors.Is(err, net.ErrClosed) {
+			return nil, err
+		}
+		// Any other error: do not propagate (would exit http.Serve). Log and retry.
+		if isAcceptTransient(err) {
+			log.Printf("TLS Accept: transient error, retrying: %v", err)
+		} else {
+			log.Printf("TLS Accept: error (retrying to keep listener up): %v", err)
+			time.Sleep(time.Second) // avoid tight loop on persistent unknown errors
+		}
+		continue
+	}
+}
+
+func (l *acceptRetryListener) Close() error   { return l.inner.Close() }
+func (l *acceptRetryListener) Addr() net.Addr { return l.inner.Addr() }
+
+// isAcceptTransient returns true for errors that are clearly per-connection (no sleep).
+func isAcceptTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection reset") ||
+		strings.Contains(s, "broken pipe") ||
+		strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "i/o timeout") ||
+		strings.Contains(s, "connection aborted")
 }
 
 // startTLS starts the server with TLS and fingerprint listener

@@ -21,6 +21,7 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 - Server can listen on **both** HTTP and HTTPS at once: set `TLS_PORT` (e.g. `8443`) together with `TLS_CERT`/`TLS_KEY`; HTTP stays on `PORT` (e.g. `8080`), HTTPS on `TLS_PORT` with TLS fingerprinting (JA3/JA4).
 - New config: `Config.TLSAddr`; env vars `PORT` and `TLS_PORT` in `cmd/server/main.go`.
 - New tasks: `task run:dual` (local HTTP :8080 + HTTPS :8443), `task build:prod` (Linux binary for deploy), `task deploy:build` (alias).
+- **TLS Accept retry (no listener exit on single connection error)**: The TLS listener uses `fingerprintlistener`, which reads the ClientHello inside `Accept()`. If that read returns an error (e.g. EOF when the client closes before or during the handshake), the error was being returned from `Accept()` and `net/http.Serve()` would exit. The server now wraps the fingerprint listener in `acceptRetryListener`: on transient errors (`io.EOF` or connection reset / broken pipe from the fingerprint read) it logs and retries `Accept()` instead of propagating the error, so one bad connection no longer stops the HTTPS listener. Compatible with Go 1.22+ (no dependency on Go 1.23+ `net.ErrRetryableAcceptError`).
 
 ### Production deploy (systemd)
 
