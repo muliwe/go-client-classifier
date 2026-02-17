@@ -125,6 +125,10 @@ cd go-client-classifier
 go mod tidy
 go install github.com/go-task/task/v3/cmd/task@latest
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Ensure Go bin is on PATH (required for `task` and `golangci-lint`)
+export PATH=$PATH:$(go env GOPATH)/bin
+# Or on many Linux systems: export PATH=$PATH:$HOME/go/bin
 ```
 
 ### TLS Certificate Setup
