@@ -10,8 +10,8 @@ import (
 
 func TestClassifierDefaultConfig(t *testing.T) {
 	cfg := classifier.DefaultConfig()
-	if cfg.Threshold != 0 {
-		t.Errorf("DefaultConfig().Threshold = %d, want 0", cfg.Threshold)
+	if cfg.Threshold != 8 {
+		t.Errorf("DefaultConfig().Threshold = %d, want 8", cfg.Threshold)
 	}
 }
 

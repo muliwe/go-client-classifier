@@ -8,7 +8,7 @@ import "testing"
 func TestClassifierPackage(t *testing.T) {
 	// Verify package is testable
 	cfg := DefaultConfig()
-	if cfg.Threshold != 0 {
-		t.Error("DefaultConfig should have Threshold=0")
+	if cfg.Threshold != 8 {
+		t.Error("DefaultConfig should have Threshold=8")
 	}
 }

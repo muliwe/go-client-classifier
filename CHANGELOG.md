@@ -37,6 +37,12 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 - **Logger**: `file.Sync()` after each log line so entries appear immediately (e.g. when tailing or on NFS).
 - **Test**: `TestServerHandleClassify_NotFoundStillLogs` asserts that a request to `/not-known` returns 404 and writes one entry to the JSONL log.
 
+### Classifier threshold and tie-break
+
+- **Default threshold 8**: `Config.Threshold` default is now **8** (was 0). Classification as browser requires net score (browser − bot) ≥ 8; real browsers typically yield net ≥ 8, reducing false browser classification (e.g. curl with many headers).
+- **Tie-break by User-Agent**: When net score equals the threshold, classification uses the User-Agent: if `UserAgentIsBot` then bot, else browser (so curl/python with many headers stay bot).
+- Tests updated for `Threshold == 8`.
+
 ### Real client IP in logs
 
 - **ClientIP**: Console and JSONL logs now show the real client IP when behind a trusted proxy. The server uses `X-Real-IP` or the first IP in `X-Forwarded-For` when the request is from localhost (127.0.0.1 / ::1) or when `X-Internal-Proxy` is `"1"` (e.g. nginx http→http or TLS termination→http). Exported as `ClientIP(r *http.Request)` for tests.

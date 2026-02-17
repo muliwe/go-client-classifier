@@ -21,15 +21,15 @@ type Classifier struct {
 // Config holds classifier configuration
 type Config struct {
 	// Threshold determines the cutoff for classification
-	// Positive net score (browser - bot) >= threshold = browser
-	// Otherwise = bot
+	// Net score (browser - bot) >= threshold = browser; otherwise = bot.
+	// Real browsers typically yield net score >= 8; raising threshold reduces false browser classification (e.g. curl with many headers).
 	Threshold int
 }
 
 // DefaultConfig returns default classifier configuration
 func DefaultConfig() Config {
 	return Config{
-		Threshold: 0, // If browser score > bot score, classify as browser
+		Threshold: 8, // Require clear browser lead; real browsers typically score >= 8 net
 	}
 }
 
@@ -47,11 +47,20 @@ func (c *Classifier) Classify(fp fingerprint.Fingerprint) fingerprint.Classifica
 
 	classification := ClassificationBot
 	var reason string
-	if netScore >= c.threshold {
+	switch {
+	case netScore > c.threshold:
 		classification = ClassificationBrowser
 		reason = c.browserReason(signals)
-	} else {
+	case netScore < c.threshold:
 		reason = c.botReason(signals)
+	default:
+		// netScore == threshold: use User-Agent so that curl/python etc. with many headers stay bot
+		if signals.UserAgentIsBot {
+			reason = c.botReason(signals)
+		} else {
+			classification = ClassificationBrowser
+			reason = c.browserReason(signals)
+		}
 	}
 
 	confidence := c.calculateConfidence(signals, netScore)
