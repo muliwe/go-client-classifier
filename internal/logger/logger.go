@@ -143,14 +143,7 @@ func (l *Logger) Log(entry LogEntry) error {
 			return err
 		}
 	}
-	if err := l.encoder.Encode(entry); err != nil {
-		return err
-	}
-	// Flush so logs appear immediately (e.g. when tailing or on NFS)
-	if l.file != nil {
-		_ = l.file.Sync()
-	}
-	return nil
+	return l.encoder.Encode(entry)
 }
 
 // LogResult logs a ClassificationResult with additional metadata
