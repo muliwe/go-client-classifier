@@ -29,7 +29,18 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 ### Go version and tooling
 
 - `go.mod` and `.golangci.yml` require **Go 1.22** (was 1.26) for compatibility with older deploy environments where the 1.26 toolchain is not available.
-- README: Go install instructions, ensure `$(go env GOPATH)/bin` is on PATH for `task`/`golangci-lint`.
+- README: Go install instructions, explicit `$HOME/go/bin` in PATH (avoids `go` in bad cwd), make PATH permanent (e.g. `~/.bashrc`).
+
+### Classify and log for all paths; 404 for non-root
+
+- **Classify handler**: For every request (any path), the server now collects the fingerprint, classifies, and writes to both the JSONL log and the console; only **GET /** returns 200 JSON, all other paths return **404** (body unchanged). So requests to e.g. `/not-known` are still classified and logged for analysis.
+- **Logger**: `file.Sync()` after each log line so entries appear immediately (e.g. when tailing or on NFS).
+- **Test**: `TestServerHandleClassify_NotFoundStillLogs` asserts that a request to `/not-known` returns 404 and writes one entry to the JSONL log.
+
+### Docs and deploy
+
+- README: Production deploy with **User=** and **Group=** in the systemd unit; **viewing logs** (real-time: `journalctl -u go-client-classifier -f`, `tail -f logs/requests_*.jsonl`); certbot **webroot** and **nginx** options when port 80 is in use; troubleshooting empty log (only classify requests are logged).
+- docs/nginx.md: Main config and **site file** in `/etc/nginx/sites-available/`; **TLS passthrough** in a separate file included from `stream { }`; **adding fingerprint modules when nginx is already installed** (rebuild with same configure args + modules, replace binary).
 
 ## v0.5.0 (2026-02-16)
 

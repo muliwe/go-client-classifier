@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/logger"
 	"github.com/muliwe/go-client-classifier/internal/server"
 )
 
@@ -100,6 +104,57 @@ func TestServerHandleClassify_NotFound(t *testing.T) {
 	resp := w.Result()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("HandleClassify(/nonexistent) status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestServerHandleClassify_NotFoundStillLogs verifies that a 404 response for a non-root path
+// still performs classification and writes one entry to the JSONL log.
+func TestServerHandleClassify_NotFoundStillLogs(t *testing.T) {
+	tmpDir := t.TempDir()
+	logCfg := logger.Config{LogDir: tmpDir, FileName: "test.jsonl", Daily: false}
+	l, err := logger.New(logCfg)
+	if err != nil {
+		t.Fatalf("logger.New: %v", err)
+	}
+	defer func() { _ = l.Close() }()
+
+	collector := fingerprint.NewCollector()
+	cls := classifier.New(classifier.DefaultConfig())
+	h := server.NewHandler(collector, cls, l)
+	h.SetQuiet(true)
+
+	req := httptest.NewRequest("GET", "/123", nil)
+	req.Header.Set("User-Agent", "curl/8.0")
+	w := httptest.NewRecorder()
+
+	h.HandleClassify(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("HandleClassify(/123) status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+
+	logPath := filepath.Join(tmpDir, "test.jsonl")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 1 || lines[0] == "" {
+		t.Errorf("log file should have exactly one line, got %d lines", len(lines))
+	}
+	var entry struct {
+		Classification string `json:"classification"`
+		RequestID      string `json:"request_id"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("log entry is not valid JSON: %v", err)
+	}
+	if entry.Classification == "" {
+		t.Error("log entry should contain classification")
+	}
+	if entry.RequestID == "" {
+		t.Error("log entry should contain request_id")
 	}
 }
 

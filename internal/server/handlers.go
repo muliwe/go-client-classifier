@@ -52,39 +52,22 @@ func (h *Handler) SetQuiet(quiet bool) {
 	h.quiet = quiet
 }
 
-// HandleClassify handles the main classification endpoint
+// HandleClassify handles the main classification endpoint.
+// Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
 func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
-	// Only handle exact root path
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Collect fingerprint
+	// Collect fingerprint and classify regardless of path
 	fp := h.collector.Collect(r)
-
-	// Classify request
 	result := h.classifier.Classify(fp)
-
-	// Calculate response time
 	responseTime := time.Since(startTime).Milliseconds()
 
-	// Log the result
+	// Always log to JSONL and console
 	if h.logger != nil {
 		if err := h.logger.LogResult(result, r.RemoteAddr, responseTime); err != nil {
 			log.Printf("Error logging result: %v", err)
 		}
 	}
-
-	// Generate message based on classification
-	message := "You appear to be using a browser"
-	if result.Classification == classifier.ClassificationBot {
-		message = "You appear to be using an automated client"
-	}
-
-	// Log to console (unless quiet mode)
 	if !h.quiet {
 		log.Printf("[%s] %s %s - UA: %s - %s (%.2f) - %dms",
 			r.RemoteAddr,
@@ -97,7 +80,16 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	// Send response
+	// Only exact root path gets 200 JSON; everything else gets 404
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
+	message := "You appear to be using a browser"
+	if result.Classification == classifier.ClassificationBot {
+		message = "You appear to be using an automated client"
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(Response{
 		Classification: result.Classification,
