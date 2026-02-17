@@ -44,133 +44,111 @@ sudo apt install -y \
  libpcre3 libpcre3-dev \
  zlib1g zlib1g-dev \
  libssl-dev \
- certbot
+ certbot \
+ libxml2-dev \
+ libxslt1-dev \
+ libgd-dev \
+ libgeoip-dev \
+ libpam0g-dev
 ```
 
 ---
 
-# Building nginx with fingerprint modules
+# Building nginx with JA3 and HTTP/2 fingerprint
 
-## 1. nginx source
+**Important:** Both JA3 and HTTP/2 fingerprint require **patching OpenSSL and nginx**. There is no “add one module to stock nginx” path that gives JA3 — the module code calls OpenSSL APIs that only exist in the patched OpenSSL. See [Wallarm: Enabling JA3](https://docs.wallarm.com/admin-en/enabling-ja3/) and [phuslu/nginx-ssl-fingerprint](https://github.com/phuslu/nginx-ssl-fingerprint): *“In both modules, we need to patch OpenSSL and NGINX.”*
 
-```
-git clone https://github.com/nginx/nginx.git
+Recommended approach: **[phuslu/nginx-ssl-fingerprint](https://github.com/phuslu/nginx-ssl-fingerprint)** — one module for JA3 and HTTP/2, with a clear [support matrix](https://github.com/phuslu/nginx-ssl-fingerprint#support-matrix) (nginx 1.20–1.27 × OpenSSL 1.1.1 / 3.0 / 3.1 / 3.2). Build from **clean clones**, then replace the system binary if needed.
+
+---
+
+## Working recipe (phuslu: JA3 + HTTP/2)
+
+Use **one** OpenSSL + nginx version pair from the support matrix. Example: **OpenSSL 3.2** and **nginx 1.24** (or 1.25). All commands from a single directory (e.g. `/usr/local/src`).
+
+**1. Clone OpenSSL, nginx, fingerprint module (and optionally auth_pam)**
+
+```bash
+cd /usr/local/src
+sudo git clone -b openssl-3.2 --depth=1 https://github.com/openssl/openssl.git openssl-3.2
+sudo git clone https://github.com/nginx/nginx.git nginx
+sudo git clone https://github.com/phuslu/nginx-ssl-fingerprint.git nginx-ssl-fingerprint
+sudo git clone https://github.com/sto/ngx_http_auth_pam_module.git ngx_http_auth_pam_module
 cd nginx
+sudo git checkout release-1.24.0
 ```
 
-## 2. HTTP/2 fingerprint module
+(If your system nginx is 1.25.x, use `release-1.25.3` and the patch `nginx-1.25.patch` below.)
 
-```
-git clone https://github.com/Xetera/nginx-http2-fingerprint.git
-```
+**2. Patch OpenSSL and nginx**
 
-This module implements [Akamai’s passive HTTP/2 fingerprinting](https://blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf): one variable `$http2_fingerprint` contains SETTINGS (incl. INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour (RFC 7540 §10.8). Forward it to the backend as `X-FP-H2`.
+JA3 needs the patched OpenSSL; the nginx patch adds the callback that uses it. Without both patches you get errors like `implicit declaration of function 'SSL_client_hello_get_ja3_data'`.
 
-## 3. JA3 module (optional)
-
-```
-git clone https://github.com/fooinha/nginx-ssl-ja3.git
+```bash
+cd /usr/local/src
+sudo patch -p1 -d openssl-3.2 < nginx-ssl-fingerprint/patches/openssl.openssl-3.2.patch
+sudo patch -p1 -d nginx < nginx-ssl-fingerprint/patches/nginx-1.24.patch
 ```
 
----
+For nginx 1.25 use `nginx-1.25.patch`; for 1.27 use `nginx-1.27.patch` and check the repo for the matching OpenSSL branch/patch.
 
-## 4. Build configuration
+**3. Configure and build nginx**
 
-```
+Point nginx at the **patched** OpenSSL source and add the fingerprint module. Add `--add-dynamic-module=.../ngx_http_auth_pam_module` if you cloned it (builds `ngx_http_auth_pam_module.so` for `modules-enabled`). Do **not** use the system OpenSSL for this build.
+
+```bash
+cd /usr/local/src/nginx
 ./auto/configure \
- --prefix=/usr/local/nginx \
- --with-http_ssl_module \
- --with-http_v2_module \
- --with-http_realip_module \
- --with-stream \
- --with-stream_ssl_preread_module \
- --add-module=../nginx-http2-fingerprint \
- --add-module=../nginx-ssl-ja3
-```
-
-```
+  --with-openssl=$(pwd)/../openssl-3.2 \
+  --add-module=$(pwd)/../nginx-ssl-fingerprint \
+  --add-dynamic-module=$(pwd)/../ngx_http_auth_pam_module \
+  --with-http_ssl_module \
+  --with-http_v2_module \
+  --with-stream \
+  --with-stream_ssl_module \
+  --with-stream_ssl_preread_module \
+  --with-http_realip_module \
+  --prefix=/usr/local/nginx \
+  --modules-path=/usr/local/nginx/modules
 make -j$(nproc)
 sudo make install
 ```
 
----
+If you did **not** clone `ngx_http_auth_pam_module`, omit the `--add-dynamic-module=...ngx_http_auth_pam_module` line and disable the PAM config: `sudo mv /etc/nginx/modules-enabled/50-mod-http-auth-pam.conf /etc/nginx/modules-enabled/50-mod-http-auth-pam.conf.bak`.
 
-# Adding fingerprint modules when nginx is already installed
+Result: nginx in `/usr/local/nginx/` with JA3 and HTTP/2 fingerprint variables (`$http_ssl_ja3`, `$http_ssl_ja3_hash`, `$http2_fingerprint`). Use this binary and your existing config (or symlink `/usr/local/nginx/sbin/nginx` into PATH).
 
-If nginx was installed from a package (e.g. `apt install nginx`), you need to rebuild the binary with the same build options plus the fingerprint modules, then replace the system binary.
+**4. Optional: replace the system nginx binary**
 
-**1. Get the installed nginx version and its configure arguments**
+If you want to keep using the distro’s paths and config (e.g. `/etc/nginx/`, `nginx -V` showing the same prefix), build with that prefix and sbin path, then replace the binary:
 
-```
-nginx -V 2>&1
-```
-
-Copy the entire output. You will need the version (first line) and the `configure arguments:` line.
-
-**2. Clone nginx source of the same (or compatible) version**
-
-```
-cd /usr/local/src   # or any directory you prefer
-sudo git clone https://github.com/nginx/nginx.git
-cd nginx
-sudo git checkout release-1.27.2   # replace with your version, e.g. release-1.26.1 or mainline
-```
-
-Match the major.minor from `nginx -V` (e.g. `nginx/1.27.2` → `release-1.27.2`).
-
-**3. Clone the fingerprint modules next to the nginx directory**
-
-```
-sudo git clone https://github.com/Xetera/nginx-http2-fingerprint.git /usr/local/src/nginx-http2-fingerprint
-sudo git clone https://github.com/fooinha/nginx-ssl-ja3.git /usr/local/src/nginx-ssl-ja3
-```
-
-**4. Configure with the same arguments as the package, plus the new modules**
-
-From the `nginx -V` output, take the string after `configure arguments:` and append the two `--add-module` options. Run from inside the nginx source directory:
-
-```
+```bash
+# When configuring, use the same prefix/sbin as the package, e.g.:
 ./auto/configure \
-  <paste the arguments from nginx -V here> \
-  --add-module=/usr/local/src/nginx-http2-fingerprint \
-  --add-module=/usr/local/src/nginx-ssl-ja3
-```
-
-Example if the package had no extra modules (Debian/Ubuntu often adds many):
-
-```
-./auto/configure \
-  --prefix=/etc/nginx \
+  --with-openssl=$(pwd)/../openssl-3.2 \
+  --add-module=$(pwd)/../nginx-ssl-fingerprint \
+  --with-http_ssl_module --with-http_v2_module \
+  --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module \
+  --with-http_realip_module \
+  --prefix=/usr/share/nginx \
   --sbin-path=/usr/sbin/nginx \
-  --modules-path=/usr/lib/nginx/modules \
-  --with-http_ssl_module \
-  --with-http_v2_module \
-  --with-stream \
-  --with-stream_ssl_preread_module \
-  --add-module=/usr/local/src/nginx-http2-fingerprint \
-  --add-module=/usr/local/src/nginx-ssl-ja3
-```
-
-**5. Build**
-
-```
+  --conf-path=/etc/nginx/nginx.conf \
+  --modules-path=/usr/lib/nginx/modules
+# ... add other paths from `nginx -V` if you need them
 make -j$(nproc)
-```
-
-**6. Replace the binary (backup first)**
-
-```
-sudo cp $(which nginx) $(which nginx).bak
-sudo cp objs/nginx /usr/sbin/nginx   # path may be /usr/sbin/nginx on Debian/Ubuntu
-```
-
-**7. Test and reload**
-
-```
+sudo cp /usr/sbin/nginx /usr/sbin/nginx.bak
+sudo cp objs/nginx /usr/sbin/nginx
 sudo nginx -t && sudo nginx -s reload
 ```
 
-If anything goes wrong, restore the original binary: `sudo cp /usr/sbin/nginx.bak /usr/sbin/nginx` and reload.
+You do **not** need to replicate every Ubuntu configure flag (geoip, image_filter, xslt, etc.) unless you use those features. For fingerprinting you only need the SSL, HTTP/2, stream, and realip options above.
+
+---
+
+## Why not “add module to existing build”
+
+- **Xetera/nginx-http2-fingerprint** is a full nginx **fork**, not an add-on module (no `config` file) → `error: no .../config was found` if you use `--add-module=...`.
+- **phuslu** and **fooinha/nginx-ssl-ja3** both require **patched OpenSSL + patched nginx**. Building with the system (unpatched) OpenSSL and only adding the module leads to `implicit declaration of function 'SSL_client_hello_get_ja3_data'`. So the only reliable approach is: clone OpenSSL and nginx, apply both patches, then configure with `--with-openssl=<patched_openssl>` and `--add-module=...`.
 
 ---
 
@@ -514,7 +492,7 @@ These values should be stored in a dataset for later analysis.
 
 # HTTP/2 fingerprint: what the module provides
 
-The [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint) module exposes a single variable `$http2_fingerprint` that already encodes SETTINGS (including INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour per Akamai’s method — no separate variables for WINDOW_UPDATE or other frames. Pass it to the Go backend as `X-FP-H2`. The Go server parses this string (format `SETTINGS|WINDOW_UPDATE|PRIORITY|...`) into structured fields (SETTINGS map, initial window, priority) for logging and signals; see [METHODOLOGY.md](METHODOLOGY.md) Phase 2 and Appendix F.
+A compatible HTTP/2 fingerprint is exposed as `$http2_fingerprint` by [Xetera/nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint) (when building from that fork) or by [phuslu/nginx-ssl-fingerprint](https://github.com/phuslu/nginx-ssl-fingerprint) (add-on module). It encodes SETTINGS (including INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour per Akamai’s method. Pass it to the Go backend as `X-FP-H2`. The Go server parses this string (format `SETTINGS|WINDOW_UPDATE|PRIORITY|...`) into structured fields (SETTINGS map, initial window, priority) for logging and signals; see [METHODOLOGY.md](METHODOLOGY.md) Phase 2 and Appendix F.
 
 Any future “extended” H2 statistics (e.g. separate variables per frame type) would still be collected via nginx modules rather than Go: there are no mature passive HTTP/2 fingerprinting libraries in Go, and nginx already parses H2 at the edge.
 
