@@ -38,10 +38,10 @@ nginx (patched)
   ├─ 443  → TLS termination + JA3 + H2 fingerprint → X-FP-* headers → Go HTTP :8080
   │         OR: stream on 443 + SNI → your domain → Go HTTPS :8443 (passthrough)
   │                         default → nginx http :8440 (other servers)
-  └─ 8444 → TLS passthrough                        → Go HTTPS :8443
+  └─ 4433 → TLS passthrough → Go HTTPS :8443
 ```
 
-One patched nginx listens on `:443` (and optionally `:8444`). It terminates TLS, adds JA3 and HTTP/2 fingerprints to headers, and forwards HTTP to Go `:8080`. Alternatively, 443 can be used in stream mode with SNI routing: your domain → Go `:8443` (TLS passthrough); all other hostnames → nginx http on `:8440` (other servers under the hood). Port 8444 can stream TLS directly to Go `:8443`.
+One patched nginx listens on `:443` (and optionally `:8444`). It terminates TLS, adds JA3 and HTTP/2 fingerprints to headers, and forwards HTTP to Go `:8080`. Alternatively, 443 can be used in stream mode with SNI routing: your domain → Go `:8443` (TLS passthrough); all other hostnames → nginx http on `:8440` (other servers under the hood). Port 4433 can stream TLS directly to Go `:8443`.
 
 
 **Variant C — TLS direct passthrough to Go:**
