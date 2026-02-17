@@ -65,9 +65,9 @@ certs/
 *.pem
 *.key
 *.crt
-!testdata/*.pem
-!testdata/*.key
-!testdata/*.crt
+!tests/testdata/*.pem
+!tests/testdata/*.key
+!tests/testdata/*.crt
 
 # JA4 DB (downloaded on first start if missing)
 internal/fingerprint/data/ja4db.json

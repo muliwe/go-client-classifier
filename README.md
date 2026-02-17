@@ -70,12 +70,12 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 │   └── server/          # HTTP handlers
 ├── tests/
 │   ├── integration/     # Automated client tests
-│   └── unit/            # Unit tests
+│   ├── unit/            # Unit tests
+│   └── testdata/        # Test stubs (e.g. ja4db_fixture.json for tests)
 ├── tools/
 │   ├── benchmark/       # HTTP benchmark tool
 │   ├── python/          # Analytics tools
 │   └── shell/           # Integration test scripts
-├── testdata/            # Test stubs (e.g. ja4db_fixture.json for tests)
 ├── internal/fingerprint/data/  # JA4 DB path (ja4db.json downloaded on first start if missing)
 ├── logs/                # JSON traffic logs (requests_YYYYMMDD.jsonl per day)
 └── docs/                # Research documentation

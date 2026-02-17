@@ -11,7 +11,7 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("JA4DB_SKIP_DOWNLOAD", "1")
 	dir, _ := os.Getwd()
 	for dir != "" && dir != string(filepath.Separator) {
-		stub := filepath.Join(dir, "testdata", "ja4db_fixture.json")
+		stub := filepath.Join(dir, "tests", "testdata", "ja4db_fixture.json")
 		if _, err := os.Stat(stub); err == nil {
 			_ = os.Setenv("JA4DB_PATH", stub)
 			break

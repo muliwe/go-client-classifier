@@ -12,6 +12,10 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 - **Rotation**: When the date changes (e.g. after midnight UTC), the logger closes the current file and opens a new one for the new day without restarting the process.
 - **Single-file mode**: Set `Daily: false` in logger config to keep the previous behaviour and use `FileName` (e.g. `requests.jsonl`) as before.
 
+### Test fixtures moved to tests/testdata
+
+- Fixture folder `testdata/` (e.g. `ja4db_fixture.json`) moved to `tests/testdata/`. All TestMain and docs updated to use `tests/testdata/ja4db_fixture.json`.
+
 ## v0.5.0 (2026-02-16)
 
 ### Nginx TLS termination: proxy header reuse in signal collector
@@ -63,7 +67,7 @@ When TLS is terminated at nginx and the Go server receives requests via `proxy_p
 - With direct TLS (not from proxy): ALPN must match observed HTTP version (h2 ↔ HTTP/2.0, http/1.1 ↔ non‑HTTP/2). Mismatch → +2 bot (`tls-alpn-http-inconsistent`). Skipped when TLS is from proxy.
 
 **Testing**
-- Stub `testdata/ja4db_fixture.json` for unit/integration; `JA4DB_SKIP_DOWNLOAD=1` and `JA4DB_PATH` set in TestMain so no network in tests. Removed large ja4db.json from test trees.
+- Stub `tests/testdata/ja4db_fixture.json` for unit/integration; `JA4DB_SKIP_DOWNLOAD=1` and `JA4DB_PATH` set in TestMain so no network in tests. Removed large ja4db.json from test trees.
 
 ### Scoring fixes: TLS/UA overlap, raw HTTP/1.1, bot UA TLS weights
 
@@ -78,7 +82,7 @@ When TLS is terminated at nginx and the Go server receives requests via `proxy_p
 
 **Tests and docs**
 - New unit tests: `TestCalculateScores_HTTP11_NoTLS_NoPenalty`, `TestCalculateScores_HTTP11_TLSAvailable_Penalty`, `TestCalculateScores_BotUA_NoTLSBrowserPoints`, `TestCalculateScores_TLSUA_BothSets_NoPenalty`.
-- `testdata/ja4db_fixture.json`: added entry with JA4 in both library and browser set (Chrome + python-requests) for the “both sets, no penalty” test.
+- `tests/testdata/ja4db_fixture.json`: added entry with JA4 in both library and browser set (Chrome + python-requests) for the “both sets, no penalty” test.
 - [docs/METHODOLOGY.md](docs/METHODOLOGY.md) Appendix G “Our current implementation”: updated TLS vs UA (4), added HTTP/1.1 and bot-UA TLS/ja4h bullets; table “HTTP/1.1 without H2” clarified.
 
 ## v0.4.0 (2026-02-13)
