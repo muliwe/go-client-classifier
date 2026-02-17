@@ -20,6 +20,7 @@ client
   ↓
 nginx
   ├─ 443  → TLS termination + JA3 + H2 fingerprint → X-FP-* headers → Go HTTP :8080 (collector uses headers)
+  │         OR: stream on 443 + SNI → Go HTTPS :8443 (passthrough, Go terminates TLS; other hosts → http on :8440)
   └─ 8444 → TLS passthrough                        → Go HTTPS :8443 (direct TLS to Go)
 ```
 
@@ -310,13 +311,85 @@ stream {
 **3. If you previously put this file in `sites-enabled`**, remove it so it is not loaded in `http` context:
 
 ```
-sudo rm /etc/nginx/sites-enabled/go.invent.sale
+sudo rm /etc/nginx/sites-enabled/your.domain.tld
 # keep the stream file only in stream-available and include it from stream { }
 ```
 
 Then run `sudo nginx -t` and `sudo nginx -s reload`.
 
 In this mode nginx does not terminate TLS and does not extract HTTP/2 fingerprint.
+
+---
+
+# Stream on port 443 (Go terminates TLS)
+
+When you need **Go to terminate TLS** for your domain on the default HTTPS port (443) while other domains still use 443, nginx cannot have both `http` and `stream` listening on 443 — only one context can bind the port. The solution is **stream on 443** with SNI-based routing: your domain → Go :8443 (passthrough), everything else → nginx `http` on an internal port (e.g. 8440).
+
+**1. Move other HTTPS servers from 443 to an internal port**
+
+In all site configs under `sites-enabled` / `conf.d` that use `listen 443 ssl`, change to:
+
+```nginx
+listen 8440 ssl;
+```
+
+(Use a port that is not used by Go, e.g. 8440; 8443/8444 are Go and passthrough.)
+
+List files that still have `listen` with 443:
+
+```bash
+sudo grep -rl "listen.*443" /etc/nginx/
+```
+
+**2. Add stream block for 443 in nginx.conf**
+
+In the top-level `stream { }` block (same level as `http { }`), add SNI routing and a server listening on 443:
+
+```nginx
+stream {
+    map $ssl_preread_server_name $backend_443 {
+        your.domain.tld  127.0.0.1:8443;
+        default          127.0.0.1:8440;
+    }
+
+    server {
+        listen 443;
+        proxy_pass $backend_443;
+        ssl_preread on;
+    }
+
+    include /etc/nginx/streams-available/your.domain.tld;   # optional: e.g. 8444 passthrough
+}
+```
+
+Do **not** add `proxy_protocol on` to this server — the Go app does not parse PROXY protocol on the TLS listener, and the handshake would break.
+
+**3. Proxy HTTP (port 80) to Go**
+
+So that `http://your.domain.tld` is also served by the Go app, add an `http` server block (e.g. in the same site file or in a dedicated one under `sites-enabled`):
+
+```nginx
+server {
+    listen 80;
+    server_name your.domain.tld;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**4. Reload**
+
+```bash
+sudo nginx -t && sudo nginx -s reload
+```
+
+Result: `http://your.domain.tld` (port 80) is proxied to Go :8080; `https://your.domain.tld` (port 443) is forwarded to Go :8443; Go terminates TLS and serves its certificate. Other hostnames on 443 are forwarded to 127.0.0.1:8440 where nginx `http` terminates TLS as before. Clients still connect to port 443 for all domains.
+
+References: [nginx stream ssl_preread](https://nginx.org/en/docs/stream/ngx_stream_ssl_preread_module.html), [ServerFault: selective TLS passthrough](https://serverfault.com/questions/999728/nginx-selective-tls-passthrough-reverse-proxy-based-on-sni).
 
 ---
 
