@@ -2,6 +2,7 @@ package logger
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -27,26 +28,39 @@ type LogEntry struct {
 
 // Logger handles structured JSON logging
 type Logger struct {
-	mu      sync.Mutex
-	file    *os.File
-	encoder *json.Encoder
-	writers []io.Writer
+	mu          sync.Mutex
+	file        *os.File
+	encoder     *json.Encoder
+	writers     []io.Writer
+	cfg         Config
+	currentDate string // YYYYMMDD for daily rotation
 }
 
 // Config holds logger configuration
 type Config struct {
 	LogDir   string // Directory for log files
-	FileName string // Log file name (default: requests.jsonl)
+	FileName string // Log file name when Daily is false (default: requests.jsonl)
+	Daily    bool   // If true, write to requests_YYYYMMDD.jsonl and rotate by day (default: true)
 	Stdout   bool   // Also write to stdout
 }
 
-// DefaultConfig returns default logger configuration
+// DefaultConfig returns default logger configuration.
+// By default logs are written to requests_YYYYMMDD.jsonl (one file per day).
 func DefaultConfig() Config {
 	return Config{
 		LogDir:   "logs",
 		FileName: "requests.jsonl",
+		Daily:    true,
 		Stdout:   false,
 	}
+}
+
+// logPath returns the path for the given date (YYYYMMDD). When cfg.Daily is false, date is ignored.
+func (cfg Config) logPath(date string) string {
+	if cfg.Daily {
+		return filepath.Join(cfg.LogDir, fmt.Sprintf("requests_%s.jsonl", date))
+	}
+	return filepath.Join(cfg.LogDir, cfg.FileName)
 }
 
 // New creates a new logger instance
@@ -56,8 +70,8 @@ func New(cfg Config) (*Logger, error) {
 		return nil, err
 	}
 
-	// Open log file in append mode
-	logPath := filepath.Join(cfg.LogDir, cfg.FileName)
+	date := time.Now().UTC().Format("20060102")
+	logPath := cfg.logPath(date)
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, err
@@ -68,7 +82,6 @@ func New(cfg Config) (*Logger, error) {
 		writers = append(writers, os.Stdout)
 	}
 
-	// Create multi-writer if needed
 	var writer io.Writer
 	if len(writers) == 1 {
 		writer = writers[0]
@@ -77,10 +90,47 @@ func New(cfg Config) (*Logger, error) {
 	}
 
 	return &Logger{
-		file:    file,
-		encoder: json.NewEncoder(writer),
-		writers: writers,
+		file:        file,
+		encoder:     json.NewEncoder(writer),
+		writers:     writers,
+		cfg:         cfg,
+		currentDate: date,
 	}, nil
+}
+
+// rotate closes the current file and opens a new one for the current date (daily rotation).
+// Caller must hold l.mu.
+func (l *Logger) rotate() error {
+	if !l.cfg.Daily || l.file == nil {
+		return nil
+	}
+	today := time.Now().UTC().Format("20060102")
+	if today == l.currentDate {
+		return nil
+	}
+	_ = l.file.Close()
+	l.file = nil
+
+	l.currentDate = today
+	logPath := l.cfg.logPath(today)
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	l.file = file
+	writers := []io.Writer{file}
+	if l.cfg.Stdout {
+		writers = append(writers, os.Stdout)
+	}
+	var writer io.Writer
+	if len(writers) == 1 {
+		writer = writers[0]
+	} else {
+		writer = io.MultiWriter(writers...)
+	}
+	l.encoder = json.NewEncoder(writer)
+	l.writers = writers
+	return nil
 }
 
 // Log writes a classification result to the log
@@ -88,6 +138,11 @@ func (l *Logger) Log(entry LogEntry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if l.cfg.Daily {
+		if err := l.rotate(); err != nil {
+			return err
+		}
+	}
 	return l.encoder.Encode(entry)
 }
 
@@ -119,10 +174,13 @@ func (l *Logger) Close() error {
 	return nil
 }
 
-// LogPath returns the path to the log file
+// LogPath returns the path to the current log file
 func (l *Logger) LogPath() string {
 	if l.file != nil {
 		return l.file.Name()
 	}
-	return ""
+	if l.cfg.Daily && l.currentDate != "" {
+		return l.cfg.logPath(l.currentDate)
+	}
+	return l.cfg.logPath(time.Now().UTC().Format("20060102"))
 }

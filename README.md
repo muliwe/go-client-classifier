@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.5.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 0.6.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -55,7 +55,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 
 - **Core**: Go (HTTP/2 server, TLS fingerprinting, classification)
 - **Analytics**: Python (log analysis, pattern extraction, visualization)
-- **Logging**: Structured JSON logs for research analysis
+- **Logging**: Structured JSON logs per day (`logs/requests_YYYYMMDD.jsonl`) for research analysis
 
 ## Project Structure
 
@@ -77,7 +77,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 │   └── shell/           # Integration test scripts
 ├── testdata/            # Test stubs (e.g. ja4db_fixture.json for tests)
 ├── internal/fingerprint/data/  # JA4 DB path (ja4db.json downloaded on first start if missing)
-├── logs/                # JSON traffic logs
+├── logs/                # JSON traffic logs (requests_YYYYMMDD.jsonl per day)
 └── docs/                # Research documentation
 ```
 
@@ -101,7 +101,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 ## Research Workflow
 
 1. **Collect**: Run server, generate traffic (curl, browsers, LLM tools)
-2. **Log**: All requests logged as structured JSON
+2. **Log**: All requests logged as structured JSON to daily files (`logs/requests_YYYYMMDD.jsonl`)
 3. **Analyze**: Python tools extract patterns from logs
 4. **Iterate**: Update classification heuristics based on findings
 5. **Test**: Automated integration tests validate behavior
@@ -290,7 +290,7 @@ Tests verify:
 
 ## Log Format
 
-Each request is logged as JSON with full fingerprint data:
+Each request is logged as one JSON line (JSONL) with full fingerprint data. Log files are written by day in UTC: `logs/requests_YYYYMMDD.jsonl` (e.g. `logs/requests_20260217.jsonl`). The server rotates to a new file automatically when the date changes.
 
 ```json
 {

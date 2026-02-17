@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.6.0 (2026-02-17)
+
+### Daily request log files
+
+Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl` (e.g. `logs/requests_20260217.jsonl`) instead of a single `requests.jsonl`.
+
+- **Default behaviour**: `logger.Config.Daily` is `true`; path is `logs/requests_<date>.jsonl` in UTC.
+- **Rotation**: When the date changes (e.g. after midnight UTC), the logger closes the current file and opens a new one for the new day without restarting the process.
+- **Single-file mode**: Set `Daily: false` in logger config to keep the previous behaviour and use `FileName` (e.g. `requests.jsonl`) as before.
+
 ## v0.5.0 (2026-02-16)
 
 ### Nginx TLS termination: proxy header reuse in signal collector

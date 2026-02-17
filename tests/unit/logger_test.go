@@ -21,6 +21,9 @@ func TestLoggerDefaultConfig(t *testing.T) {
 	if cfg.FileName != "requests.jsonl" {
 		t.Errorf("DefaultConfig().FileName = %q, want %q", cfg.FileName, "requests.jsonl")
 	}
+	if cfg.Daily != true {
+		t.Error("DefaultConfig().Daily should be true")
+	}
 	if cfg.Stdout != false {
 		t.Error("DefaultConfig().Stdout should be false")
 	}
@@ -32,6 +35,7 @@ func TestLoggerNew(t *testing.T) {
 	cfg := logger.Config{
 		LogDir:   tmpDir,
 		FileName: "test.jsonl",
+		Daily:    false,
 		Stdout:   false,
 	}
 
@@ -59,6 +63,7 @@ func TestLoggerNew_CreatesDirectory(t *testing.T) {
 	cfg := logger.Config{
 		LogDir:   nestedDir,
 		FileName: "test.jsonl",
+		Daily:    false,
 	}
 
 	l, err := logger.New(cfg)
@@ -197,6 +202,7 @@ func TestLoggerClose(t *testing.T) {
 	cfg := logger.Config{
 		LogDir:   tmpDir,
 		FileName: "test.jsonl",
+		Daily:    false,
 	}
 
 	l, err := logger.New(cfg)
@@ -206,5 +212,31 @@ func TestLoggerClose(t *testing.T) {
 
 	if err := l.Close(); err != nil {
 		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestLoggerDailyFileName(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := logger.Config{
+		LogDir: tmpDir,
+		Daily:  true,
+	}
+
+	l, err := logger.New(cfg)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = l.Close() }()
+
+	path := l.LogPath()
+	expectedSuffix := "requests_" + time.Now().UTC().Format("20060102") + ".jsonl"
+	if !strings.HasSuffix(path, expectedSuffix) {
+		t.Errorf("LogPath() = %q, should end with %q", path, expectedSuffix)
+	}
+
+	// File should exist
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Errorf("Daily log file was not created at %s", path)
 	}
 }
