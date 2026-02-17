@@ -147,7 +147,7 @@ You do **not** need to replicate every Ubuntu configure flag (geoip, image_filte
 
 ## Why not “add module to existing build”
 
-- **Xetera/nginx-http2-fingerprint** is a full nginx **fork**, not an add-on module (no `config` file) → `error: no .../config was found` if you use `--add-module=...`.
+- **Xetera/nginx-http2-fingerprint** is a full nginx **fork**, not an add-on module.
 - **phuslu** and **fooinha/nginx-ssl-ja3** both require **patched OpenSSL + patched nginx**. Building with the system (unpatched) OpenSSL and only adding the module leads to `implicit declaration of function 'SSL_client_hello_get_ja3_data'`. So the only reliable approach is: clone OpenSSL and nginx, apply both patches, then configure with `--with-openssl=<patched_openssl>` and `--add-module=...`.
 
 ---
@@ -231,7 +231,7 @@ server {
         proxy_set_header X-FP-TLS-SNI       $ssl_server_name;
 
         # JA3 (if module is built)
-        proxy_set_header X-FP-JA3 $ssl_ja3;
+        proxy_set_header X-FP-JA3 $ssl_ja3; # form phuslu fork $http_ssl_ja3
 
         # HTTP/2 fingerprint
         proxy_set_header X-FP-H2 $http2_fingerprint;
@@ -481,7 +481,7 @@ Available in access_log:
 ```
 $ssl_protocol
 $ssl_cipher
-$ssl_ja3
+$ssl_ja3/$http_ssl_ja3
 $http2_fingerprint
 $remote_addr
 ```
