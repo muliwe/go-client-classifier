@@ -15,13 +15,35 @@ Goals:
 
 # Architecture
 
+**Variant A — prod nginx + patched nginx (fingerprints on 4433):**
+
 ```
 client
   ↓
-nginx
-  ├─ 443  → TLS termination + JA3 + H2 fingerprint → X-FP-* headers → Go HTTP :8080 (collector uses headers)
-  │         OR: stream on 443 + SNI → Go HTTPS :8443 (passthrough, Go terminates TLS; other hosts → http on :8440)
-  └─ 8444 → TLS passthrough                        → Go HTTPS :8443 (direct TLS to Go)
+prod nginx (stock)
+  443  → stream TLS → patched nginx :4433
+                          ↓
+                    TLS termination + JA3 + H2 fingerprint
+                    X-FP-* headers → proxy_pass → Go HTTP :8080
+```
+
+Prod nginx only streams TLS to 4433; the patched nginx on 4433 terminates TLS, adds fingerprints to headers, and forwards plain HTTP to Go :8080.
+
+**Variant B — один nginx с модулями:**
+
+```
+client
+  ↓
+nginx (patched)
+  ├─ 443  → TLS termination + JA3 + H2 fingerprint → X-FP-* headers → Go HTTP :8080
+  │         OR: stream on 443 + SNI → Go HTTPS :8443 (passthrough, Go terminates TLS)
+  └─ 8444 → TLS passthrough                        → Go HTTPS :8443
+```
+
+**Variant C — TLS passthrough в Go:**
+
+```
+  stream 443 + SNI → Go HTTPS :8443 (Go terminates TLS, JA3/JA4 in-process)
 ```
 
 ---
