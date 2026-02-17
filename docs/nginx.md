@@ -93,6 +93,85 @@ sudo make install
 
 ---
 
+# Adding fingerprint modules when nginx is already installed
+
+If nginx was installed from a package (e.g. `apt install nginx`), you need to rebuild the binary with the same build options plus the fingerprint modules, then replace the system binary.
+
+**1. Get the installed nginx version and its configure arguments**
+
+```
+nginx -V 2>&1
+```
+
+Copy the entire output. You will need the version (first line) and the `configure arguments:` line.
+
+**2. Clone nginx source of the same (or compatible) version**
+
+```
+cd /usr/local/src   # or any directory you prefer
+sudo git clone https://github.com/nginx/nginx.git
+cd nginx
+sudo git checkout release-1.27.2   # replace with your version, e.g. release-1.26.1 or mainline
+```
+
+Match the major.minor from `nginx -V` (e.g. `nginx/1.27.2` → `release-1.27.2`).
+
+**3. Clone the fingerprint modules next to the nginx directory**
+
+```
+sudo git clone https://github.com/Xetera/nginx-http2-fingerprint.git /usr/local/src/nginx-http2-fingerprint
+sudo git clone https://github.com/fooinha/nginx-ssl-ja3.git /usr/local/src/nginx-ssl-ja3
+```
+
+**4. Configure with the same arguments as the package, plus the new modules**
+
+From the `nginx -V` output, take the string after `configure arguments:` and append the two `--add-module` options. Run from inside the nginx source directory:
+
+```
+./auto/configure \
+  <paste the arguments from nginx -V here> \
+  --add-module=/usr/local/src/nginx-http2-fingerprint \
+  --add-module=/usr/local/src/nginx-ssl-ja3
+```
+
+Example if the package had no extra modules (Debian/Ubuntu often adds many):
+
+```
+./auto/configure \
+  --prefix=/etc/nginx \
+  --sbin-path=/usr/sbin/nginx \
+  --modules-path=/usr/lib/nginx/modules \
+  --with-http_ssl_module \
+  --with-http_v2_module \
+  --with-stream \
+  --with-stream_ssl_preread_module \
+  --add-module=/usr/local/src/nginx-http2-fingerprint \
+  --add-module=/usr/local/src/nginx-ssl-ja3
+```
+
+**5. Build**
+
+```
+make -j$(nproc)
+```
+
+**6. Replace the binary (backup first)**
+
+```
+sudo cp $(which nginx) $(which nginx).bak
+sudo cp objs/nginx /usr/sbin/nginx   # path may be /usr/sbin/nginx on Debian/Ubuntu
+```
+
+**7. Test and reload**
+
+```
+sudo nginx -t && sudo nginx -s reload
+```
+
+If anything goes wrong, restore the original binary: `sudo cp /usr/sbin/nginx.bak /usr/sbin/nginx` and reload.
+
+---
+
 # Certbot certificates
 
 Obtaining a certificate:
@@ -124,88 +203,99 @@ sudo crontab -e
 
 # nginx configuration
 
-File: `/usr/local/nginx/conf/nginx.conf`
+**Main config** — ensure the `http` block in `/etc/nginx/nginx.conf` includes site files (Debian/Ubuntu default):
 
 ```
-worker_processes 1;
-
-events {
-    worker_connections 1024;
-}
-
 http {
-
     include       mime.types;
     default_type  application/octet-stream;
-
-    sendfile on;
+    sendfile      on;
 
     log_format fp '$remote_addr $ssl_protocol $ssl_cipher $http2_fingerprint';
+    access_log   /var/log/nginx/access.log fp;
 
-    access_log logs/access.log fp;
+    include /etc/nginx/sites-enabled/*;
+}
+```
 
-    server {
-        listen 80;
-        server_name example.com;
-        return 301 https://$host$request_uri;
-    }
+**Site file** — create `/etc/nginx/sites-available/your.domain.tld`:
 
-    server {
-        listen 443 ssl http2;
-        server_name example.com;
+```
+server {
+    listen 80;
+    server_name your.domain.tld;
+    return 301 https://$host$request_uri;
+}
 
-        ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+server {
+    listen 443 ssl http2;
+    server_name your.domain.tld;
 
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_prefer_server_ciphers off;
+    ssl_certificate     /etc/letsencrypt/live/your.domain.tld/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your.domain.tld/privkey.pem;
 
-        location / {
-            proxy_pass http://127.0.0.1:8080;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
 
-            proxy_set_header Host $host;
-            proxy_set_header X-Forwarded-For $remote_addr;
-            proxy_set_header X-Forwarded-Proto https;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
 
-            # TLS context
-            proxy_set_header X-FP-TLS-Version   $ssl_protocol;
-            proxy_set_header X-FP-TLS-Cipher    $ssl_cipher;
-            proxy_set_header X-FP-TLS-ALPN      $ssl_alpn_protocol;
-            proxy_set_header X-FP-TLS-SNI       $ssl_server_name;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
 
-            # JA3 (if module is built)
-            proxy_set_header X-FP-JA3 $ssl_ja3;
+        # TLS context
+        proxy_set_header X-FP-TLS-Version   $ssl_protocol;
+        proxy_set_header X-FP-TLS-Cipher    $ssl_cipher;
+        proxy_set_header X-FP-TLS-ALPN      $ssl_alpn_protocol;
+        proxy_set_header X-FP-TLS-SNI       $ssl_server_name;
 
-            # HTTP/2 fingerprint
-            proxy_set_header X-FP-H2 $http2_fingerprint;
+        # JA3 (if module is built)
+        proxy_set_header X-FP-JA3 $ssl_ja3;
 
-            # prevent header spoofing
-            proxy_set_header X-Internal-Proxy "1";
-        }
+        # HTTP/2 fingerprint
+        proxy_set_header X-FP-H2 $http2_fingerprint;
+
+        # prevent header spoofing
+        proxy_set_header X-Internal-Proxy "1";
     }
 }
+```
+
+Enable the site and reload:
+
+```
+sudo ln -s /etc/nginx/sites-available/your.domain.tld /etc/nginx/sites-enabled/
+sudo nginx -t && sudo nginx -s reload
 ```
 
 ---
 
 # TLS passthrough configuration
 
-Add to nginx.conf:
+Create `/etc/nginx/sites-available/your.domain.tld` with:
+
+```
+upstream go_tls_backend {
+    server 127.0.0.1:8443;
+}
+
+server {
+    listen 8444;
+    proxy_pass go_tls_backend;
+    proxy_protocol on;
+}
+```
+
+Include it from the top-level `stream { }` block in `nginx.conf` (the `stream` block is separate from `http`, so it cannot live inside `sites-enabled`; use a dedicated include):
 
 ```
 stream {
-
-    upstream go_tls_backend {
-        server 127.0.0.1:8443;
-    }
-
-    server {
-        listen 8444;
-        proxy_pass go_tls_backend;
-        proxy_protocol on;
-    }
+    include /etc/nginx/sites-available/your.domain.tld;
 }
 ```
+
+Enable the site by adding the same `include` inside the existing `stream { }` in `nginx.conf` if you already have one.
 
 In this mode nginx does not terminate TLS and does not extract HTTP/2 fingerprint.
 

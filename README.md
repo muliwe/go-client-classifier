@@ -387,8 +387,10 @@ After=network.target
 
 [Service]
 Type=simple
+User=deploy
+Group=deploy
 WorkingDirectory=/opt/go-client-classifier
-ExecStart=/opt/go-client-classifier/server
+ExecStart=/opt/go-client-classifier/bin/server
 Restart=always
 RestartSec=5
 
@@ -405,6 +407,8 @@ Environment=TLS_KEY=/opt/go-client-classifier/certs/server.key
 WantedBy=multi-user.target
 ```
 
+Replace `User=deploy` and `Group=deploy` with the user and group that should run the service. Ensure that user can read the binary, `certs/`, and write to `logs/` (e.g. `chown -R deploy:deploy /opt/go-client-classifier`).
+
 Alternatively, put variables in a file: create `/opt/go-client-classifier/.env` (or `environment.conf`) and add `EnvironmentFile=/opt/go-client-classifier/.env` to the unit.
 
 **4. Enable and start**
@@ -417,6 +421,20 @@ sudo systemctl status go-client-classifier
 ```
 
 Verify: `curl http://localhost:8080/health` and `curl -k https://localhost:8443/health`.
+
+**Viewing logs in real time**
+
+- **Service output** (stdout/stderr: startup message, per-request console line, errors):
+  ```bash
+  journalctl -u go-client-classifier -f
+  ```
+- **Request log file** (JSONL, one line per classify request):
+  ```bash
+  tail -f /opt/go-client-classifier/logs/requests_$(date +%Y%m%d).jsonl
+  ```
+  Or from the app directory: `tail -f logs/requests_*.jsonl` (today’s file).
+
+**Note:** Any request that hits the classify handler (including non-root paths like `/not-known`) is classified and written to the JSONL and console logs; only **GET /** returns 200 JSON, other paths return 404. **GET /health** and **GET /debug** are handled by other handlers and are not logged. If the log stays empty, check `journalctl -u go-client-classifier -f` for the "Logs:" path at startup and any "Error logging result" messages.
 
 **Environment variables**
 
