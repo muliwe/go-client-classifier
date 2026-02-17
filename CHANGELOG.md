@@ -41,6 +41,7 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 
 - README: Production deploy with **User=** and **Group=** in the systemd unit; **viewing logs** (real-time: `journalctl -u go-client-classifier -f`, `tail -f logs/requests_*.jsonl`); certbot **webroot** and **nginx** options when port 80 is in use; troubleshooting empty log (only classify requests are logged).
 - docs/nginx.md: Main config and **site file** in `/etc/nginx/sites-available/`; **TLS passthrough** in a separate file included from `stream { }`; **adding fingerprint modules when nginx is already installed** (rebuild with same configure args + modules, replace binary).
+- docs/nginx.md: **Stream on port 443** — section on SNI-based routing so that Go terminates TLS on 443 (stream `listen 443` + `ssl_preread`, domain → Go :8443, default → nginx http on :8440); other HTTPS servers must use `listen 8440 ssl`; command `grep -rl "listen.*443"` to list configs; **HTTP (port 80)** proxy to Go :8080 for the same domain.
 
 ## v0.5.0 (2026-02-16)
 
