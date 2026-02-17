@@ -356,13 +356,14 @@ stream {
         listen 443;
         proxy_pass $backend_443;
         ssl_preread on;
+        proxy_protocol on;   # optional: send client IP to Go; requires PROXY_PROTOCOL=1 on the Go service
     }
 
     include /etc/nginx/streams-available/your.domain.tld;   # optional: e.g. 8444 passthrough
 }
 ```
 
-Do **not** add `proxy_protocol on` to this server — the Go app does not parse PROXY protocol on the TLS listener, and the handshake would break.
+**Real client IP for stream (443 → Go :8443):** To have logs show the real client IP instead of `127.0.0.1`, set `proxy_protocol on` in the stream server above and start the Go service with `PROXY_PROTOCOL=1` (or `true`). The Go server will then parse the PROXY protocol header and use the client address for logging. If you omit `proxy_protocol on`, leave `PROXY_PROTOCOL` unset so direct TLS connections still work.
 
 **3. Proxy HTTP (port 80) to Go**
 

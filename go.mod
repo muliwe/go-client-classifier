@@ -6,6 +6,7 @@ require (
 	github.com/go-task/task/v3 v3.48.0
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/google/uuid v1.6.0
+	github.com/pires/go-proxyproto v0.11.0
 	github.com/psanford/tlsfingerprint v0.0.0-20251111180026-c742e470de9b
 )
 

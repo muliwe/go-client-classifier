@@ -400,6 +400,9 @@ Environment=TLS_PORT=8443
 Environment=TLS_CERT=/opt/go-client-classifier/certs/server.crt
 Environment=TLS_KEY=/opt/go-client-classifier/certs/server.key
 
+# Optional: enable PROXY protocol on TLS port (when nginx stream uses proxy_protocol on → real client IP in logs)
+# Environment=PROXY_PROTOCOL=1
+
 # Raise open-file limit (default 1024 can cause SSL/connection failures under load)
 LimitNOFILE=65535
 
@@ -441,13 +444,14 @@ Verify: `curl http://localhost:8080/health` and `curl -k https://localhost:8443/
 
 **Environment variables**
 
-| Variable    | Description                              | Example             |
+| Variable   | Description                              | Example             |
 |------------|------------------------------------------|---------------------|
 | `PORT`     | HTTP port                                | `8080`              |
 | `TLS_PORT` | HTTPS port (when using TLS)              | `8443`              |
+| `PROXY_PROTOCOL` | PROXY protocol on TLS (if nginx has `proxy_protocol on`) | `true` |
 | `TLS_CERT` | Path to certificate file                 | `certs/server.crt`  |
 | `TLS_KEY`  | Path to key file                         | `certs/server.key`  |
-| `DEBUG`    | Enable `/debug` endpoint                  | `true` / `false`    |
+| `DEBUG`    | Enable `/debug` endpoint                 | `true` / `false`    |
 
 If only `TLS_CERT` and `TLS_KEY` are set (no `TLS_PORT`), the service runs in HTTPS-only mode on `PORT`.
 

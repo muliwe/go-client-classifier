@@ -41,12 +41,14 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 
 - **ClientIP**: Console and JSONL logs now show the real client IP when behind a trusted proxy. The server uses `X-Real-IP` or the first IP in `X-Forwarded-For` when the request is from localhost (127.0.0.1 / ::1) or when `X-Internal-Proxy` is `"1"` (e.g. nginx http→http or TLS termination→http). Exported as `ClientIP(r *http.Request)` for tests.
 - **Tests**: `TestServerClientIP` (direct, X-Forwarded-For, X-Real-IP, localhost, X-Internal-Proxy); `TestServerHandleClassify_LogsRealIPWhenProxied` (JSONL `remote_addr` from header).
+- **PROXY protocol (stream)**: When nginx stream uses `proxy_protocol on`, the TLS listener can parse the PROXY header so that `RemoteAddr` (and logs) show the real client IP. Set `PROXY_PROTOCOL=1` (or `true`) for the Go service and add `proxy_protocol on` to the stream server in nginx. Optional; omit both when not using PROXY protocol. Dependency: `github.com/pires/go-proxyproto`.
 
 ### Docs and deploy
 
 - README: Production deploy with **User=** and **Group=** in the systemd unit; **LimitNOFILE=65535** in the unit to avoid connection/SSL errors under load; **viewing logs** (real-time: `journalctl -u go-client-classifier -f`, `tail -f logs/requests_*.jsonl`); certbot **webroot** and **nginx** options when port 80 is in use; troubleshooting empty log (only classify requests are logged).
 - docs/nginx.md: Main config and **site file** in `/etc/nginx/sites-available/`; **TLS passthrough** in a separate file included from `stream { }`; **adding fingerprint modules when nginx is already installed** (rebuild with same configure args + modules, replace binary).
-- docs/nginx.md: **Stream on port 443** — section on SNI-based routing so that Go terminates TLS on 443 (stream `listen 443` + `ssl_preread`, domain → Go :8443, default → nginx http on :8440); other HTTPS servers must use `listen 8440 ssl`; command `grep -rl "listen.*443"` to list configs; **HTTP (port 80)** proxy to Go :8080 with `X-Forwarded-For` and `X-Internal-Proxy "1"` for real client IP; Notes: real IP requires X-Forwarded-For (or X-Real-IP), and X-Internal-Proxy when proxy is not on localhost.
+- docs/nginx.md: **Stream on port 443** — section on SNI-based routing so that Go terminates TLS on 443 (stream `listen 443` + `ssl_preread`, domain → Go :8443, default → nginx http on :8440); other HTTPS servers must use `listen 8440 ssl`; command `grep -rl "listen.*443"` to list configs; optional **proxy_protocol on** and Go `PROXY_PROTOCOL=1` for real client IP in stream path; **HTTP (port 80)** proxy to Go :8080 with `X-Forwarded-For` and `X-Internal-Proxy "1"` for real client IP; Notes: real IP requires X-Forwarded-For (or X-Real-IP), and X-Internal-Proxy when proxy is not on localhost.
+- README: **PROXY_PROTOCOL** env var and optional `Environment=PROXY_PROTOCOL=1` in systemd; env table entry for `PROXY_PROTOCOL`.
 
 ## v0.5.0 (2026-02-16)
 

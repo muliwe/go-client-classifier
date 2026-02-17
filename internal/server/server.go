@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/psanford/tlsfingerprint/fingerprintlistener"
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
@@ -34,6 +35,9 @@ type Config struct {
 	TLSAddr     string // HTTPS listen address (e.g. ":8443"); when set with TLSEnabled, HTTP stays on Addr and HTTPS on TLSAddr
 	TLSCertFile string
 	TLSKeyFile  string
+
+	// ProxyProtocol enables PROXY protocol on the TLS listener (for nginx stream with proxy_protocol on → real client IP in logs).
+	ProxyProtocol bool
 }
 
 // DefaultConfig returns sensible defaults
@@ -228,7 +232,15 @@ func (s *Server) runTLS() error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", s.cfg.TLSAddr, err)
 	}
-	fpListener := fingerprintlistener.NewListener(tcpListener)
+	listener := net.Listener(tcpListener)
+	if s.cfg.ProxyProtocol {
+		listener = &proxyproto.Listener{
+			Listener:          tcpListener,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		log.Printf("PROXY protocol enabled on %s (real client IP from nginx stream)", s.cfg.TLSAddr)
+	}
+	fpListener := fingerprintlistener.NewListener(listener)
 	s.listener = fpListener
 	s.tlsServer.TLSConfig = &tls.Config{
 		Certificates: []tls.Certificate{cert},

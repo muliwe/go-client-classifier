@@ -32,6 +32,11 @@ func main() {
 		cfg.TLSKeyFile = tlsKey
 	}
 
+	// PROXY protocol on TLS listener (for nginx stream with proxy_protocol on → real client IP in logs)
+	if v := os.Getenv("PROXY_PROTOCOL"); v == "1" || v == "true" {
+		cfg.ProxyProtocol = true
+	}
+
 	srv, err := server.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
