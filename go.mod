@@ -1,6 +1,6 @@
 module github.com/muliwe/go-client-classifier
 
-go 1.26
+go 1.22
 
 require (
 	github.com/go-task/task/v3 v3.48.0

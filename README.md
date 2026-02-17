@@ -110,8 +110,8 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 
 ### Prerequisites
 
-- Go 1.26+
-- `$GOPATH/bin` in PATH
+- **Go 1.22+** — [Download](https://go.dev/dl/) installers for Windows, macOS, Linux; or install via package manager (e.g. `winget install GoLang.Go`, `brew install go`, `apt install golang-go`). Ensure `go` is on your PATH.
+- `$GOPATH/bin` (or `$HOME/go/bin`) in PATH — required for `go install`-ed tools (task, golangci-lint).
 - TLS certificate and key (for HTTPS mode)
 
 ### Installation
