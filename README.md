@@ -159,6 +159,27 @@ openssl req -x509 -newkey rsa:4096 -keyout certs/server.key -out certs/server.cr
 
 Add the certificate to your system's trusted certificates for browser testing without warnings.
 
+**Using Let's Encrypt (certbot)** — for a public hostname with HTTPS:
+
+```bash
+# Install certbot (Ubuntu/Debian)
+sudo apt install certbot
+
+# Obtain a certificate (standalone mode: port 80 must be free for the challenge)
+sudo certbot certonly --standalone -d your-domain.example.com
+
+# Certbot stores certs under /etc/letsencrypt/live/<domain>/
+# Point the server at them via env or symlink into certs/:
+#   TLS_CERT=/etc/letsencrypt/live/your-domain.example.com/fullchain.pem
+#   TLS_KEY=/etc/letsencrypt/live/your-domain.example.com/privkey.pem
+# Or copy/symlink into project certs/ (ensure deploy user can read; certbot files are root-readable):
+sudo cp /etc/letsencrypt/live/your-domain.example.com/fullchain.pem certs/server.crt
+sudo cp /etc/letsencrypt/live/your-domain.example.com/privkey.pem certs/server.key
+sudo chown $(whoami) certs/server.crt certs/server.key
+```
+
+Renewal: certbot can renew via `sudo certbot renew` (e.g. from cron or systemd timer). After renewal, restart the Go server so it reloads the certs.
+
 ### Development
 
 ```bash
