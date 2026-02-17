@@ -1,11 +1,12 @@
 module github.com/muliwe/go-client-classifier
 
-go 1.22
+go 1.24.6
 
 require (
 	github.com/go-task/task/v3 v3.48.0
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/google/uuid v1.6.0
+	github.com/psanford/tlsfingerprint v0.0.0-20251111180026-c742e470de9b
 )
 
 require (
@@ -203,7 +204,6 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
-	github.com/psanford/tlsfingerprint v0.0.0-20251111180026-c742e470de9b // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.3.0 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.3-0.20240823090925-0fe6f58b47b1 // indirect
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22 // indirect

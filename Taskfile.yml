@@ -29,6 +29,24 @@ tasks:
     cmds:
       - go run cmd/server/main.go
 
+  run:dual:
+    desc: Run the server with both HTTP and HTTPS (HTTP :8080, HTTPS :8443)
+    env:
+      PORT: "8080"
+      TLS_PORT: "8443"
+      TLS_CERT: "certs/bot.local.crt"
+      TLS_KEY: "certs/bot.local.key"
+    cmds:
+      - go run cmd/server/main.go
+
+  build:prod:
+    desc: Build server binary for Linux (production deploy)
+    env:
+      GOOS: linux
+      GOARCH: amd64
+    cmds:
+      - go build -ldflags="-s -w" -o bin/server ./cmd/server
+
   test:
     desc: Run all tests
     cmds:
@@ -95,3 +113,8 @@ tasks:
       CONCURRENCY: '{{.CONCURRENCY | default "10"}}'
     cmds:
       - go run ./tools/benchmark -url={{.URL}} -duration={{.DURATION}} -c={{.CONCURRENCY}} -insecure
+
+  deploy:build:
+    desc: Alias for build:prod (build for Linux deploy)
+    cmds:
+      - task: build:prod

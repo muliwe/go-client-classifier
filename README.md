@@ -111,7 +111,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 ### Prerequisites
 
 - **Go 1.22+** — [Download](https://go.dev/dl/) installers for Windows, macOS, Linux; or install via package manager (e.g. `winget install GoLang.Go`, `brew install go`, `apt install golang-go`). Ensure `go` is on your PATH.
-- `$GOPATH/bin` (or `$HOME/go/bin`) in PATH — required for `go install`-ed tools (task, golangci-lint).
+- Go tools directory in PATH — add `$HOME/go/bin` (default when Go is installed in the usual way). Required so `task` and `golangci-lint` are found after `go install`. Using this explicit path avoids errors when `go` cannot read the current directory (e.g. after `sudo su`). Do not install the `task` or `taskwarrior` apt/snap packages (they are different programs).
 - TLS certificate and key (for HTTPS mode)
 
 ### Installation
@@ -127,8 +127,11 @@ go install github.com/go-task/task/v3/cmd/task@latest
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # Ensure Go bin is on PATH (required for `task` and `golangci-lint`)
-export PATH=$PATH:$(go env GOPATH)/bin
-# Or on many Linux systems: export PATH=$PATH:$HOME/go/bin
+# Use explicit path so it works even when current directory has permission issues (e.g. after sudo su)
+export PATH=$PATH:$HOME/go/bin
+
+# To make it permanent, add the same line to your shell profile and reload:
+echo 'export PATH=$PATH:$HOME/go/bin' >> ~/.bashrc && source ~/.bashrc   # bash
 ```
 
 ### TLS Certificate Setup
@@ -324,6 +327,87 @@ Each request is logged as one JSON line (JSONL) with full fingerprint data. Log 
   "score": 18
 }
 ```
+
+### Production deploy
+
+You can run the service on Ubuntu as a systemd unit: one process listens on both HTTP and HTTPS, and restarts on failure or after a reboot.
+
+**1. Build the Linux binary**
+
+On your dev machine or in CI:
+
+```bash
+task build:prod
+```
+
+The binary will be at `bin/server`. Copy it to the server (e.g. `/opt/go-client-classifier/`).
+
+**2. Certificates**
+
+Place the certificate and key in the app directory, for example:
+
+```
+/opt/go-client-classifier/
+├── server          # binary
+├── certs/
+│   ├── server.crt
+│   └── server.key
+└── logs/           # created automatically
+```
+
+**3. systemd unit file**
+
+Create `/etc/systemd/system/go-client-classifier.service`:
+
+```ini
+[Unit]
+Description=Go Client Classifier (bot detector)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/go-client-classifier
+ExecStart=/opt/go-client-classifier/server
+Restart=always
+RestartSec=5
+
+# HTTP :8080, HTTPS :8443
+Environment=PORT=8080
+Environment=TLS_PORT=8443
+Environment=TLS_CERT=/opt/go-client-classifier/certs/server.crt
+Environment=TLS_KEY=/opt/go-client-classifier/certs/server.key
+
+# Optional: disable request logging, only health/debug
+# Environment=DEBUG=false
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Alternatively, put variables in a file: create `/opt/go-client-classifier/.env` (or `environment.conf`) and add `EnvironmentFile=/opt/go-client-classifier/.env` to the unit.
+
+**4. Enable and start**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable go-client-classifier
+sudo systemctl start go-client-classifier
+sudo systemctl status go-client-classifier
+```
+
+Verify: `curl http://localhost:8080/health` and `curl -k https://localhost:8443/health`.
+
+**Environment variables**
+
+| Variable    | Description                              | Example             |
+|------------|------------------------------------------|---------------------|
+| `PORT`     | HTTP port                                | `8080`              |
+| `TLS_PORT` | HTTPS port (when using TLS)              | `8443`              |
+| `TLS_CERT` | Path to certificate file                 | `certs/server.crt`  |
+| `TLS_KEY`  | Path to key file                         | `certs/server.key`  |
+| `DEBUG`    | Enable `/debug` endpoint                  | `true` / `false`    |
+
+If only `TLS_CERT` and `TLS_KEY` are set (no `TLS_PORT`), the service runs in HTTPS-only mode on `PORT`.
 
 ## Research Questions
 

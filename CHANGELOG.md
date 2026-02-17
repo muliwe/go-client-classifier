@@ -16,6 +16,21 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 
 - Fixture folder `testdata/` (e.g. `ja4db_fixture.json`) moved to `tests/testdata/`. All TestMain and docs updated to use `tests/testdata/ja4db_fixture.json`.
 
+### Dual HTTP + HTTPS listeners
+
+- Server can listen on **both** HTTP and HTTPS at once: set `TLS_PORT` (e.g. `8443`) together with `TLS_CERT`/`TLS_KEY`; HTTP stays on `PORT` (e.g. `8080`), HTTPS on `TLS_PORT` with TLS fingerprinting (JA3/JA4).
+- New config: `Config.TLSAddr`; env vars `PORT` and `TLS_PORT` in `cmd/server/main.go`.
+- New tasks: `task run:dual` (local HTTP :8080 + HTTPS :8443), `task build:prod` (Linux binary for deploy), `task deploy:build` (alias).
+
+### Production deploy (systemd)
+
+- README section **Production deploy**: build with `task build:prod`, copy binary and certs to server, install systemd unit with `Restart=always` and `RestartSec=5`, expose HTTP and HTTPS via `PORT` and `TLS_PORT`. Service survives crashes and reboots (`WantedBy=multi-user.target`).
+
+### Go version and tooling
+
+- `go.mod` and `.golangci.yml` require **Go 1.22** (was 1.26) for compatibility with older deploy environments where the 1.26 toolchain is not available.
+- README: Go install instructions, ensure `$(go env GOPATH)/bin` is on PATH for `task`/`golangci-lint`.
+
 ## v0.5.0 (2026-02-16)
 
 ### Nginx TLS termination: proxy header reuse in signal collector

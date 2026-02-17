@@ -10,9 +10,12 @@ import (
 func main() {
 	cfg := server.DefaultConfig()
 
-	// Allow port override from environment
+	// Port overrides from environment
 	if port := os.Getenv("PORT"); port != "" {
 		cfg.Addr = ":" + port
+	}
+	if tlsPort := os.Getenv("TLS_PORT"); tlsPort != "" {
+		cfg.TLSAddr = ":" + tlsPort
 	}
 
 	// Enable debug endpoint in development
