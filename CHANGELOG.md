@@ -37,11 +37,16 @@ Request logs are now written **by day** to files named `requests_YYYYMMDD.jsonl`
 - **Logger**: `file.Sync()` after each log line so entries appear immediately (e.g. when tailing or on NFS).
 - **Test**: `TestServerHandleClassify_NotFoundStillLogs` asserts that a request to `/not-known` returns 404 and writes one entry to the JSONL log.
 
+### Real client IP in logs
+
+- **ClientIP**: Console and JSONL logs now show the real client IP when behind a trusted proxy. The server uses `X-Real-IP` or the first IP in `X-Forwarded-For` when the request is from localhost (127.0.0.1 / ::1) or when `X-Internal-Proxy` is `"1"` (e.g. nginx http→http or TLS termination→http). Exported as `ClientIP(r *http.Request)` for tests.
+- **Tests**: `TestServerClientIP` (direct, X-Forwarded-For, X-Real-IP, localhost, X-Internal-Proxy); `TestServerHandleClassify_LogsRealIPWhenProxied` (JSONL `remote_addr` from header).
+
 ### Docs and deploy
 
-- README: Production deploy with **User=** and **Group=** in the systemd unit; **viewing logs** (real-time: `journalctl -u go-client-classifier -f`, `tail -f logs/requests_*.jsonl`); certbot **webroot** and **nginx** options when port 80 is in use; troubleshooting empty log (only classify requests are logged).
+- README: Production deploy with **User=** and **Group=** in the systemd unit; **LimitNOFILE=65535** in the unit to avoid connection/SSL errors under load; **viewing logs** (real-time: `journalctl -u go-client-classifier -f`, `tail -f logs/requests_*.jsonl`); certbot **webroot** and **nginx** options when port 80 is in use; troubleshooting empty log (only classify requests are logged).
 - docs/nginx.md: Main config and **site file** in `/etc/nginx/sites-available/`; **TLS passthrough** in a separate file included from `stream { }`; **adding fingerprint modules when nginx is already installed** (rebuild with same configure args + modules, replace binary).
-- docs/nginx.md: **Stream on port 443** — section on SNI-based routing so that Go terminates TLS on 443 (stream `listen 443` + `ssl_preread`, domain → Go :8443, default → nginx http on :8440); other HTTPS servers must use `listen 8440 ssl`; command `grep -rl "listen.*443"` to list configs; **HTTP (port 80)** proxy to Go :8080 for the same domain.
+- docs/nginx.md: **Stream on port 443** — section on SNI-based routing so that Go terminates TLS on 443 (stream `listen 443` + `ssl_preread`, domain → Go :8443, default → nginx http on :8440); other HTTPS servers must use `listen 8440 ssl`; command `grep -rl "listen.*443"` to list configs; **HTTP (port 80)** proxy to Go :8080 with `X-Forwarded-For` and `X-Internal-Proxy "1"` for real client IP; Notes: real IP requires X-Forwarded-For (or X-Real-IP), and X-Internal-Proxy when proxy is not on localhost.
 
 ## v0.5.0 (2026-02-16)
 

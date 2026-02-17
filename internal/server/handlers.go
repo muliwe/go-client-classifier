@@ -3,13 +3,41 @@ package server
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 	"github.com/muliwe/go-client-classifier/internal/logger"
 )
+
+// ClientIP returns the client IP for logging. When the request is from a trusted proxy (localhost
+// or X-Internal-Proxy: 1, e.g. nginx http→http or TLS termination→http), it uses X-Real-IP or the
+// first (leftmost) IP in X-Forwarded-For; otherwise r.RemoteAddr.
+func ClientIP(r *http.Request) string {
+	trustProxy := r.Header.Get("X-Internal-Proxy") == "1"
+	if !trustProxy {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			return r.RemoteAddr
+		}
+		if host != "127.0.0.1" && host != "::1" {
+			return r.RemoteAddr
+		}
+	}
+	if s := strings.TrimSpace(r.Header.Get("X-Real-IP")); s != "" {
+		return s
+	}
+	if s := r.Header.Get("X-Forwarded-For"); s != "" {
+		if i := strings.Index(s, ","); i >= 0 {
+			s = s[:i]
+		}
+		return strings.TrimSpace(s)
+	}
+	return r.RemoteAddr
+}
 
 const version = "0.6.0"
 
@@ -62,15 +90,16 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	result := h.classifier.Classify(fp)
 	responseTime := time.Since(startTime).Milliseconds()
 
+	addr := ClientIP(r)
 	// Always log to JSONL and console
 	if h.logger != nil {
-		if err := h.logger.LogResult(result, r.RemoteAddr, responseTime); err != nil {
+		if err := h.logger.LogResult(result, addr, responseTime); err != nil {
 			log.Printf("Error logging result: %v", err)
 		}
 	}
 	if !h.quiet {
 		log.Printf("[%s] %s %s - UA: %s - %s (%.2f) - %dms",
-			r.RemoteAddr,
+			addr,
 			r.Method,
 			r.URL.Path,
 			fp.HTTP.UserAgent,

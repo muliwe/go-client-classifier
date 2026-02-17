@@ -158,6 +158,44 @@ func TestServerHandleClassify_NotFoundStillLogs(t *testing.T) {
 	}
 }
 
+func TestServerHandleClassify_LogsRealIPWhenProxied(t *testing.T) {
+	tmpDir := t.TempDir()
+	logCfg := logger.Config{LogDir: tmpDir, FileName: "test.jsonl", Daily: false}
+	l, err := logger.New(logCfg)
+	if err != nil {
+		t.Fatalf("logger.New: %v", err)
+	}
+	defer func() { _ = l.Close() }()
+
+	collector := fingerprint.NewCollector()
+	cls := classifier.New(classifier.DefaultConfig())
+	h := server.NewHandler(collector, cls, l)
+	h.SetQuiet(true)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "127.0.0.1:51954"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.Header.Set("User-Agent", "curl/8.0")
+	w := httptest.NewRecorder()
+
+	h.HandleClassify(w, req)
+
+	logPath := filepath.Join(tmpDir, "test.jsonl")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+	var entry struct {
+		RemoteAddr string `json:"remote_addr"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &entry); err != nil {
+		t.Fatalf("log entry JSON: %v", err)
+	}
+	if entry.RemoteAddr != "203.0.113.10" {
+		t.Errorf("remote_addr in log = %q, want 203.0.113.10 (real client IP when proxied)", entry.RemoteAddr)
+	}
+}
+
 func TestServerHandleDebug(t *testing.T) {
 	h := createTestHandler()
 
@@ -207,5 +245,37 @@ func TestServerHandleClassify_BrowserHeaders(t *testing.T) {
 
 	if response.Classification != "browser" {
 		t.Errorf("HandleClassify(browser headers) classification = %q, want %q", response.Classification, "browser")
+	}
+}
+
+func TestServerClientIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		remoteAddr string
+		headers    map[string]string
+		want       string
+	}{
+		{"direct connection", "192.168.1.100:45678", nil, "192.168.1.100:45678"},
+		{"proxy X-Forwarded-For", "127.0.0.1:8080", map[string]string{"X-Forwarded-For": "203.0.113.50"}, "203.0.113.50"},
+		{"proxy X-Forwarded-For first", "127.0.0.1:8080", map[string]string{"X-Forwarded-For": "203.0.113.50, 10.0.0.1"}, "203.0.113.50"},
+		{"proxy X-Real-IP", "127.0.0.1:8080", map[string]string{"X-Real-IP": "198.51.100.1"}, "198.51.100.1"},
+		{"proxy X-Real-IP overrides X-Forwarded-For", "127.0.0.1:8080", map[string]string{"X-Real-IP": "198.51.100.1", "X-Forwarded-For": "203.0.113.50"}, "198.51.100.1"},
+		{"localhost no headers", "127.0.0.1:8080", nil, "127.0.0.1:8080"},
+		{"::1 with X-Forwarded-For", "[::1]:8080", map[string]string{"X-Forwarded-For": "2001:db8::1"}, "2001:db8::1"},
+		{"X-Internal-Proxy http->http", "10.0.0.5:12345", map[string]string{"X-Internal-Proxy": "1", "X-Forwarded-For": "203.0.113.20"}, "203.0.113.20"},
+		{"non-localhost no proxy header", "192.168.1.1:80", nil, "192.168.1.1:80"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			got := server.ClientIP(req)
+			if got != tt.want {
+				t.Errorf("ClientIP() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -377,9 +377,12 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Internal-Proxy "1";
     }
 }
 ```
+
+**Real client IP in logs:** The Go server uses `X-Forwarded-For` (or `X-Real-IP`) when the request is from localhost or when `X-Internal-Proxy` is `"1"`, so logs and JSONL show the real client IP instead of the proxy address. For both HTTP (port 80) and TLS termination (443 → http to Go), set these headers as above.
 
 **4. Reload**
 
@@ -512,3 +515,4 @@ Any future “extended” H2 statistics (e.g. separate variables per frame type)
 2. With TLS passthrough nginx does not see HTTP/2 frames.
 3. Fingerprint headers must only be trusted when coming from the trusted proxy.
 4. Do not use these headers directly from untrusted (external) traffic.
+5. **Real client IP in logs:** Set `X-Forwarded-For` (or `X-Real-IP`) so the Go server logs the real client IP. When the proxy is not on localhost, also set `X-Internal-Proxy "1"` so the backend trusts the forwarded IP (same as for fingerprint headers).
