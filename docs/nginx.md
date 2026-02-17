@@ -273,7 +273,19 @@ sudo nginx -t && sudo nginx -s reload
 
 # TLS passthrough configuration
 
-Create `/etc/nginx/sites-available/your.domain.tld` with:
+**Requirement:** The `stream { }` directive requires nginx to be built with the stream module. On **Ubuntu**, the default `nginx` package may not include it (you get `unknown directive "stream"` even when the block is at top level). Install **nginx-full**, which includes Stream:
+
+```bash
+sudo apt install nginx-full
+```
+
+Confirm with `nginx -V 2>&1` that the binary has stream support, then `sudo nginx -t && sudo nginx -s reload`.
+
+**Important:** Stream config must **not** be in `sites-available` or `sites-enabled` — those are included inside `http { }`, so nginx would parse it as HTTP and fail with `"proxy_pass" directive is not allowed here`. Use a separate path and include it only from a top-level `stream { }` block.
+
+**1. Create the stream config** in a path that is **not** under `sites-enabled`, for example:
+
+`/etc/nginx/stream-available/your.domain.tld` (create the directory if needed: `sudo mkdir -p /etc/nginx/stream-available`)
 
 ```
 upstream go_tls_backend {
@@ -287,15 +299,22 @@ server {
 }
 ```
 
-Include it from the top-level `stream { }` block in `nginx.conf` (the `stream` block is separate from `http`, so it cannot live inside `sites-enabled`; use a dedicated include):
+**2. Include it from the top-level `stream { }` block** in `nginx.conf` (same level as `http { }`, not inside it). Edit `/etc/nginx/nginx.conf` and add, or add to an existing `stream` block:
 
 ```
 stream {
-    include /etc/nginx/sites-available/your.domain.tld;
+    include /etc/nginx/stream-available/your.domain.tld;
 }
 ```
 
-Enable the site by adding the same `include` inside the existing `stream { }` in `nginx.conf` if you already have one.
+**3. If you previously put this file in `sites-enabled`**, remove it so it is not loaded in `http` context:
+
+```
+sudo rm /etc/nginx/sites-enabled/go.invent.sale
+# keep the stream file only in stream-available and include it from stream { }
+```
+
+Then run `sudo nginx -t` and `sudo nginx -s reload`.
 
 In this mode nginx does not terminate TLS and does not extract HTTP/2 fingerprint.
 
@@ -303,20 +322,31 @@ In this mode nginx does not terminate TLS and does not extract HTTP/2 fingerprin
 
 # Running nginx
 
-```
-sudo /usr/local/nginx/sbin/nginx
-```
-
-Reload:
+**Test configuration** (validate syntax and paths without starting or reloading):
 
 ```
-sudo /usr/local/nginx/sbin/nginx -s reload
+sudo nginx -t
 ```
 
-Stop:
+On a source install, use the full path: `sudo /usr/local/nginx/sbin/nginx -t`. Run this after editing configs and before `start` or `reload`.
+
+**Start:**
 
 ```
-sudo /usr/local/nginx/sbin/nginx -s stop
+sudo nginx
+# or: sudo /usr/local/nginx/sbin/nginx
+```
+
+**Reload** (after testing with `nginx -t`):
+
+```
+sudo nginx -s reload
+```
+
+**Stop:**
+
+```
+sudo nginx -s stop
 ```
 
 ---
