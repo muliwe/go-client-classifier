@@ -400,6 +400,9 @@ Environment=TLS_PORT=8443
 Environment=TLS_CERT=/opt/go-client-classifier/certs/server.crt
 Environment=TLS_KEY=/opt/go-client-classifier/certs/server.key
 
+# Raise open-file limit (default 1024 can cause SSL/connection failures under load)
+LimitNOFILE=65535
+
 # Optional: disable request logging, only health/debug
 # Environment=DEBUG=false
 
