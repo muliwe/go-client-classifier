@@ -81,6 +81,7 @@ git clone https://github.com/fooinha/nginx-ssl-ja3.git
  --prefix=/usr/local/nginx \
  --with-http_ssl_module \
  --with-http_v2_module \
+ --with-http_realip_module \
  --with-stream \
  --with-stream_ssl_preread_module \
  --add-module=../nginx-http2-fingerprint \
@@ -330,10 +331,19 @@ When you need **Go to terminate TLS** for your domain on the default HTTPS port 
 In all site configs under `sites-enabled` / `conf.d` that use `listen 443 ssl`, change to:
 
 ```nginx
-listen 8440 ssl;
+listen 8440 ssl proxy_protocol;
 ```
 
 (Use a port that is not used by Go, e.g. 8440; 8443/8444 are Go and passthrough.)
+
+Because the stream server below sends PROXY protocol to **both** backends (8443 and 8440), the nginx **http** server on 8440 must accept it: add `proxy_protocol` to `listen`, then set the real client IP from the PROXY header. In the same config file(s), inside the `http { }` block (or in each server that uses 8440), add:
+
+```nginx
+set_real_ip_from 127.0.0.1;
+real_ip_header proxy_protocol;
+```
+
+(Requires nginx built with `--with-http_realip_module`, which is included in many packages.) Then nginx http on 8440 will parse the PROXY header and use the client address for `$remote_addr` and access logs.
 
 List files that still have `listen` with 443:
 
@@ -363,7 +373,7 @@ stream {
 }
 ```
 
-**Real client IP for stream (443 → Go :8443):** To have logs show the real client IP instead of `127.0.0.1`, set `proxy_protocol on` in the stream server above and start the Go service with `PROXY_PROTOCOL=1` (or `true`). The Go server will then parse the PROXY protocol header and use the client address for logging. If you omit `proxy_protocol on`, leave `PROXY_PROTOCOL` unset so direct TLS connections still work.
+**Real client IP for stream:** The stream server above has `proxy_protocol on`, so it sends the PROXY protocol header to **both** backends (Go :8443 and nginx http :8440). Nginx http understands PROXY: use `listen 8440 ssl proxy_protocol` and `real_ip_header proxy_protocol` as in step 1 so that access logs on 8440 show the real client IP. For Go, start the service with `PROXY_PROTOCOL=1` (or `true`) so it parses the PROXY header and uses the client address for logging. If you ever run without `proxy_protocol on` in stream (e.g. only one backend), leave `PROXY_PROTOCOL` unset on the Go side so direct TLS still works.
 
 **3. Proxy HTTP (port 80) to Go**
 
