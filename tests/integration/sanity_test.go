@@ -82,6 +82,8 @@ func TestClassify_BrowserDetection(t *testing.T) {
 	req.Header.Set("Sec-Fetch-Site", "none")
 	req.Header.Set("Sec-Fetch-User", "?1")
 	req.Header.Set("Sec-CH-UA", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
+	// Cookie present so JA4H C/D are non-zero; avoids ja4h-no-cookies(+3) (smoking-gun for browser UA + no cookies).
+	req.Header.Set("Cookie", "session=test")
 
 	w := httptest.NewRecorder()
 	handler.HandleClassify(w, req)

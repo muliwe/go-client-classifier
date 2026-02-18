@@ -438,7 +438,7 @@ func TestCalculateScores_H2UAInconsistent(t *testing.T) {
 }
 
 func TestCalculateScores_TLSUAInconsistent(t *testing.T) {
-	// Browser-like UA but JA3 is known library (e.g. Python requests) → tls-ua-inconsistent +2 bot (Appendix G)
+	// Browser-like UA but JA3 is known library (e.g. Python requests) → tls-ua-inconsistent +3 bot (Appendix G)
 	fp := fingerprint.Fingerprint{
 		TLS: fingerprint.TLSFingerprint{
 			Available: true,
@@ -457,11 +457,11 @@ func TestCalculateScores_TLSUAInconsistent(t *testing.T) {
 	if !s.TLSKnownLibrary {
 		t.Error("JA3 should be in known-library set")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "tls-ua-inconsistent(+2)") {
-		t.Error("Breakdown should contain tls-ua-inconsistent(+2) when browser UA + known library JA3")
+	if !strings.Contains(s.ScoreBreakdown, "tls-ua-inconsistent(+3)") {
+		t.Error("Breakdown should contain tls-ua-inconsistent(+3) when browser UA + known library JA3")
 	}
-	if s.BotScore < 2 {
-		t.Errorf("BotScore should be at least 2 from tls-ua-inconsistent, got %d", s.BotScore)
+	if s.BotScore < 3 {
+		t.Errorf("BotScore should be at least 3 from tls-ua-inconsistent, got %d", s.BotScore)
 	}
 }
 
@@ -491,7 +491,7 @@ func TestCalculateScores_TLSUAConsistent_BrowserBonus(t *testing.T) {
 }
 
 func TestCalculateScores_TLSUA_BotUA_BrowserTLS(t *testing.T) {
-	// Bot UA (e.g. curl) but JA3 is known browser → tls-ua-inconsistent +2 bot
+	// Bot UA (e.g. curl) but JA3 is known browser → tls-ua-inconsistent +3 bot
 	fp := fingerprint.Fingerprint{
 		TLS: fingerprint.TLSFingerprint{
 			Available: true,
@@ -507,10 +507,10 @@ func TestCalculateScores_TLSUA_BotUA_BrowserTLS(t *testing.T) {
 	if !s.UserAgentIsBot || !s.TLSKnownBrowser {
 		t.Error("UA is bot and JA3 should be in known-browser set")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "tls-ua-inconsistent(+2)") {
-		t.Error("Breakdown should contain tls-ua-inconsistent(+2) when bot UA + known browser TLS")
+	if !strings.Contains(s.ScoreBreakdown, "tls-ua-inconsistent(+3)") {
+		t.Error("Breakdown should contain tls-ua-inconsistent(+3) when bot UA + known browser TLS")
 	}
-	if s.BotScore < 2 {
+	if s.BotScore < 3 {
 		t.Errorf("BotScore should include tls-ua-inconsistent, got %d", s.BotScore)
 	}
 }
@@ -727,7 +727,7 @@ func TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped(t *testing.T) {
 }
 
 func TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty(t *testing.T) {
-	// From proxy + browser UA + no GREASE (curl/libraries) → ua-browser-no-grease(+2) bot
+	// From proxy + browser UA + no GREASE (curl/libraries) → ua-browser-no-grease(+3) bot
 	fp := fingerprint.Fingerprint{
 		TLS: fingerprint.TLSFingerprint{
 			Available:  true,
@@ -744,10 +744,10 @@ func TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty(t *testing.T) {
 	if !s.TLSFromProxy || !s.UserAgentIsBrowser || s.HasSSLGreased {
 		t.Error("Setup: from proxy, browser UA, no GREASE")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "ua-browser-no-grease(+2)") {
-		t.Error("Breakdown should contain ua-browser-no-grease(+2) when browser UA + from proxy + no GREASE")
+	if !strings.Contains(s.ScoreBreakdown, "ua-browser-no-grease(+3)") {
+		t.Error("Breakdown should contain ua-browser-no-grease(+3) when browser UA + from proxy + no GREASE")
 	}
-	if s.BotScore < 2 {
+	if s.BotScore < 3 {
 		t.Errorf("BotScore should include ua-browser-no-grease, got %d", s.BotScore)
 	}
 }
@@ -987,8 +987,8 @@ func TestExtractSignals_HeaderOrder_NotBrowserLike(t *testing.T) {
 	if s.BrowserLikeHeaderOrder {
 		t.Error("Accept or accept-language at index >= 8 should set BrowserLikeHeaderOrder false")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "header-order-late(+1)") {
-		t.Errorf("Browser UA with late header order should get header-order-late(+1), got %s", s.ScoreBreakdown)
+	if !strings.Contains(s.ScoreBreakdown, "header-order-late(+2)") {
+		t.Errorf("Browser UA with late header order should get header-order-late(+2), got %s", s.ScoreBreakdown)
 	}
 }
 
@@ -1050,14 +1050,14 @@ func TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty(t *testing.T) {
 		},
 	}
 	s := fingerprint.ExtractSignals(fp)
-	if !strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+1)") {
-		t.Errorf("Browser UA + no cookies + zeroed C/D should get ja4h-no-cookies(+1), got %s", s.ScoreBreakdown)
+	if !strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
+		t.Errorf("Browser UA + no cookies + zeroed C/D should get ja4h-no-cookies(+3), got %s", s.ScoreBreakdown)
 	}
 	// With cookies present, no penalty
 	fp.HTTP.HasCookies = true
 	fp.HTTP.JA4HHash = "ge11cn25enus_abc123_a1b2c3d4e5f6_f6e5d4c3b2a1"
 	s = fingerprint.ExtractSignals(fp)
-	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+1)") {
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
 		t.Error("HasCookies true should not get ja4h-no-cookies penalty")
 	}
 }
@@ -1135,7 +1135,7 @@ func TestCalculateScores_RealBrowserLike_KeepsBrowserScore(t *testing.T) {
 	if s.JA4HZeroedCookieHashes {
 		t.Error("Real browser with cookies should not have JA4HZeroedCookieHashes")
 	}
-	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+1)") {
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
 		t.Error("Real browser-like fingerprint should not get ja4h-no-cookies in breakdown")
 	}
 	if s.BrowserScore < 22 {

@@ -1267,7 +1267,7 @@ Breakdown:
 ```
 ge11nn040000_b3c4d5e6f7a8_000000000000_000000000000
 ```
-- 4 headers, no language — typical of HTTP libraries. When JA4H has zeroed C/D and the request has browser UA but no cookies, we add +1 bot (`ja4h-no-cookies`); see [Appendix I](#appendix-i-impersonate-and-header-order-detection).
+- 4 headers, no language — typical of HTTP libraries. When JA4H has zeroed C/D and the request has browser UA but no cookies, we add +3 bot (`ja4h-no-cookies`); see [Appendix I](#appendix-i-impersonate-and-header-order-detection).
 
 ### Classifier Integration
 
@@ -1567,14 +1567,14 @@ HTTP/2 fingerprint reflects the real client stack; it cannot be set via JavaScri
 
 - **Done**: JA4H vs HTTP (cookies, referer, version, language) — spatial consistency; inconsistency → +2 bot.  
 - **Done**: H2 vs User-Agent — when UA looks like a browser but the HTTP/2 fingerprint is library-like (e.g. no PRIORITY, non-browser INITIAL_WINDOW_SIZE or WINDOW_UPDATE), we add +2 bot (`h2-ua-inconsistent`). Uses existing H2 parsed signals; no new data collection.  
-- **Done**: TLS vs User-Agent — (1) When UA looks like a browser but JA3/JA4 is in a known-library set (curl, Python requests, Go, Node.js), we add +2 bot (`tls-ua-inconsistent`). (2) When UA looks like a browser and JA3/JA4 is in a known-browser set (Chrome, etc.), we add +1 browser (`tls-ua-consistent`). (3) When UA claims bot/library but JA3/JA4 is in the known-browser set, we add +2 bot (`tls-ua-inconsistent`). (4) We only apply (1) when the fingerprint is in the library set and *not* in the browser set—the same JA4 can appear in both ja4db categories (e.g. real Chrome), in which case we do not penalize. JA3 maps are static in `internal/fingerprint/tls_client_map.go`; JA4 set is loaded from file (default `internal/fingerprint/data/ja4db.json`, download from ja4db.com on first start if missing). Env: `JA4DB_PATH`, `JA4DB_SKIP_DOWNLOAD` (tests). Extend from ja3.me, JA3.ZONE, ja4db.com.
+- **Done**: TLS vs User-Agent — (1) When UA looks like a browser but JA3/JA4 is in a known-library set (curl, Python requests, Go, Node.js), we add +3 bot (`tls-ua-inconsistent`). (2) When UA looks like a browser and JA3/JA4 is in a known-browser set (Chrome, etc.), we add +1 browser (`tls-ua-consistent`). (3) When UA claims bot/library but JA3/JA4 is in the known-browser set, we add +3 bot (`tls-ua-inconsistent`). (4) We only apply (1) when the fingerprint is in the library set and *not* in the browser set—the same JA4 can appear in both ja4db categories (e.g. real Chrome), in which case we do not penalize. JA3 maps are static in `internal/fingerprint/tls_client_map.go`; JA4 set is loaded from file (default `internal/fingerprint/data/ja4db.json`, download from ja4db.com on first start if missing). Env: `JA4DB_PATH`, `JA4DB_SKIP_DOWNLOAD` (tests). Extend from ja3.me, JA3.ZONE, ja4db.com.
 - **Done**: HTTP/1.1 without H2 — we add +1 bot only when TLS was available (the client could have negotiated H2). For raw HTTP pipelines (no TLS, e.g. direct to app without nginx), we do not penalize HTTP/1.1.
 - **Done**: Bot User-Agent and TLS/JA4H browser points — when the User-Agent is already classified as bot (e.g. curl, Python), we do not award browser points for TLS (modern-tls, high-ciphers, session-ticket, multi-groups, tls-ext≥10) or for ja4h-consistent. Primitive CLI clients have modern TLS stacks too; without this, curl would receive 6–7 browser points and the net score would be only slightly negative.  
 - **Done**: H2 vs JA4 — when JA4 is present, we parse ALPN from Part A (h2/h1/h3). If JA4 says h2 but the request is not HTTP/2 (or says h1 but it is HTTP/2), we add +2 bot (`h2-ja4-inconsistent`). See `JA4ALPN()` in `tls_client_map.go`.
 - **Done**: TLS/HTTP version mismatch — with direct TLS (not from proxy), we require ALPN to match the observed HTTP version: ALPN `h2` ↔ `HTTP/2.0`, ALPN `http/1.1` ↔ non‑HTTP/2. Mismatch → +2 bot (`tls-alpn-http-inconsistent`). When TLS is from proxy, ALPN reflects client↔proxy; the request to the backend may be HTTP/1.1, so we do not apply this check.
 - **Done**: Obsolete TLS (X-FP-TLS-Version) — when version is TLS 1.0 or TLS 1.1 we add +1 bot (`obsolete-tls(+1)`). Source: proxy header `X-FP-TLS-Version`; signals `TLSObsolete`, used in `calculateScores`. Outdated clients are often automation or legacy stacks.
 - **Done**: GREASE (X-FP-SSL-GREASED) — when the header is non-empty, TLS is modern (1.2/1.3), and UA is not bot we add +1 browser (`ssl-greased(+1)`). Real browsers send GREASE; many libraries omit or use it inconsistently (Akamai, Cloudflare). Signal `HasSSLGreased`; format of value is module-dependent (e.g. phuslu).
-- **Done**: Browser UA + no GREASE when TLS from proxy — when TLS is from proxy, UA looks like a browser, and X-FP-SSL-GREASED is empty we add +2 bot (`ua-browser-no-grease(+2)`). Typical of curl or HTTP libraries spoofing browser headers; real browsers send GREASE.
+- **Done**: Browser UA + no GREASE when TLS from proxy — when TLS is from proxy, UA looks like a browser, and X-FP-SSL-GREASED is empty we add +3 bot (`ua-browser-no-grease(+3)`). Strong (smoking-gun) signal; typical of curl or HTTP libraries spoofing browser headers; real browsers send GREASE.
 - **Done**: From-proxy scoring adjustments — (1) **no-session**: we do *not* add +1 bot for missing session ticket when TLS is from proxy, because X-FP-* does not convey session ticket presence. (2) **JA4H consistency**: when TLS is from proxy, we do *not* compare JA4H version (11/10) with `is_http2` in the consistency check; the backend always sees HTTP/1.x from the proxy, so JA4H version reflects that, while `is_http2` comes from ALPN and is correct for the client.
 - **Done**: INITIAL_WINDOW_SIZE 6291456 — Chrome uses 6 MiB; we treat it as browser-like (`h2-init-window`). 10485760 (10 MiB) remains library-typical and is not in the browser-like set.
 - **Done**: knownLibraryJA3 — extended with additional curl/OpenSSL JA3 hashes (e.g. `0149f47eabf9a20d0893e2a44e5a6323` from curl with HTTP/2 on Linux) so that browser UA + library TLS is reliably detected as `tls-ua-inconsistent`.
@@ -1631,9 +1631,9 @@ Signals derived from the above headers and used in `calculateScores` (see [Appen
 |--------|-----------|-------|
 | `obsolete-tls` | X-FP-TLS-Version is TLS 1.0 or 1.1 | +1 bot |
 | `ssl-greased` | X-FP-SSL-GREASED non-empty, modern TLS, non-bot UA | +1 browser |
-| `ua-browser-no-grease` | TLS from proxy, browser UA, X-FP-SSL-GREASED empty | +2 bot |
+| `ua-browser-no-grease` | TLS from proxy, browser UA, X-FP-SSL-GREASED empty | +3 bot |
 | `has_tls_fingerprint` | JA3 or JA4 present (JA3 from X-FP-JA3-HASH or X-FP-JA3) | Enables TLS-based scoring |
-| `tls-ua-inconsistent` / `tls-ua-consistent` | JA3/JA4 vs User-Agent (known library/browser sets) | +2 bot / +1 browser |
+| `tls-ua-inconsistent` / `tls-ua-consistent` | JA3/JA4 vs User-Agent (known library/browser sets) | +3 bot / +1 browser |
 | H2 fingerprint rules | X-FP-H2 parsed (SETTINGS, PRIORITY, etc.); INITIAL_WINDOW_SIZE 6291456 = browser-like | Multiple browser/bot points |
 | `h2-ja4-inconsistent` | JA4 ALPN vs actual HTTP/2 when JA4 from X-FP-JA4 | +2 bot |
 
@@ -1681,7 +1681,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 **Computation**: From `fingerprint.http.header_order` (lowercase), we take the first index of `"accept"` and `"accept-language"`. If both are present and both indices are &lt; 8, the signal is true.
 
-**Scoring**: +1 browser (`header-order(+1)`). Optionally, when User-Agent is browser-like but the order is not browser-like (either index ≥ 10), we add +1 bot (`header-order-late(+1)`) to separate impersonators.
+**Scoring**: +1 browser (`header-order(+1)`). When User-Agent is browser-like but the order is not browser-like (either index ≥ 10), we add +2 bot (`header-order-late(+2)`) to separate impersonators (strong signal).
 
 **Dependency**: Header order must be preserved from client to backend (e.g. Go 1.22+ or proxy passing order through).
 
@@ -1693,7 +1693,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 **Computation**: In `extractJA4HSignals`, after splitting JA4H by `_`, we set the signal when `len(parts) >= 4` and `parts[2] == "000000000000"` and `parts[3] == "000000000000"`.
 
-**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add +1 bot (`ja4h-no-cookies(+1)`). This is applied even when TLS is from proxy, to detect automation that mimics browser but sends no cookies.
+**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add **+3 bot** (`ja4h-no-cookies(+3)`). This is a strong (smoking-gun) signal for automation that mimics browser but sends no cookies; applied even when TLS is from proxy.
 
 **References**: [2] FoxIO JA4+ Network Fingerprinting, JA4H technical details (https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md).
 
@@ -1732,14 +1732,14 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 | Signal | Condition | Effect | Source |
 |--------|-----------|--------|--------|
 | `header-order` | Accept and Accept-Language in first 8 positions of HeaderOrder | +1 browser | JA4H header structure; WebDecoy/ThreatRelay; internal payload comparison |
-| `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 10 | +1 bot | Same |
-| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +1 bot | [2] FoxIO JA4H; cookie hashes when no cookies |
+| `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 10 | +2 bot | Same |
+| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +3 bot | [2] FoxIO JA4H; smoking-gun for automation |
 | `sec-ch-ua-modern` | First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand | +1 browser | Chrome 109+ Client Hints; no bot penalty for Chromium-first |
 
 ### Risks and mitigations
 
 - **Header order altered by proxy**: If a proxy or CDN reorders headers, a real browser may lose the browser-like order. We use a threshold of 8 and do not rely on header order alone; we only add a bot point for “late” order when both Accept and Accept-Language are present and at least one is at index ≥ 10.
-- **Real users without cookies**: Incognito or first visit can yield zeroed JA4H C/D and no Cookie header. We add the bot point only when User-Agent is browser-like; a single +1 bot is weighted by 4, so a typical real browser with cookies and browser-like order still classifies as browser.
+- **Real users without cookies**: Incognito or first visit can yield zeroed JA4H C/D and no Cookie header. We add the +3 bot penalty only when User-Agent is browser-like; a typical real browser with cookies and browser-like order still classifies as browser; first-visit/incognito may need other browser signals to outweigh the penalty.
 - **Older browsers**: Browsers that do not send Not:A-Brand first simply do not get the sec-ch-ua-modern bonus; we do not penalize them.
 
 ### Additional signals (from updated payloads and curl_cffi best practices)

@@ -501,16 +501,16 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "low-headers(+2)")
 	}
 
-	// Missing typical headers (without Sec-Fetch)
+	// Missing typical headers (Accept or Accept-Encoding) and no Sec-Fetch - strong library signal
 	if s.MissingTypicalHeader && !s.HasSecFetchHeaders {
-		botScore++
-		botReasons = append(botReasons, "missing-typical(+1)")
+		botScore += 2
+		botReasons = append(botReasons, "missing-typical(+2)")
 	}
 
-	// Missing User-Agent - very suspicious
+	// Missing User-Agent - smoking gun (legitimate clients always send it)
 	if !s.HasUserAgent {
-		botScore += 2
-		botReasons = append(botReasons, "no-ua(+2)")
+		botScore += 3
+		botReasons = append(botReasons, "no-ua(+3)")
 	}
 
 	// HTTP/1.1 without H2 when TLS was available - many bots don't support HTTP/2.
@@ -576,17 +576,17 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		}
 	}
 
-	// JA4H zeroed C/D with browser UA and no cookies: typical of automation (e.g. curl_cffi). Applied for proxy path too.
+	// JA4H zeroed C/D with browser UA and no cookies: smoking gun for automation (e.g. curl_cffi). Strong penalty.
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !fp.HTTP.HasCookies && s.JA4HZeroedCookieHashes {
-		botScore++
-		botReasons = append(botReasons, "ja4h-no-cookies(+1)")
+		botScore += 3
+		botReasons = append(botReasons, "ja4h-no-cookies(+3)")
 	}
 
-	// Browser UA but header order not browser-like (Accept or Accept-Language late): separates real browser from impersonate.
+	// Browser UA but header order not browser-like (Accept or Accept-Language late): strong impersonation tell.
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.BrowserLikeHeaderOrder && s.HasAcceptLanguage && s.HasAccept {
 		if idxAccept, idxLang := indexOfHeader(fp.HTTP.HeaderOrder, "accept"), indexOfHeader(fp.HTTP.HeaderOrder, "accept-language"); idxAccept >= 10 || idxLang >= 10 {
-			botScore++
-			botReasons = append(botReasons, "header-order-late(+1)")
+			botScore += 2
+			botReasons = append(botReasons, "header-order-late(+2)")
 		}
 	}
 
@@ -597,17 +597,16 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "h2-ua-inconsistent(+2)")
 	}
 
-	// TLS vs User-Agent inconsistency (Appendix G): UA claims browser but JA3/JA4 is known library (curl, Go, Python, etc.).
-	// Only penalize when TLS is library and NOT also known browser (same fingerprint can appear in both ja4db sets).
+	// TLS vs User-Agent inconsistency (Appendix G): UA claims browser but JA3/JA4 is known library (curl, Go, Python, etc.). Smoking gun.
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary && !s.TLSKnownBrowser {
-		botScore += 2
-		botReasons = append(botReasons, "tls-ua-inconsistent(+2)")
+		botScore += 3
+		botReasons = append(botReasons, "tls-ua-inconsistent(+3)")
 	}
 
-	// Browser UA but no GREASE when TLS from proxy: real browsers send GREASE; curl/libraries typically do not
+	// Browser UA but no GREASE when TLS from proxy: real browsers send GREASE; curl/libraries typically do not. Smoking gun.
 	if s.TLSFromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased {
-		botScore += 2
-		botReasons = append(botReasons, "ua-browser-no-grease(+2)")
+		botScore += 3
+		botReasons = append(botReasons, "ua-browser-no-grease(+3)")
 	}
 
 	// TLS vs User-Agent: browser UA + known browser TLS → consistency bonus
@@ -616,10 +615,10 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "tls-ua-consistent(+1)")
 	}
 
-	// TLS vs User-Agent: bot UA but JA3/JA4 is known browser (e.g. spoofed UA, real browser TLS)
+	// TLS vs User-Agent: bot UA but JA3/JA4 is known browser (e.g. spoofed UA, real browser TLS). Smoking gun.
 	if s.UserAgentIsBot && s.TLSKnownBrowser {
-		botScore += 2
-		botReasons = append(botReasons, "tls-ua-inconsistent(+2)")
+		botScore += 3
+		botReasons = append(botReasons, "tls-ua-inconsistent(+3)")
 	}
 
 	// H2 vs JA4 inconsistency (Appendix G): JA4 says h2 but request is HTTP/1.1, or JA4 says h1 but we have HTTP/2

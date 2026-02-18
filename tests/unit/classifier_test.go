@@ -182,8 +182,8 @@ func TestClassify_ReasonContainsJA4H(t *testing.T) {
 
 func TestClassify_ImpersonateLikeFingerprint_ClassifiedAsBot(t *testing.T) {
 	// Fingerprint similar to curl_cffi impersonating Chrome: browser UA, Sec-Fetch, H2 from proxy,
-	// no cookies, JA4H zeroed C/D, late accept/accept-language order. With new signals (ja4h-no-cookies,
-	// header-order-late, and optionally ua-browser-no-grease) net score should be <= threshold → bot.
+	// no cookies, JA4H zeroed C/D, late accept/accept-language order. With signals (ja4h-no-cookies +3,
+	// header-order-late, ua-browser-no-grease) net score should be <= threshold → bot.
 	c := classifier.New(classifier.DefaultConfig())
 	order := make([]string, 26)
 	for i := range order {
@@ -204,7 +204,7 @@ func TestClassify_ImpersonateLikeFingerprint_ClassifiedAsBot(t *testing.T) {
 			ALPN:       "h2",
 			FromProxy:  true,
 			JA3Hash:    "88ddb7c9e8f79ce9a304f01221a4e3a3", // curl_cffi Chrome profile (reference_bot_curl_cffi.json); in knownLibraryJA3 → tls-ua-inconsistent
-			SSLGreased: "",                                 // no GREASE → ua-browser-no-grease(+2) so net drops below threshold
+			SSLGreased: "",                                 // no GREASE → ua-browser-no-grease(+3) so net drops below threshold
 		},
 		HTTP: fingerprint.HTTPFingerprint{
 			HeaderOrder:   order,
