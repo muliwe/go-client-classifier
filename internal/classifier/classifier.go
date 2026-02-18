@@ -11,6 +11,10 @@ import (
 const (
 	ClassificationBrowser = "browser"
 	ClassificationBot     = "bot"
+
+	// BotScoreWeight multiplies bot_score so that even a few bot signals strongly reduce net.
+	// Net = browser_score - BotScoreWeight*bot_score. With weight 4: 1–2 bot points (real browser edge case) still allow browser; 6 bot points (e.g. curl with spoofed headers) overwhelm many browser points.
+	BotScoreWeight = 4
 )
 
 // Classifier performs client classification based on fingerprint signals
@@ -20,9 +24,8 @@ type Classifier struct {
 
 // Config holds classifier configuration
 type Config struct {
-	// Threshold determines the cutoff for classification
-	// Net score (browser - bot) >= threshold = browser; otherwise = bot.
-	// Real browsers typically yield net score >= 8; raising threshold reduces false browser classification (e.g. curl with many headers).
+	// Threshold: net score (browser - BotScoreWeight*bot) must be > threshold for browser.
+	// Bot points are weighted so they can outweigh spoofable browser headers (e.g. curl with many headers).
 	Threshold int
 }
 
@@ -43,7 +46,7 @@ func New(cfg Config) *Classifier {
 // Classify analyzes a fingerprint and returns classification result
 func (c *Classifier) Classify(fp fingerprint.Fingerprint) fingerprint.ClassificationResult {
 	signals := fingerprint.ExtractSignals(fp)
-	netScore := signals.BrowserScore - signals.BotScore
+	netScore := signals.BrowserScore - BotScoreWeight*signals.BotScore
 
 	classification := ClassificationBot
 	var reason string

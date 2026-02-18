@@ -155,7 +155,20 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleDebug returns detailed fingerprint for debugging (optional endpoint)
+// DebugResponse is the /debug payload: summary first, then full result for details
+type DebugResponse struct {
+	Classification string  `json:"classification"`
+	Score          int     `json:"score"`  // weighted net (browser - 4*bot)
+	Reason         string  `json:"reason"` // text summary
+	Confidence     float64 `json:"confidence"`
+	RequestID      string  `json:"request_id"`
+	Timestamp      string  `json:"timestamp"`
+	Fingerprint    any     `json:"fingerprint,omitempty"`
+	Signals        any     `json:"signals,omitempty"`
+}
+
+// HandleDebug returns detailed fingerprint for debugging (optional endpoint).
+// Top-level fields (classification, score, reason) give the outcome without a second request to /.
 func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
@@ -163,7 +176,17 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(result); err != nil {
+	payload := DebugResponse{
+		Classification: result.Classification,
+		Score:          result.Score,
+		Reason:         result.Reason,
+		Confidence:     result.Confidence,
+		RequestID:      result.RequestID,
+		Timestamp:      result.Timestamp.UTC().Format(time.RFC3339Nano),
+		Fingerprint:    result.Fingerprint,
+		Signals:        result.Signals,
+	}
+	if err := encoder.Encode(payload); err != nil {
 		log.Printf("Error encoding debug response: %v", err)
 	}
 }

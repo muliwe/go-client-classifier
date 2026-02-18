@@ -257,16 +257,18 @@ Current implementation uses the following weights:
 
 ### Classification Logic
 
-```
-net_score = browser_score - bot_score
+Bot points are **weighted** so that a few strong bot signals (e.g. TLS known library + no GREASE + library-like H2) can outweigh many spoofable browser headers. Real browsers may occasionally get 1–2 bot points; curl with spoofed headers gets several.
 
-if net_score >= threshold:
+```
+net_score = browser_score - BotScoreWeight * bot_score   // BotScoreWeight = 4
+
+if net_score > threshold:
     classification = "browser"
 else:
     classification = "bot"
 ```
 
-Default threshold: `0` (browser score must exceed bot score)
+Default threshold: `8`. With weight 4: e.g. browser 19, bot 6 → net 19−24 = −5 → bot; browser 20, bot 2 → net 20−8 = 12 → browser.
 
 ### Confidence Calculation
 

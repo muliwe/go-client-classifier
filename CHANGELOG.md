@@ -19,6 +19,9 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 **New bot signal (stronger detection of spoofed headers):**
 - **ua-browser-no-grease**: When TLS is from proxy, User-Agent looks like a browser, and X-FP-SSL-GREASED is empty, +2 bot. Real browsers send GREASE; curl and many HTTP libraries do not.
 
+**Weighted bot score (classification):**
+- **net_score = browser_score − 4×bot_score** (constant `BotScoreWeight = 4` in classifier). A few bot points now strongly reduce net so that curl with spoofed headers (e.g. 19 browser, 6 bot → net −5) is classified as bot; real browser with 1–2 bot points (e.g. 20 browser, 2 bot → net 12) stays browser. Threshold unchanged (default 8). See [Scoring Algorithm](docs/METHODOLOGY.md#scoring-algorithm).
+
 **Tests:**
 - `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`.
 - `TestIsBrowserLikeH2InitialWindow`: 6291456 browser-like, 10485760 not browser-like.
@@ -59,6 +62,7 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 
 **API**
 - **Confidence**: the classify response JSON now returns `confidence` as a **string** with 2 decimal places (e.g. `"0.95"`) to avoid float instability in JSON. Internal classification and logs keep full precision (float). Test: `TestServerHandleClassify_ConfidenceAsString`.
+- **Debug endpoint** (`/debug`): response now includes top-level `classification`, `score` (weighted net), and `reason` (text summary) so one request gives both the verdict and full fingerprint/signals without calling `/` separately.
 
 ## v0.6.0 (2026-02-17)
 

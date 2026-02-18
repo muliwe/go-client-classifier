@@ -256,30 +256,43 @@ func TestExtractSignals_BotPatterns(t *testing.T) {
 }
 
 func TestClassifier_ScoreCalculation(t *testing.T) {
-	collector := fingerprint.NewCollector()
 	clf := classifier.New(classifier.DefaultConfig())
 
-	// Browser-like request should have positive score
-	browserReq := httptest.NewRequest("GET", "/", nil)
-	browserReq.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0.0.0")
-	browserReq.Header.Set("Accept-Language", "en-US")
-	browserReq.Header.Set("Accept-Encoding", "gzip")
-	browserReq.Header.Set("Sec-Fetch-Site", "none")
-
-	browserFp := collector.Collect(browserReq)
+	// Browser-like fingerprint with TLS from proxy, GREASE, no bot signals → positive weighted net
+	browserFp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:  true,
+			FromProxy:  true,
+			Version:    "TLS 1.3",
+			SSLGreased: "1",
+			JA3Hash:    "d476cd86acfd7e8c059537eb357d1135", // not in knownLibraryJA3
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+			AcceptLang:    "en-US",
+			AcceptEnc:     "gzip, deflate, br",
+			SecFetchSite:  "none",
+			SecFetchMode:  "navigate",
+			SecFetchDest:  "document",
+			SecChUA:       `"Chromium";v="120"`,
+			HeaderCount:   14,
+			JA4HHash:      "ge11nn14enus_abc_000_000",
+			H2Fingerprint: "1:65536;4:6291456;2:0|1|1:1:0:256|m,a,s,p",
+			H2Parsed:      fingerprint.ParseH2Fingerprint("1:65536;4:6291456;2:0|1|1:1:0:256|m,a,s,p"),
+		},
+	}
 	browserResult := clf.Classify(browserFp)
-
-	if browserResult.Score < 0 {
-		t.Errorf("Expected positive score for browser-like request, got %d", browserResult.Score)
+	if browserResult.Score <= 0 {
+		t.Errorf("Expected positive score for browser-like fingerprint (0 bot), got %d (browser=%d bot=%d)",
+			browserResult.Score, browserResult.Signals.BrowserScore, browserResult.Signals.BotScore)
 	}
 
-	// Bot-like request should have negative score
+	// Bot-like request should have negative weighted net
+	collector := fingerprint.NewCollector()
 	botReq := httptest.NewRequest("GET", "/", nil)
 	botReq.Header.Set("User-Agent", "curl/8.0.1")
-
 	botFp := collector.Collect(botReq)
 	botResult := clf.Classify(botFp)
-
 	if botResult.Score >= 0 {
 		t.Errorf("Expected negative score for bot-like request, got %d", botResult.Score)
 	}
