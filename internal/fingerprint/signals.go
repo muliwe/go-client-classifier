@@ -512,7 +512,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	}
 
 	// JA4H fingerprint signals (bot-positive)
-	if s.HasJA4HFingerprint {
+	// When TLS is from proxy, JA4H is computed from the request as seen by the backend (after nginx);
+	// header set can differ from what the client sent, so these penalties are skipped to avoid false bot points for real browsers.
+	if s.HasJA4HFingerprint && !fp.TLS.FromProxy {
 		// Missing language in JA4H - bots often don't send Accept-Language
 		if s.JA4HMissingLanguage {
 			botScore++

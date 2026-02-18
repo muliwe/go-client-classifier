@@ -674,6 +674,57 @@ func TestCalculateScores_FromProxy_JA4HVersion_Consistent(t *testing.T) {
 	}
 }
 
+func TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped(t *testing.T) {
+	// From proxy: JA4H bot penalties (ja4h-no-lang, ja4h-low-headers, ja4h-inconsistent) are skipped
+	// because JA4H is computed from the request as seen by the backend (header set can differ from client).
+	// Use a JA4H that would normally trigger all three: 0000 lang, low header count (03), and request has Accept-Language → inconsistent.
+	// Give full browser-like HTTP/TLS so no other bot points (Sec-Fetch, GREASE, Accept, etc.).
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			ALPN:       "h2",
+			Version:    "TLS 1.3",
+			FromProxy:  true,
+			SSLGreased: "1",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:      "HTTP/1.1",
+			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
+			JA4HHash:     "ge11nn030000_abc123def456_000000000000_000000000000", // 3 headers, no lang
+			HeaderCount:  26,
+			AcceptLang:   "ru-RU,ru;q=0.9", // present → inconsistent with JA4H 0000
+			Accept:       "text/html,application/xhtml+xml",
+			AcceptEnc:    "gzip, deflate, br",
+			SecFetchSite: "none",
+			SecFetchMode: "navigate",
+			SecFetchDest: "document",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.HasJA4HFingerprint || !s.TLSFromProxy {
+		t.Fatal("Setup: need JA4H and FromProxy")
+	}
+	if !s.JA4HMissingLanguage || !s.JA4HLowHeaderCount {
+		t.Error("JA4H fingerprint should parse as missing lang and low headers (for direct would trigger penalties)")
+	}
+	if s.JA4HConsistentSignal {
+		t.Error("JA4H 0000 with HasAcceptLanguage should be inconsistent (for direct would trigger penalty)")
+	}
+	// When from proxy we must NOT add any JA4H bot penalties
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-lang(+1)") {
+		t.Error("From proxy: should NOT add ja4h-no-lang")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ja4h-low-headers(+1)") {
+		t.Error("From proxy: should NOT add ja4h-low-headers")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ja4h-inconsistent(+2)") {
+		t.Error("From proxy: should NOT add ja4h-inconsistent")
+	}
+	// With browser-like request and from proxy, no other bot signals → BotScore 0
+	if s.BotScore != 0 {
+		t.Errorf("From proxy + browser-like request: BotScore want 0, got %d (breakdown: %s)", s.BotScore, s.ScoreBreakdown)
+	}
+}
+
 func TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty(t *testing.T) {
 	// From proxy + browser UA + no GREASE (curl/libraries) → ua-browser-no-grease(+2) bot
 	fp := fingerprint.Fingerprint{
