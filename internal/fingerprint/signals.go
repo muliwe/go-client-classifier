@@ -347,47 +347,35 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "h2-pseudo-headers(+1)")
 	}
 
-	// Sec-Fetch-* headers - strong browser indicator (cannot be spoofed via JS)
+	// Sec-Fetch-* headers — easily spoofable; reduced weight
 	if s.HasSecFetchHeaders {
-		browserScore += 3
-		browserReasons = append(browserReasons, "sec-fetch(+3)")
-	}
-
-	// Accept-Language - browsers always send this
-	if s.HasAcceptLanguage {
 		browserScore++
-		browserReasons = append(browserReasons, "accept-lang(+1)")
+		browserReasons = append(browserReasons, "sec-fetch(+1)")
 	}
 
-	// Browser headers combination
-	if s.HasBrowserHeaders {
-		browserScore++
-		browserReasons = append(browserReasons, "browser-headers(+1)")
-	}
+	// Accept-Language — trivial to spoof; no browser points
+	_ = s.HasAcceptLanguage
 
-	// User-Agent looks like browser (without bot patterns)
+	// Browser headers combination — trivial to spoof; no browser points
+	_ = s.HasBrowserHeaders
+
+	// User-Agent looks like browser — easily spoofable; reduced weight
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot {
-		browserScore += 2
-		browserReasons = append(browserReasons, "browser-ua(+2)")
+		browserScore++
+		browserReasons = append(browserReasons, "browser-ua(+1)")
 	}
 
-	// Sec-CH-UA client hints - browser-specific
+	// Sec-CH-UA client hints — easily spoofable; reduced weight
 	if s.HasSecClientHints {
-		browserScore += 2
-		browserReasons = append(browserReasons, "sec-ch-ua(+2)")
+		browserScore++
+		browserReasons = append(browserReasons, "sec-ch-ua(+1)")
 	}
 
-	// Browser-like header order (Accept and Accept-Language early). See Appendix I.
-	if s.BrowserLikeHeaderOrder {
-		browserScore++
-		browserReasons = append(browserReasons, "header-order(+1)")
-	}
+	// Browser-like header order — disabled as signal (order not preserved through nginx); no browser points
+	_ = s.BrowserLikeHeaderOrder
 
-	// Sec-CH-UA modern order (Not:A-Brand or Not_A Brand first, Chrome 109+). Bonus only; no bot penalty for Chromium-first.
-	if s.SecChUAModernOrder {
-		browserScore++
-		browserReasons = append(browserReasons, "sec-ch-ua-modern(+1)")
-	}
+	// Sec-CH-UA modern order — easily spoofable; no browser points
+	_ = s.SecChUAModernOrder
 
 	// Cache-Control present: real Chrome often sends max-age=0 on navigation; impersonators often omit. Appendix I.
 	if s.HasCacheControl {
@@ -395,11 +383,8 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "cache-control(+1)")
 	}
 
-	// Accept-Language rich (multiple locales or long): real browsers often send several locales; automation often short. Appendix I.
-	if s.AcceptLangRich {
-		browserScore++
-		browserReasons = append(browserReasons, "accept-lang-rich(+1)")
-	}
+	// Accept-Language rich — easily spoofable; no browser points
+	_ = s.AcceptLangRich
 
 	// Cookies present
 	if fp.HTTP.HasCookies {
@@ -407,11 +392,7 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "cookies(+1)")
 	}
 
-	// High header count - browsers send many headers
-	if fp.HTTP.HeaderCount >= 10 {
-		browserScore++
-		browserReasons = append(browserReasons, "headers>=10(+1)")
-	}
+	// High header count — trivial to spoof; no browser points (fp.HTTP.HeaderCount still used elsewhere)
 
 	// Modern TLS - only count as browser signal when UA is not already a known bot (curl, etc. have modern TLS too)
 	if !s.UserAgentIsBot && s.HasModernTLS {
@@ -582,12 +563,11 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "ja4h-no-cookies(+3)")
 	}
 
-	// Browser UA but header order not browser-like (Accept or Accept-Language late): strong impersonation tell.
+	// Browser UA but header order not browser-like (Accept or Accept-Language late).
+	// Disabled: 0 points — header order is not preserved when proxying through vanilla nginx.
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.BrowserLikeHeaderOrder && s.HasAcceptLanguage && s.HasAccept {
-		if idxAccept, idxLang := indexOfHeader(fp.HTTP.HeaderOrder, "accept"), indexOfHeader(fp.HTTP.HeaderOrder, "accept-language"); idxAccept >= 10 || idxLang >= 10 {
-			botScore += 2
-			botReasons = append(botReasons, "header-order-late(+2)")
-		}
+		idxAccept, idxLang := indexOfHeader(fp.HTTP.HeaderOrder, "accept"), indexOfHeader(fp.HTTP.HeaderOrder, "accept-language")
+		_ = idxAccept >= 10 || idxLang >= 10 // header-order-late disabled: 0 points (proxy reorders headers)
 	}
 
 	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like.

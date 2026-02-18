@@ -10,8 +10,8 @@ import (
 
 func TestClassifierDefaultConfig(t *testing.T) {
 	cfg := classifier.DefaultConfig()
-	if cfg.Threshold != 8 {
-		t.Errorf("DefaultConfig().Threshold = %d, want 8", cfg.Threshold)
+	if cfg.Threshold != 4 {
+		t.Errorf("DefaultConfig().Threshold = %d, want 4", cfg.Threshold)
 	}
 }
 
@@ -64,6 +64,7 @@ func TestClassify_Browser(t *testing.T) {
 			SecFetchDest: "document",
 			SecChUA:      `"Chromium";v="120"`,
 			HeaderCount:  14,
+			HasCookies:   true, // avoid ja4h-no-cookies(+3) so real-browser-like fp stays browser
 			JA4HHash:     "ge20nn14enus_abc123def456_000000000000_000000000000",
 		},
 		TLS: fingerprint.TLSFingerprint{

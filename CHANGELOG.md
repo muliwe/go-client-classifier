@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## v0.7.0 (2026-02-18)
 
+### Spoofable signals and header-order
+
+**header-order-late disabled:** The bot signal `header-order-late` (+2) is no longer applied (0 points). Vanilla nginx does not preserve HTTP header order when proxying; late Accept/Accept-Language can be a proxy artifact. Logic remains in code for possible future use (e.g. when order is passed via a dedicated header from OpenResty).
+
+**Reduced browser weights for easily spoofable signals:** Trivial-to-forge headers no longer carry full weight:
+- **sec-fetch**: +3 → +1
+- **browser-ua**: +2 → +1
+- **sec-ch-ua**: +2 → +1
+- **0 points** (not added to breakdown): accept-lang, browser-headers, header-order, sec-ch-ua-modern, accept-lang-rich, headers>=10
+
+**Classifier threshold:** Default threshold 8 → 4 so that real browsers (with fewer spoofable points) still classify as browser when net = browser_score − 4×bot_score > 4.
+
+**Reference data and tests:** `reference_browser.json` (browser_score 25→16), `reference_bot_curl_cffi.json` (browser 21→15, bot 5→3); unit tests and default threshold assertions updated.
+
 ### Classifier: browser vs curl (proxy path)
 
 Improves separation of real browsers from curl (or similar) when requests arrive via TLS-terminating proxy. See [Appendix G](docs/METHODOLOGY.md#appendix-g-cross-validation-of-transport-vs-application-fingerprints), [Phase 2](docs/METHODOLOGY.md#phase-2-http2-deep-inspection), [Phase 3](docs/METHODOLOGY.md#phase-3-fingerprint-inconsistency-detection).
@@ -21,10 +35,10 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 **New bot signal (stronger detection of spoofed headers):**
 - **ua-browser-no-grease**: When TLS is from proxy, User-Agent looks like a browser, and X-FP-SSL-GREASED is empty, +3 bot. Real browsers send GREASE; curl and many HTTP libraries do not.
 
-**Strengthened bot signals (smoking guns):** Several high-confidence bot indicators now carry stronger weight so automation is classified more reliably: **header-order-late** +2 (browser UA but Accept/Accept-Language late), **ua-browser-no-grease** +3, **tls-ua-inconsistent** +3 (browser UA + library TLS or bot UA + browser TLS), **no-ua** +3 (missing User-Agent), **missing-typical** +2 (no Sec-Fetch and missing Accept or Accept-Encoding). See METHODOLOGY Appendix I and H.
+**Strengthened bot signals (smoking guns):** Several high-confidence bot indicators now carry stronger weight so automation is classified more reliably: **ua-browser-no-grease** +3, **tls-ua-inconsistent** +3 (browser UA + library TLS or bot UA + browser TLS), **no-ua** +3 (missing User-Agent), **missing-typical** +2 (no Sec-Fetch and missing Accept or Accept-Encoding). **header-order-late** was +2 but is now disabled (0 points) because vanilla nginx does not preserve header order. See METHODOLOGY Appendix I and H.
 
 **Weighted bot score (classification):**
-- **net_score = browser_score − 4×bot_score** (constant `BotScoreWeight = 4` in classifier). A few bot points now strongly reduce net so that curl with spoofed headers (e.g. 19 browser, 6 bot → net −5) is classified as bot; real browser with 1–2 bot points (e.g. 20 browser, 2 bot → net 12) stays browser. Threshold unchanged (default 8). See [Scoring Algorithm](docs/METHODOLOGY.md#scoring-algorithm).
+- **net_score = browser_score − 4×bot_score** (constant `BotScoreWeight = 4` in classifier). A few bot points now strongly reduce net so that curl with spoofed headers is classified as bot; real browser with 1–2 bot points stays browser. Default threshold was 8; see subsection *Spoofable signals and header-order* for reduction to 4. See [Scoring Algorithm](docs/METHODOLOGY.md#scoring-algorithm).
 
 **Tests:**
 - `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped`, `TestCalculateScores_FromProxy_H2UAInconsistent_Skipped`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`.

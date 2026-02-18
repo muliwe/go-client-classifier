@@ -32,7 +32,7 @@ type Config struct {
 // DefaultConfig returns default classifier configuration
 func DefaultConfig() Config {
 	return Config{
-		Threshold: 8, // Require clear browser lead; real browsers typically score >= 8 net
+		Threshold: 4, // Net (browser - 4*bot) must be > 4; tuned after reducing spoofable browser weights
 	}
 }
 

@@ -956,8 +956,9 @@ func TestExtractSignals_HeaderOrder_BrowserLike(t *testing.T) {
 	if !s.BrowserLikeHeaderOrder {
 		t.Error("Accept and accept-language in first 8 positions should set BrowserLikeHeaderOrder true")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "header-order(+1)") {
-		t.Errorf("Breakdown should contain header-order(+1), got %s", s.ScoreBreakdown)
+	// header-order gives 0 points (easily spoofable / order lost behind nginx); signal still computed
+	if strings.Contains(s.ScoreBreakdown, "header-order(+1)") {
+		t.Errorf("header-order is disabled for scoring; breakdown should not contain header-order(+1), got %s", s.ScoreBreakdown)
 	}
 }
 
@@ -987,8 +988,9 @@ func TestExtractSignals_HeaderOrder_NotBrowserLike(t *testing.T) {
 	if s.BrowserLikeHeaderOrder {
 		t.Error("Accept or accept-language at index >= 8 should set BrowserLikeHeaderOrder false")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "header-order-late(+2)") {
-		t.Errorf("Browser UA with late header order should get header-order-late(+2), got %s", s.ScoreBreakdown)
+	// header-order-late is disabled: order is not preserved through vanilla nginx, so we do not penalize late order.
+	if strings.Contains(s.ScoreBreakdown, "header-order-late") {
+		t.Errorf("header-order-late is disabled; breakdown should not contain it, got %s", s.ScoreBreakdown)
 	}
 }
 
@@ -1096,8 +1098,9 @@ func TestCalculateScores_SecChUAModernOrder_BrowserBonus(t *testing.T) {
 		},
 	}
 	s := fingerprint.ExtractSignals(fp)
-	if !strings.Contains(s.ScoreBreakdown, "sec-ch-ua-modern(+1)") {
-		t.Errorf("SecChUAModernOrder should add sec-ch-ua-modern(+1), got %s", s.ScoreBreakdown)
+	// sec-ch-ua-modern gives 0 points (easily spoofable); signal still computed
+	if strings.Contains(s.ScoreBreakdown, "sec-ch-ua-modern(+1)") {
+		t.Errorf("sec-ch-ua-modern is disabled for scoring; breakdown should not contain it, got %s", s.ScoreBreakdown)
 	}
 }
 
@@ -1138,8 +1141,8 @@ func TestCalculateScores_RealBrowserLike_KeepsBrowserScore(t *testing.T) {
 	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
 		t.Error("Real browser-like fingerprint should not get ja4h-no-cookies in breakdown")
 	}
-	if s.BrowserScore < 22 {
-		t.Errorf("Real browser-like should have browser score >= 22, got %d", s.BrowserScore)
+	if s.BrowserScore < 15 {
+		t.Errorf("Real browser-like should have browser score >= 15, got %d", s.BrowserScore)
 	}
 }
 
@@ -1225,7 +1228,8 @@ func TestCalculateScores_CacheControlAndAcceptLangRich_BrowserBonus(t *testing.T
 	if !strings.Contains(s.ScoreBreakdown, "cache-control(+1)") {
 		t.Errorf("breakdown should contain cache-control(+1), got %s", s.ScoreBreakdown)
 	}
-	if !strings.Contains(s.ScoreBreakdown, "accept-lang-rich(+1)") {
-		t.Errorf("breakdown should contain accept-lang-rich(+1), got %s", s.ScoreBreakdown)
+	// accept-lang-rich gives 0 points (easily spoofable); signal still computed
+	if strings.Contains(s.ScoreBreakdown, "accept-lang-rich(+1)") {
+		t.Errorf("accept-lang-rich is disabled for scoring; breakdown should not contain it, got %s", s.ScoreBreakdown)
 	}
 }
