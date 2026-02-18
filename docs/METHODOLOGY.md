@@ -1435,7 +1435,7 @@ When `X-Internal-Proxy` is not `"1"`, all `X-FP-*` headers are ignored for finge
 ### Scoring impact
 
 - **HTTP/2 fingerprint**: If `has_http2_fingerprint` is true, the browser score is increased by **+1** (`h2-fp`). HTTP/2 SETTINGS/frame-level fingerprints correlate with real browser and client implementations and are hard to spoof from script (no JS API for raw H2 frames); see Akamai [4], NST Browser [6], and recent anti-bot literature.
-- **Parsed H2 + browser-like INITIAL_WINDOW_SIZE**: When the H2 fingerprint string is successfully parsed (`h2_settings_parsed`) and SETTINGS INITIAL_WINDOW_SIZE (id 4) is one of the values commonly seen in real browsers (65535, 65536, 131072, 1048576, 2097152 per RFC 7540 and Akamai fingerprinting), the browser score is increased by **+1** (`h2-init-window`). Unusual or library-typical window sizes do not receive this bonus. See `internal/fingerprint/h2fingerprint.go` (`IsBrowserLikeH2InitialWindow`). curl and many HTTP/2 libraries use different window sizes than browsers (Scrapfly [32], lwt hiker [33]).
+- **Parsed H2 + browser-like INITIAL_WINDOW_SIZE**: When the H2 fingerprint string is successfully parsed (`h2_settings_parsed`) and SETTINGS INITIAL_WINDOW_SIZE (id 4) is one of the values commonly seen in real browsers (65535, 65536, 131072, 1048576, 2097152, **6291456** per RFC 7540 and Akamai fingerprinting; Chrome uses 6291456 = 6 MiB), the browser score is increased by **+1** (`h2-init-window`). Unusual or library-typical window sizes do not receive this bonus; **10485760** (10 MiB) is typical for curl and HTTP/2 libraries and is *not* treated as browser-like. See `internal/fingerprint/h2fingerprint.go` (`IsBrowserLikeH2InitialWindow`). curl and many HTTP/2 libraries use different window sizes than browsers (Scrapfly [32], lwt hiker [33]).
 - **Parsed H2 + PRIORITY present**: When the fingerprint is parsed and the PRIORITY segment is non-empty (`h2_priority_present`), the browser score is increased by **+1** (`h2-priority`). Browsers typically send PRIORITY frames; many HTTP/2 client libraries omit or handle them differently (lwt hiker [33], Scrapfly format [32]).
 - **Parsed H2 + WINDOW_UPDATE present**: When the connection-level WINDOW_UPDATE segment (second segment) is non-zero (`h2_window_update_present`), **+1** (`h2-window-update`). Real clients use flow control; this correlates with browser behavior (Akamai [4], Scrapfly [32]).
 - **Parsed H2 + browser-like MAX_FRAME_SIZE**: When SETTINGS id 5 (MAX_FRAME_SIZE) is 16384 (RFC default) or 16777215 (max), **+1** (`h2-max-frame`). Browsers typically use these values (RFC 7540/9113).
@@ -1570,6 +1570,10 @@ HTTP/2 fingerprint reflects the real client stack; it cannot be set via JavaScri
 - **Done**: TLS/HTTP version mismatch — with direct TLS (not from proxy), we require ALPN to match the observed HTTP version: ALPN `h2` ↔ `HTTP/2.0`, ALPN `http/1.1` ↔ non‑HTTP/2. Mismatch → +2 bot (`tls-alpn-http-inconsistent`). When TLS is from proxy, ALPN reflects client↔proxy; the request to the backend may be HTTP/1.1, so we do not apply this check.
 - **Done**: Obsolete TLS (X-FP-TLS-Version) — when version is TLS 1.0 or TLS 1.1 we add +1 bot (`obsolete-tls(+1)`). Source: proxy header `X-FP-TLS-Version`; signals `TLSObsolete`, used in `calculateScores`. Outdated clients are often automation or legacy stacks.
 - **Done**: GREASE (X-FP-SSL-GREASED) — when the header is non-empty, TLS is modern (1.2/1.3), and UA is not bot we add +1 browser (`ssl-greased(+1)`). Real browsers send GREASE; many libraries omit or use it inconsistently (Akamai, Cloudflare). Signal `HasSSLGreased`; format of value is module-dependent (e.g. phuslu).
+- **Done**: Browser UA + no GREASE when TLS from proxy — when TLS is from proxy, UA looks like a browser, and X-FP-SSL-GREASED is empty we add +2 bot (`ua-browser-no-grease(+2)`). Typical of curl or HTTP libraries spoofing browser headers; real browsers send GREASE.
+- **Done**: From-proxy scoring adjustments — (1) **no-session**: we do *not* add +1 bot for missing session ticket when TLS is from proxy, because X-FP-* does not convey session ticket presence. (2) **JA4H consistency**: when TLS is from proxy, we do *not* compare JA4H version (11/10) with `is_http2` in the consistency check; the backend always sees HTTP/1.x from the proxy, so JA4H version reflects that, while `is_http2` comes from ALPN and is correct for the client.
+- **Done**: INITIAL_WINDOW_SIZE 6291456 — Chrome uses 6 MiB; we treat it as browser-like (`h2-init-window`). 10485760 (10 MiB) remains library-typical and is not in the browser-like set.
+- **Done**: knownLibraryJA3 — extended with additional curl/OpenSSL JA3 hashes (e.g. `0149f47eabf9a20d0893e2a44e5a6323` from curl with HTTP/2 on Linux) so that browser UA + library TLS is reliably detected as `tls-ua-inconsistent`.
 - **Done**: JA3 hash from proxy — we prefer **X-FP-JA3-HASH** (32-char MD5) for classification; if absent we use X-FP-JA3 as hash when it looks like MD5, else we compute MD5 of the raw JA3 string in Go. Ensures TLS vs UA checks work regardless of whether nginx sends raw or hash. See [Appendix H](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection).
 - **Planned**: Temporal inconsistency (same attribute changes across requests from same client).
 
@@ -1623,9 +1627,10 @@ Signals derived from the above headers and used in `calculateScores` (see [Appen
 |--------|-----------|-------|
 | `obsolete-tls` | X-FP-TLS-Version is TLS 1.0 or 1.1 | +1 bot |
 | `ssl-greased` | X-FP-SSL-GREASED non-empty, modern TLS, non-bot UA | +1 browser |
+| `ua-browser-no-grease` | TLS from proxy, browser UA, X-FP-SSL-GREASED empty | +2 bot |
 | `has_tls_fingerprint` | JA3 or JA4 present (JA3 from X-FP-JA3-HASH or X-FP-JA3) | Enables TLS-based scoring |
 | `tls-ua-inconsistent` / `tls-ua-consistent` | JA3/JA4 vs User-Agent (known library/browser sets) | +2 bot / +1 browser |
-| H2 fingerprint rules | X-FP-H2 parsed (SETTINGS, PRIORITY, etc.) | Multiple browser/bot points |
+| H2 fingerprint rules | X-FP-H2 parsed (SETTINGS, PRIORITY, etc.); INITIAL_WINDOW_SIZE 6291456 = browser-like | Multiple browser/bot points |
 | `h2-ja4-inconsistent` | JA4 ALPN vs actual HTTP/2 when JA4 from X-FP-JA4 | +2 bot |
 
 ### References (publications and sources)

@@ -557,6 +557,27 @@ func TestCalculateScores_SSLGreased_BrowserBonus(t *testing.T) {
 	}
 }
 
+func TestCalculateScores_SSLGreased_ZeroIsAbsent(t *testing.T) {
+	// X-FP-SSL-GREASED "0" means no GREASE (nginx convention) → HasSSLGreased false, no ssl-greased bonus
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:  true,
+			Version:    "TLS 1.3",
+			SSLGreased: "0",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent: "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.HasSSLGreased {
+		t.Error("HasSSLGreased should be false when X-FP-SSL-GREASED is \"0\"")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ssl-greased(+1)") {
+		t.Error("Breakdown should NOT contain ssl-greased when value is \"0\"")
+	}
+}
+
 func TestCalculateScores_TLSALPNVsHTTPInconsistent(t *testing.T) {
 	// Direct TLS: ALPN h2 but request is HTTP/1.1 → tls-alpn-http-inconsistent +2 bot
 	fp := fingerprint.Fingerprint{
@@ -601,6 +622,81 @@ func TestCalculateScores_TLSALPNVsHTTP_FromProxy_NoPenalty(t *testing.T) {
 	s := fingerprint.ExtractSignals(fp)
 	if s.TLSALPNVsHTTPInconsistent {
 		t.Error("From proxy: ALPN h2 + HTTP/1.1 to backend is normal, should not set TLSALPNVsHTTPInconsistent")
+	}
+}
+
+func TestCalculateScores_FromProxy_NoSession_NoPenalty(t *testing.T) {
+	// From proxy: HasSessionTicket is never set (X-FP-* does not pass it) → do not add no-session(+1) bot
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available: true,
+			Version:   "TLS 1.3",
+			FromProxy: true,
+			JA3Hash:   "0149f47eabf9a20d0893e2a44e5a6323",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent: "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.TLSFromProxy != true {
+		t.Error("TLS should be from proxy")
+	}
+	if strings.Contains(s.ScoreBreakdown, "no-session(+1)") {
+		t.Error("From proxy: should NOT add no-session(+1) (session ticket not in X-FP-*)")
+	}
+}
+
+func TestCalculateScores_FromProxy_JA4HVersion_Consistent(t *testing.T) {
+	// From proxy: backend sees HTTP/1.1 so JA4H version is "11"; is_http2 from ALPN. Do not treat as ja4h-inconsistent
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			ALPN:      "h2",
+			FromProxy: true,
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:     "HTTP/1.1",
+			UserAgent:   "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
+			JA4HHash:    "ge11nn14enus_abc123def456_000000000000_000000000000", // version 11
+			HeaderCount: 14,
+			AcceptLang:  "en-US,en;q=0.9",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.IsHTTP2 {
+		t.Error("ALPN h2 should set IsHTTP2")
+	}
+	if s.JA4HConsistentSignal != true {
+		t.Error("From proxy: JA4H version vs is_http2 should be ignored, so signals stay consistent")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ja4h-inconsistent(+2)") {
+		t.Error("From proxy: should NOT add ja4h-inconsistent from version mismatch (backend sees HTTP/1.x)")
+	}
+}
+
+func TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty(t *testing.T) {
+	// From proxy + browser UA + no GREASE (curl/libraries) → ua-browser-no-grease(+2) bot
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:  true,
+			Version:    "TLS 1.3",
+			FromProxy:  true,
+			SSLGreased: "",                                 // no GREASE
+			JA3Hash:    "0149f47eabf9a20d0893e2a44e5a6323", // curl
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/133.0.0.0 Safari/537.36",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.TLSFromProxy || !s.UserAgentIsBrowser || s.HasSSLGreased {
+		t.Error("Setup: from proxy, browser UA, no GREASE")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "ua-browser-no-grease(+2)") {
+		t.Error("Breakdown should contain ua-browser-no-grease(+2) when browser UA + from proxy + no GREASE")
+	}
+	if s.BotScore < 2 {
+		t.Errorf("BotScore should include ua-browser-no-grease, got %d", s.BotScore)
 	}
 }
 

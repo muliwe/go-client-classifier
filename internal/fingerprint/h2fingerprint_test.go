@@ -53,13 +53,13 @@ func TestParseH2Fingerprint_NoSettings(t *testing.T) {
 }
 
 func TestIsBrowserLikeH2InitialWindow(t *testing.T) {
-	browserLike := []uint32{65535, 65536, 131072, 1048576, 2097152}
+	browserLike := []uint32{65535, 65536, 131072, 1048576, 2097152, 6291456} // 6291456 = Chrome 6 MiB
 	for _, size := range browserLike {
 		if !IsBrowserLikeH2InitialWindow(size) {
 			t.Errorf("IsBrowserLikeH2InitialWindow(%d) should be true", size)
 		}
 	}
-	notBrowserLike := []uint32{0, 1, 99999, 100000, 123456}
+	notBrowserLike := []uint32{0, 1, 99999, 100000, 123456, 10485760} // 10485760 typical for curl/libraries
 	for _, size := range notBrowserLike {
 		if IsBrowserLikeH2InitialWindow(size) {
 			t.Errorf("IsBrowserLikeH2InitialWindow(%d) should be false", size)

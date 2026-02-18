@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file.
 
 ## v0.7.0 (2026-02-18)
 
+### Classifier: browser vs curl (proxy path)
+
+Improves separation of real browsers from curl (or similar) when requests arrive via TLS-terminating proxy. See [Appendix G](docs/METHODOLOGY.md#appendix-g-cross-validation-of-transport-vs-application-fingerprints), [Phase 2](docs/METHODOLOGY.md#phase-2-http2-deep-inspection), [Phase 3](docs/METHODOLOGY.md#phase-3-fingerprint-inconsistency-detection).
+
+**Proxy-path scoring adjustments (fewer false bot points for real browser):**
+- **no-session**: Bot penalty for missing session ticket is not applied when TLS is from proxy (X-FP-* does not convey session ticket presence).
+- **JA4H consistency**: When TLS is from proxy, JA4H version (11/10) is not compared with `is_http2` in the consistency check; the backend sees HTTP/1.x from the proxy, so the version mismatch is not treated as inconsistency.
+
+**Browser-like H2 and TLS:**
+- **INITIAL_WINDOW_SIZE 6291456** (Chrome 6 MiB) is now treated as browser-like (`h2-init-window`). Value 10485760 (typical for curl/libraries) remains non–browser-like.
+- **knownLibraryJA3** extended with additional curl/OpenSSL JA3 hashes (e.g. `0149f47eabf9a20d0893e2a44e5a6323`) so that browser UA with library TLS is reliably detected as `tls-ua-inconsistent`.
+
+**New bot signal (stronger detection of spoofed headers):**
+- **ua-browser-no-grease**: When TLS is from proxy, User-Agent looks like a browser, and X-FP-SSL-GREASED is empty, +2 bot. Real browsers send GREASE; curl and many HTTP libraries do not.
+
+**Tests:**
+- `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`.
+- `TestIsBrowserLikeH2InitialWindow`: 6291456 browser-like, 10485760 not browser-like.
+- `TestIsKnownLibraryTLS`: curl JA3 `0149f47eabf9a20d0893e2a44e5a6323` in known-library set.
+
 ### X-FP-* proxy headers: JA3 hash, GREASE, obsolete TLS, JA4 ([Appendix H](docs/METHODOLOGY.md#appendix-h-ja3-ja4-and-x-fp-for-bot-detection))
 
 **JA3 hash from proxy**

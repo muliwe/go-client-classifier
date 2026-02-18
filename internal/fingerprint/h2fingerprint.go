@@ -81,12 +81,14 @@ func ParseH2Fingerprint(raw string) *H2FingerprintParsed {
 
 // Browser-like INITIAL_WINDOW_SIZE values (SETTINGS id 4) commonly seen in real browsers
 // (Chrome, Firefox, Safari, Edge) per Akamai fingerprinting; RFC 7540 default is 65535.
+// Chrome uses 6291456 (6 MiB); 10485760 is typical for curl/libraries and is not included.
 var browserLikeInitialWindowSizes = map[uint32]struct{}{
 	65535:   {}, // RFC 7540 default
 	65536:   {},
 	131072:  {},
 	1048576: {},
 	2097152: {},
+	6291456: {}, // Chrome 6 MiB
 }
 
 // IsBrowserLikeH2InitialWindow returns true if the given INITIAL_WINDOW_SIZE is commonly

@@ -128,10 +128,16 @@ var knownLibraryJA3 = map[string]bool{
 	"599ccb0563b7bbae9962ca7e634cc462": true,
 	// cURL 7.x (Scrapfly, daniel.haxx.se)
 	"e7d705a3286e19ea42f587b344ee6865": true,
+	// cURL / OpenSSL (observed JA3 from curl with HTTP/2, e.g. Linux deploy)
+	"0149f47eabf9a20d0893e2a44e5a6323": true,
 	// Go default http.Client (Scrapfly: b32309a26951...; may vary by Go/openssl)
 	"b32309a26951c0191840ad2b48942e64": true,
 	// Node.js https (Scrapfly: 8f1c5a3428db...; full hash may vary by Node/OpenSSL version)
 	"8f1c5a3428db0a2a88c6d34d730c0f2e": true,
+	// PowerShell / .NET HttpClient (Windows; observed from Invoke-WebRequest)
+	"68b3ecfaf0034bb9fcbecd518b5ab8d4": true,
+	// cURL on Windows (curl.exe; ALPN http/1.1, observed from PowerShell)
+	"fae0e5d973c96ae1888b99538efa0363": true,
 }
 
 // Known library/bot JA4 hashes (full string). Filled from ja4db.com in init().

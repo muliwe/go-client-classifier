@@ -102,7 +102,8 @@ func ExtractSignals(fp Fingerprint) Signals {
 	// Proxy / HTTP/2 fingerprint (e.g. nginx TLS termination)
 	s.TLSFromProxy = fp.TLS.FromProxy
 	s.TLSObsolete = fp.TLS.Version == "TLS 1.0" || fp.TLS.Version == "TLS 1.1"
-	s.HasSSLGreased = strings.TrimSpace(fp.TLS.SSLGreased) != ""
+	// X-FP-SSL-GREASED: nginx may send "0" when no GREASE; only non-empty and not "0"/"false" count as present
+	s.HasSSLGreased = isSSLGreasedPresent(fp.TLS.SSLGreased)
 	s.HasHTTP2Fingerprint = fp.HTTP.H2Fingerprint != ""
 	s.HasHTTP2FingerprintFromProxy = fp.TLS.FromProxy && fp.HTTP.H2Fingerprint != ""
 	if fp.HTTP.H2Parsed != nil && fp.HTTP.H2Parsed.ParsedOK {
@@ -248,12 +249,14 @@ func parseHeaderCount(s string, result *int) (int, error) {
 }
 
 // checkJA4HConsistency verifies JA4H signals match HTTP signals
-// Returns true if signals are consistent, false if there are discrepancies
+// Returns true if signals are consistent, false if there are discrepancies.
+// When TLS is from proxy, backend sees HTTP/1.x so JA4H version is "11"/"10"; is_http2 comes from ALPN.
+// We do not compare JA4H version vs is_http2 when from_proxy to avoid false inconsistency.
 func checkJA4HConsistency(s *Signals, fp Fingerprint) bool {
 	consistent := true
 
-	// HTTP/2 consistency
-	if s.JA4HIsHTTP2 != s.IsHTTP2 {
+	// HTTP/2 consistency (skip when from proxy: JA4H reflects backend HTTP/1.x, not client protocol)
+	if !fp.TLS.FromProxy && s.JA4HIsHTTP2 != s.IsHTTP2 {
 		consistent = false
 	}
 
@@ -501,8 +504,8 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 			botReasons = append(botReasons, "few-tls-ext(+1)")
 		}
 
-		// No session ticket support
-		if !s.HasSessionSupport && fp.TLS.Available {
+		// No session ticket support (skip when from proxy: session ticket not passed in X-FP-*)
+		if !s.HasSessionSupport && fp.TLS.Available && !fp.TLS.FromProxy {
 			botScore++
 			botReasons = append(botReasons, "no-session(+1)")
 		}
@@ -540,6 +543,12 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary && !s.TLSKnownBrowser {
 		botScore += 2
 		botReasons = append(botReasons, "tls-ua-inconsistent(+2)")
+	}
+
+	// Browser UA but no GREASE when TLS from proxy: real browsers send GREASE; curl/libraries typically do not
+	if s.TLSFromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased {
+		botScore += 2
+		botReasons = append(botReasons, "ua-browser-no-grease(+2)")
 	}
 
 	// TLS vs User-Agent: browser UA + known browser TLS → consistency bonus
@@ -593,6 +602,22 @@ func isH2LibraryLike(s Signals) bool {
 		return true
 	}
 	return false
+}
+
+// isSSLGreasedPresent returns true when X-FP-SSL-GREASED indicates GREASE is present.
+// Nginx may send "0" when there is no GREASE; we treat empty, "0", and "false" as absent.
+func isSSLGreasedPresent(raw string) bool {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return false
+	}
+	if v == "0" {
+		return false
+	}
+	if strings.EqualFold(v, "false") {
+		return false
+	}
+	return true
 }
 
 // containsAny checks if string contains any of the substrings
