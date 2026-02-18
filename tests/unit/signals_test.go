@@ -752,6 +752,34 @@ func TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty(t *testing.T) {
 	}
 }
 
+func TestCalculateScores_BrowserUA_NoGrease_FromProxy_HTTPToHTTP_NoPenalty(t *testing.T) {
+	// HTTP→HTTP proxy: client did no TLS to us; TLS from proxy but no ALPN/JA3/cipher. Do NOT add ua-browser-no-grease.
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:   true,
+			FromProxy:   true,
+			Version:     "",
+			ALPN:        "",
+			JA3Hash:     "",
+			CipherSuite: "",
+			SSLGreased:  "",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+			Accept:     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+			AcceptEnc:  "gzip, deflate",
+			AcceptLang: "ru-RU,ru;q=0.9,en;q=0.8",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.TLSFromProxy || !s.UserAgentIsBrowser {
+		t.Error("Setup: from proxy, browser UA")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ua-browser-no-grease(+3)") {
+		t.Errorf("HTTP→HTTP proxy must NOT get ua-browser-no-grease (no client TLS), got breakdown: %s", s.ScoreBreakdown)
+	}
+}
+
 func TestCalculateScores_FromProxy_H2UAInconsistent_Skipped(t *testing.T) {
 	// From proxy: H2 fingerprint may omit SETTINGS (e.g. id 5 MAX_FRAME_SIZE) so isH2LibraryLike can be true for real Chrome.
 	// We must NOT add h2-ua-inconsistent when from proxy.

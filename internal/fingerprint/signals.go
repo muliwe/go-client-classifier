@@ -595,7 +595,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	}
 
 	// Browser UA but no GREASE when TLS from proxy: real browsers send GREASE; curl/libraries typically do not. Smoking gun.
-	if s.TLSFromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased {
+	// Only apply when proxy actually forwarded client TLS (ALPN, JA3, or cipher). For HTTP→HTTP proxy, client did no TLS to us, so no GREASE is expected — do not penalize.
+	proxyHasClientTLS := fp.TLS.ALPN != "" || fp.TLS.JA3Hash != "" || fp.TLS.CipherSuite != ""
+	if s.TLSFromProxy && proxyHasClientTLS && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased {
 		botScore += 3
 		botReasons = append(botReasons, "ua-browser-no-grease(+3)")
 	}
