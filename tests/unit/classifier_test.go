@@ -179,3 +179,54 @@ func TestClassify_ReasonContainsJA4H(t *testing.T) {
 		t.Errorf("Score breakdown should mention JA4H, got: %s", result.Signals.ScoreBreakdown)
 	}
 }
+
+func TestClassify_ImpersonateLikeFingerprint_ClassifiedAsBot(t *testing.T) {
+	// Fingerprint similar to curl_cffi impersonating Chrome: browser UA, Sec-Fetch, H2 from proxy,
+	// no cookies, JA4H zeroed C/D, late accept/accept-language order. With new signals (ja4h-no-cookies,
+	// header-order-late, and optionally ua-browser-no-grease) net score should be <= threshold → bot.
+	c := classifier.New(classifier.DefaultConfig())
+	order := make([]string, 26)
+	for i := range order {
+		order[i] = "x"
+	}
+	order[10] = "accept"
+	order[24] = "accept-language"
+	order[0] = "x-forwarded-for"
+	order[1] = "x-fp-ja3-hash"
+	order[2] = "sec-fetch-site"
+	order[3] = "sec-fetch-mode"
+	order[4] = "sec-fetch-dest"
+	order[5] = "user-agent"
+	order[6] = "accept-encoding"
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Version:    "TLS 1.3",
+			ALPN:       "h2",
+			FromProxy:  true,
+			JA3Hash:    "88ddb7c9e8f79ce9a304f01221a4e3a3", // curl_cffi Chrome profile (reference_bot_curl_cffi.json); in knownLibraryJA3 → tls-ua-inconsistent
+			SSLGreased: "",                                 // no GREASE → ua-browser-no-grease(+2) so net drops below threshold
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder:   order,
+			HeaderCount:   len(order),
+			UserAgent:     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/142.0.0.0 Safari/537.36",
+			Accept:        "text/html,application/xhtml+xml",
+			AcceptLang:    "en-US,en;q=0.9",
+			AcceptEnc:     "gzip, deflate, br, zstd",
+			SecFetchSite:  "none",
+			SecFetchMode:  "navigate",
+			SecFetchDest:  "document",
+			HasCookies:    false,
+			JA4HHash:      "ge11nn25enus_fc343ccb8320_000000000000_000000000000",
+			H2Fingerprint: "1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p",
+		},
+	}
+	fp.HTTP.H2Parsed = fingerprint.ParseH2Fingerprint(fp.HTTP.H2Fingerprint)
+	result := c.Classify(fp)
+	if result.Classification != classifier.ClassificationBot {
+		t.Errorf("Impersonate-like fingerprint (no cookies, zeroed JA4H C/D, late header order, no GREASE) should be classified bot, got %s (net score %d)", result.Classification, result.Score)
+	}
+	if result.Score > 8 {
+		t.Errorf("Impersonate-like fingerprint net score should be <= 8 for bot classification, got %d", result.Score)
+	}
+}

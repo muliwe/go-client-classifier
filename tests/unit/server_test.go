@@ -233,6 +233,7 @@ func TestServerHandleClassify_BrowserHeaders(t *testing.T) {
 	req.Header.Set("Sec-Fetch-Site", "none")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
 	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Cookie", "session=test") // so fingerprint has cookies and JA4H C/D non-zero; avoids ja4h-no-cookies
 	w := httptest.NewRecorder()
 
 	h.HandleClassify(w, req)

@@ -21,6 +21,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix F: Nginx TLS Termination and Proxy Header Reuse](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)
 - [Appendix G: Cross-validation of transport vs application fingerprints](#appendix-g-cross-validation-of-transport-vs-application-fingerprints)
 - [Appendix H: JA3, JA4 and X-FP-* for bot detection](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection)
+- [Appendix I: Impersonate and header-order detection](#appendix-i-impersonate-and-header-order-detection)
 
 ---
 
@@ -97,7 +98,7 @@ Modern replacement for User-Agent providing structured client information:
 
 #### Header Order
 
-HTTP clients emit headers in characteristic sequences based on implementation. While not reliable as a sole identifier, header order provides supplementary signal.
+HTTP clients emit headers in characteristic sequences based on implementation. While not reliable as a sole identifier, header order provides supplementary signal. Header order can also distinguish real browsers from impersonators (e.g. curl_cffi): Accept and Accept-Language tend to appear early in real Chrome; automation often sends a different order. See [Appendix I: Impersonate and header-order detection](#appendix-i-impersonate-and-header-order-detection) for the signals we use.
 
 **Research findings**: Header order is highly variable across middleware and implementations, best used as one feature among many (Radware, 2023).
 
@@ -1218,6 +1219,7 @@ From JA4H_a component, we extract classification signals:
 | `ja4h_has_cookies` | Cookie flag is 'c' | +0 (neutral, tracked for analysis) |
 | `ja4h_has_referer` | Referer flag is 'r' | +1 browser (navigation context) |
 | `ja4h_consistent_signal` | JA4H signals match HTTP signals | +1 browser / +2 bot if inconsistent |
+| `ja4h_zeroed_cookie_hashes` | JA4H parts C and D are 000000000000 (no cookies) | +1 bot when browser UA and no Cookie header; see [Appendix I](#appendix-i-impersonate-and-header-order-detection) |
 
 ### Consistency Checking
 
@@ -1265,7 +1267,7 @@ Breakdown:
 ```
 ge11nn040000_b3c4d5e6f7a8_000000000000_000000000000
 ```
-- 4 headers, no language — typical of HTTP libraries
+- 4 headers, no language — typical of HTTP libraries. When JA4H has zeroed C/D and the request has browser UA but no cookies, we add +1 bot (`ja4h-no-cookies`); see [Appendix I](#appendix-i-impersonate-and-header-order-detection).
 
 ### Classifier Integration
 
@@ -1660,6 +1662,124 @@ The practices in this appendix align with the following publications and documen
 - **JA4 at edge**: Evaluate production use of a JA4-capable nginx module or Fingerproxy and extend JA4-based rules when X-FP-JA4 is widely available.
 - **GREASE format**: Document the exact format of X-FP-SSL-GREASED per nginx module (phuslu and others) for optional stricter parsing or anomaly detection (e.g. TLS 1.3 with empty GREASE as soft bot signal).
 - **Validation dataset**: Collect labeled traffic (browser vs bot) with X-FP-* present and measure precision/recall for the above rules; compare with commercial solutions (e.g. FP-Inconsistent-style evaluation).
+
+---
+
+## Appendix I: Impersonate and header-order detection
+
+*Added: 2026-02-18*
+
+### Purpose
+
+Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match TLS and HTTP/2 fingerprints and send Sec-Fetch-* and Sec-CH-UA headers, and previously scored only one point below a real browser (e.g. 21 vs 22) because they often send no cookies. To separate them from real browsers without raising the classification threshold, we added signals based on header order, JA4H cookie-hash segments, and Sec-CH-UA brand order.
+
+### Signals
+
+#### BrowserLikeHeaderOrder
+
+**Definition**: Accept and Accept-Language appear in the first N positions of the request header order (as received by the backend). We use N=8 so that 1–2 proxy-added headers (e.g. x-fp-h2, x-forwarded-for) do not disqualify real browsers.
+
+**Computation**: From `fingerprint.http.header_order` (lowercase), we take the first index of `"accept"` and `"accept-language"`. If both are present and both indices are &lt; 8, the signal is true.
+
+**Scoring**: +1 browser (`header-order(+1)`). Optionally, when User-Agent is browser-like but the order is not browser-like (either index ≥ 10), we add +1 bot (`header-order-late(+1)`) to separate impersonators.
+
+**Dependency**: Header order must be preserved from client to backend (e.g. Go 1.22+ or proxy passing order through).
+
+**References**: JA4H uses header structure and order; ThreatRelay JA4H, WebDecoy headless detection; internal comparison of real browser vs curl_cffi payloads (see reference fixtures in `tests/testdata/reference_browser.json`, `reference_bot_curl_cffi.json`).
+
+#### JA4HZeroedCookieHashes
+
+**Definition**: JA4H parts C and D (cookie-name hash and cookie name=value hash per FoxIO spec) are both `000000000000`. Per [2] FoxIO JA4H, when no cookies are present, C and D are output as 12 zeros.
+
+**Computation**: In `extractJA4HSignals`, after splitting JA4H by `_`, we set the signal when `len(parts) >= 4` and `parts[2] == "000000000000"` and `parts[3] == "000000000000"`.
+
+**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add +1 bot (`ja4h-no-cookies(+1)`). This is applied even when TLS is from proxy, to detect automation that mimics browser but sends no cookies.
+
+**References**: [2] FoxIO JA4+ Network Fingerprinting, JA4H technical details (https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md).
+
+#### SecChUAModernOrder
+
+**Definition**: The first quoted brand in the Sec-CH-UA header is `Not:A-Brand` or `Not_A Brand` (Chrome 109+). Automation and older Chrome often send `Chromium` first.
+
+**Computation**: We take the first token (up to the first comma), extract the quoted value, normalize spaces and case, and compare to `not:a-brand`, `not_abrand`, `not_a_brand`.
+
+**Scoring**: +1 browser (`sec-ch-ua-modern(+1)`). We do not add a bot penalty when the first brand is Chromium, to avoid false positives on older browsers.
+
+**References**: MDN Sec-CH-UA (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Sec-CH-UA), Chrome User-Agent Client Hints; GREASE behaviour (Stack Overflow, Chrome 109).
+
+#### HasCacheControl
+
+**Observation**: Real Chrome often sends `Cache-Control: max-age=0` on document navigation (Fetch “no-cache” mode). curl_cffi requests in the reference payload do not send Cache-Control.
+
+**Computation**: `fingerprint.http.headers["cache-control"]` non-empty (collector stores all headers; use lowercase key).
+
+**Scoring**: +1 browser when present (`cache-control(+1)`). No bot penalty when missing (many valid requests omit it).
+
+**References**: MDN Cache-Control; Fetch standard (max-age=0 for no-cache).
+
+#### AcceptLangRich
+
+**Observation**: Real browsers often send multiple locales in Accept-Language with q-values (e.g. `ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6`). curl_cffi in the reference sends a short single-locale value (`en-US,en;q=0.9`). Single locale can also be privacy/incognito, so use only as a browser bonus.
+
+**Computation**: Accept-Language has at least 3 comma-separated parts (e.g. split by comma, trim, count) or length &gt; 40. Thresholds chosen so reference browser gets the point and reference bot does not.
+
+**Scoring**: +1 browser when rich (`accept-lang-rich(+1)`). No bot penalty for short Accept-Language.
+
+**References**: MDN Accept-Language; browser fingerprinting research (multiple locales typical for real browsers; single locale for some bots and privacy mode).
+
+### Scoring table
+
+| Signal | Condition | Effect | Source |
+|--------|-----------|--------|--------|
+| `header-order` | Accept and Accept-Language in first 8 positions of HeaderOrder | +1 browser | JA4H header structure; WebDecoy/ThreatRelay; internal payload comparison |
+| `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 10 | +1 bot | Same |
+| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +1 bot | [2] FoxIO JA4H; cookie hashes when no cookies |
+| `sec-ch-ua-modern` | First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand | +1 browser | Chrome 109+ Client Hints; no bot penalty for Chromium-first |
+
+### Risks and mitigations
+
+- **Header order altered by proxy**: If a proxy or CDN reorders headers, a real browser may lose the browser-like order. We use a threshold of 8 and do not rely on header order alone; we only add a bot point for “late” order when both Accept and Accept-Language are present and at least one is at index ≥ 10.
+- **Real users without cookies**: Incognito or first visit can yield zeroed JA4H C/D and no Cookie header. We add the bot point only when User-Agent is browser-like; a single +1 bot is weighted by 4, so a typical real browser with cookies and browser-like order still classifies as browser.
+- **Older browsers**: Browsers that do not send Not:A-Brand first simply do not get the sec-ch-ua-modern bonus; we do not penalize them.
+
+### Additional signals (from updated payloads and curl_cffi best practices)
+
+Comparison of full reference payloads (real Chrome vs curl_cffi) and curl_cffi/curl-impersonate docs shows further discriminators. Proposed (not yet implemented):
+
+#### Known impersonator JA3 (optional, operational)
+
+**Observation**: When TLS is from proxy, JA3 is available (e.g. X-FP-JA3-HASH). curl-impersonate uses a fixed JA3 per browser profile; the reference bot payload has a distinct JA3 (e.g. Chrome 142 profile) vs the real browser (Chrome 145). A list of JA3 hashes observed from curl-impersonate/curl_cffi builds can be maintained and checked when UA claims browser.
+
+**Computation**: When `tls.from_proxy` and `tls.ja3_hash` is in a configured or hardcoded set of “known impersonator” JA3 hashes and User-Agent is browser-like → treat as impersonator hint.
+
+**Scoring**: +1 bot when JA3 in list and browser UA (`ja3-known-impersonator(+1)`). List should be updated from operational data or curl-impersonate release notes; risk of false positives if a real browser build shares the same JA3.
+
+**References**: curl_cffi impersonate FAQ (JA3 and HTTP/2 not comprehensive; other fields detectable); curl-impersonate Chrome profiles per version.
+
+#### Collecting JA3 hashes (sources for known-library / impersonator list)
+
+We add JA3 hashes to `knownLibraryJA3` (and optionally keep a separate impersonator set) from:
+
+- **Reference payloads**: e.g. `tests/testdata/reference_bot_curl_cffi.json` — capture real request with X-FP-JA3-HASH from your proxy; hash is in `fingerprint.tls.ja3_hash`.
+- **Public JA3 databases and tools** (no single “impersonator” list; use to look up or verify hashes):
+  - **ja3.me** — free JA3+User-Agent database; API: `https://api.ja3.me/v1/ja3/{hash}`, `https://api.ja3.me/v1/user_agent/{query}` (see [ja3.me](https://ja3.me/)).
+  - **Scrapfly JA3 tool** — [Scrapfly JA3/JA4 fingerprint](https://scrapfly.io/web-scraping-tools/ja3-fingerprint) (compare against 125k+ fingerprints).
+  - **Live capture**: [tls.browserleaks.com/json](https://tls.browserleaks.com/json), [tls.peet.ws/api/all](https://tls.peet.ws/api/all) — hit with the client (e.g. curl_cffi) and read JA3 from the response.
+- **curl-impersonate / curl_cffi**: The [curl-impersonate](https://github.com/lwthiker/curl-impersonate) repo does **not** publish a ready list of JA3 hashes. It provides:
+  - **tests/signatures/** — YAML with full TLS Client Hello (ciphers, extensions, etc.) per browser version; JA3 can be **derived** from these or **measured** by running the binary.
+  - **curl_cffi** supports targets like chrome99..chrome136, safari153..safari260, firefox133, etc. (see [curl_cffi impersonate targets](https://curl-cffi.readthedocs.io/en/latest/impersonate/targets.html)). Each target has a fixed JA3 per build; to collect hashes, run e.g. `curl_cffi` with `impersonate="chrome124"` against tls.browserleaks.com or your `/debug` endpoint and record the JA3 hash, then add it to `knownLibraryJA3` in `internal/fingerprint/tls_client_map.go`.
+- **Operational data**: Logs with `fingerprint.tls.ja3_hash` and `fingerprint.proxy_headers` (X-FP-JA3-HASH) for requests classified or confirmed as bots; add recurring hashes to the blocklist after review.
+
+There is no single public "all curl-impersonate JA3" list; we maintain the list from reference payloads, from measuring each curl_cffi/curl-impersonate profile, from ja3.me/Scrapfly for lookup/verification, and from operational logs.
+
+### References (this appendix)
+
+- [2] FoxIO JA4+ Network Fingerprinting — https://github.com/FoxIO-LLC/ja4 (JA4H technical_details/JA4H.md).
+- ThreatRelay JA4H Quick Labs — https://www.threatrelay.com/Quick-Labs/JA4/JA4H (HTTP client fingerprinting).
+- WebDecoy headless/impersonate detection — headless browser detection (Playwright, Puppeteer, Selenium); JA4/JA4H for scrapers.
+- MDN Sec-CH-UA — https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Sec-CH-UA.
+- curl_cffi impersonate — https://curl-cffi.readthedocs.io/en/latest/impersonate.html (what is mimicked: TLS, H2, headers).
+- curl_cffi Impersonation FAQ — JA3/akamai not comprehensive; other fields detectable; professional detection of curl_cffi behavior.
 
 ---
 

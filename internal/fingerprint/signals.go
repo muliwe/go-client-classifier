@@ -170,6 +170,19 @@ func ExtractSignals(fp Fingerprint) Signals {
 		extractJA4HSignals(&s, fp.HTTP.JA4HHash, fp)
 	}
 
+	// Header order: Accept and Accept-Language in first N positions (browser-like). Threshold 8 allows 1-2 proxy headers first.
+	s.BrowserLikeHeaderOrder = isBrowserLikeHeaderOrder(fp.HTTP.HeaderOrder, 8)
+
+	// Sec-CH-UA: Chrome 109+ sends Not:A-Brand or Not_A Brand first; automation often sends Chromium first.
+	s.SecChUAModernOrder = isSecChUAModernOrder(fp.HTTP.SecChUA)
+
+	// Cache-Control: real Chrome often sends on document navigation; curl_cffi often omits.
+	if v, ok := fp.HTTP.Headers["cache-control"]; ok && strings.TrimSpace(v) != "" {
+		s.HasCacheControl = true
+	}
+	// Accept-Language richness: multiple locales typical for real browsers; automation often short/single locale.
+	s.AcceptLangRich = acceptLangRich(fp.HTTP.AcceptLang)
+
 	// User-Agent analysis
 	uaLower := strings.ToLower(fp.HTTP.UserAgent)
 	s.UserAgentIsBot = containsAny(uaLower, botPatterns)
@@ -229,6 +242,11 @@ func extractJA4HSignals(s *Signals, ja4h string, fp Fingerprint) {
 	if len(ja4hA) >= 12 {
 		s.JA4HLanguageCode = ja4hA[8:12]
 		s.JA4HMissingLanguage = s.JA4HLanguageCode == "0000"
+	}
+
+	// JA4H parts C and D: 12 zeros when no cookies (FoxIO spec). Used for ja4h-no-cookies bot signal.
+	if len(parts) >= 4 && parts[2] == "000000000000" && parts[3] == "000000000000" {
+		s.JA4HZeroedCookieHashes = true
 	}
 
 	// Check consistency between JA4H signals and HTTP signals
@@ -357,6 +375,30 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	if s.HasSecClientHints {
 		browserScore += 2
 		browserReasons = append(browserReasons, "sec-ch-ua(+2)")
+	}
+
+	// Browser-like header order (Accept and Accept-Language early). See Appendix I.
+	if s.BrowserLikeHeaderOrder {
+		browserScore++
+		browserReasons = append(browserReasons, "header-order(+1)")
+	}
+
+	// Sec-CH-UA modern order (Not:A-Brand or Not_A Brand first, Chrome 109+). Bonus only; no bot penalty for Chromium-first.
+	if s.SecChUAModernOrder {
+		browserScore++
+		browserReasons = append(browserReasons, "sec-ch-ua-modern(+1)")
+	}
+
+	// Cache-Control present: real Chrome often sends max-age=0 on navigation; impersonators often omit. Appendix I.
+	if s.HasCacheControl {
+		browserScore++
+		browserReasons = append(browserReasons, "cache-control(+1)")
+	}
+
+	// Accept-Language rich (multiple locales or long): real browsers often send several locales; automation often short. Appendix I.
+	if s.AcceptLangRich {
+		browserScore++
+		browserReasons = append(browserReasons, "accept-lang-rich(+1)")
 	}
 
 	// Cookies present
@@ -534,6 +576,20 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		}
 	}
 
+	// JA4H zeroed C/D with browser UA and no cookies: typical of automation (e.g. curl_cffi). Applied for proxy path too.
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !fp.HTTP.HasCookies && s.JA4HZeroedCookieHashes {
+		botScore++
+		botReasons = append(botReasons, "ja4h-no-cookies(+1)")
+	}
+
+	// Browser UA but header order not browser-like (Accept or Accept-Language late): separates real browser from impersonate.
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.BrowserLikeHeaderOrder && s.HasAcceptLanguage && s.HasAccept {
+		if idxAccept, idxLang := indexOfHeader(fp.HTTP.HeaderOrder, "accept"), indexOfHeader(fp.HTTP.HeaderOrder, "accept-language"); idxAccept >= 10 || idxLang >= 10 {
+			botScore++
+			botReasons = append(botReasons, "header-order-late(+1)")
+		}
+	}
+
 	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like.
 	// Skip when from proxy: X-FP-H2 may omit some SETTINGS (e.g. MAX_FRAME_SIZE id 5), so isH2LibraryLike can false-positive on real browsers.
 	if !fp.TLS.FromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && s.HasHTTP2Fingerprint && isH2LibraryLike(s) {
@@ -631,4 +687,72 @@ func containsAny(s string, substrs []string) bool {
 		}
 	}
 	return false
+}
+
+// isBrowserLikeHeaderOrder returns true when both "accept" and "accept-language" appear in the first maxIdx positions of order (case-insensitive).
+func isBrowserLikeHeaderOrder(order []string, maxIdx int) bool {
+	idxAccept := indexOfHeader(order, "accept")
+	idxLang := indexOfHeader(order, "accept-language")
+	if idxAccept < 0 || idxLang < 0 {
+		return false
+	}
+	return idxAccept < maxIdx && idxLang < maxIdx
+}
+
+// indexOfHeader returns the first index of name in order (lowercase comparison), or -1 if not found.
+func indexOfHeader(order []string, name string) int {
+	lower := strings.ToLower(name)
+	for i, h := range order {
+		if strings.ToLower(h) == lower {
+			return i
+		}
+	}
+	return -1
+}
+
+// isSecChUAModernOrder returns true when the first quoted brand in Sec-CH-UA is "Not:A-Brand" or "Not_A Brand" (Chrome 109+).
+func isSecChUAModernOrder(secChUA string) bool {
+	s := strings.TrimSpace(secChUA)
+	if s == "" {
+		return false
+	}
+	// First token: up to first comma or end; then extract quoted value.
+	if idx := strings.Index(s, ","); idx >= 0 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	s = strings.TrimSpace(s)
+	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') {
+		return false
+	}
+	quote := s[0]
+	end := 1
+	for end < len(s) && s[end] != quote {
+		end++
+	}
+	if end >= len(s) {
+		return false
+	}
+	first := strings.TrimSpace(s[1:end])
+	firstNorm := strings.ToLower(strings.ReplaceAll(first, " ", ""))
+	return firstNorm == "not:a-brand" || firstNorm == "not_abrand" || firstNorm == "not_a_brand"
+}
+
+// acceptLangRich returns true when Accept-Language has multiple locales (>= 3 comma-separated parts) or length > 40.
+// Real browsers often send several locales with q-values; automation and curl_cffi often send a short single-locale value.
+func acceptLangRich(acceptLang string) bool {
+	s := strings.TrimSpace(acceptLang)
+	if s == "" {
+		return false
+	}
+	if len(s) > 40 {
+		return true
+	}
+	parts := strings.Split(s, ",")
+	count := 0
+	for _, p := range parts {
+		if strings.TrimSpace(p) != "" {
+			count++
+		}
+	}
+	return count >= 3
 }

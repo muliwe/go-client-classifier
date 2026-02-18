@@ -678,7 +678,7 @@ func TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped(t *testing.T) {
 	// From proxy: JA4H bot penalties (ja4h-no-lang, ja4h-low-headers, ja4h-inconsistent) are skipped
 	// because JA4H is computed from the request as seen by the backend (header set can differ from client).
 	// Use a JA4H that would normally trigger all three: 0000 lang, low header count (03), and request has Accept-Language → inconsistent.
-	// Give full browser-like HTTP/TLS so no other bot points (Sec-Fetch, GREASE, Accept, etc.).
+	// HasCookies true and JA4H parts C/D non-zero so the new ja4h-no-cookies penalty does not apply (that one is for impersonate detection).
 	fp := fingerprint.Fingerprint{
 		TLS: fingerprint.TLSFingerprint{
 			ALPN:       "h2",
@@ -689,8 +689,9 @@ func TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped(t *testing.T) {
 		HTTP: fingerprint.HTTPFingerprint{
 			Version:      "HTTP/1.1",
 			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
-			JA4HHash:     "ge11nn030000_abc123def456_000000000000_000000000000", // 3 headers, no lang
+			JA4HHash:     "ge11cn030000_abc123def456_111111111111_222222222222", // c=cookies, 03 headers, 0000 lang; C/D non-zero so no ja4h-no-cookies
 			HeaderCount:  26,
+			HasCookies:   true,
 			AcceptLang:   "ru-RU,ru;q=0.9", // present → inconsistent with JA4H 0000
 			Accept:       "text/html,application/xhtml+xml",
 			AcceptEnc:    "gzip, deflate, br",
@@ -937,5 +938,294 @@ func TestCalculateScores_TLSUA_BothSets_NoPenalty(t *testing.T) {
 	}
 	if strings.Contains(s.ScoreBreakdown, "tls-ua-inconsistent") {
 		t.Errorf("Browser UA + TLS in both library and browser set must NOT get tls-ua-inconsistent; breakdown: %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_HeaderOrder_BrowserLike(t *testing.T) {
+	// Accept and accept-language at indices 1 and 2 (both < 8) → BrowserLikeHeaderOrder true
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder: []string{"x-fp-h2", "accept", "accept-language", "priority", "user-agent"},
+			HeaderCount: 5,
+			UserAgent:   "Mozilla/5.0 Chrome/120.0.0.0",
+			Accept:      "text/html",
+			AcceptLang:  "en-US,en;q=0.9",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.BrowserLikeHeaderOrder {
+		t.Error("Accept and accept-language in first 8 positions should set BrowserLikeHeaderOrder true")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "header-order(+1)") {
+		t.Errorf("Breakdown should contain header-order(+1), got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_HeaderOrder_NotBrowserLike(t *testing.T) {
+	// Accept at 10, accept-language at 24 → BrowserLikeHeaderOrder false
+	order := make([]string, 30)
+	for i := range order {
+		order[i] = "x"
+	}
+	order[10] = "accept"
+	order[24] = "accept-language"
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{FromProxy: true},
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder:  order,
+			HeaderCount:  30,
+			UserAgent:    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/142.0.0.0 Safari/537.36",
+			Accept:       "text/html",
+			AcceptLang:   "en-US,en;q=0.9",
+			SecFetchSite: "none",
+			SecFetchMode: "navigate",
+			SecFetchDest: "document",
+			JA4HHash:     "ge11nn25enus_fc343ccb8320_000000000000_000000000000",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.BrowserLikeHeaderOrder {
+		t.Error("Accept or accept-language at index >= 8 should set BrowserLikeHeaderOrder false")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "header-order-late(+1)") {
+		t.Errorf("Browser UA with late header order should get header-order-late(+1), got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_HeaderOrder_EmptyOrMissing(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder: []string{},
+			UserAgent:   "Mozilla/5.0 Chrome/120.0.0.0",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.BrowserLikeHeaderOrder {
+		t.Error("Empty HeaderOrder should set BrowserLikeHeaderOrder false")
+	}
+	fp.HTTP.HeaderOrder = []string{"user-agent", "accept-encoding"}
+	s = fingerprint.ExtractSignals(fp)
+	if s.BrowserLikeHeaderOrder {
+		t.Error("Missing accept or accept-language should set BrowserLikeHeaderOrder false")
+	}
+}
+
+func TestExtractSignals_JA4H_ZeroedCookieHashes(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			JA4HHash: "ge11nn25enus_fc343ccb8320_000000000000_000000000000",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.JA4HZeroedCookieHashes {
+		t.Error("JA4H with parts C and D 000000000000 should set JA4HZeroedCookieHashes true")
+	}
+}
+
+func TestExtractSignals_JA4H_NonZeroedCookieHashes(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			JA4HHash: "ge11cn26ruru_e9eb613b7ad4_68abb940d098_7b022c4b1588",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.JA4HZeroedCookieHashes {
+		t.Error("JA4H with non-zero C/D should set JA4HZeroedCookieHashes false")
+	}
+}
+
+func TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{FromProxy: true, SSLGreased: "1", Version: "TLS 1.3"},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:    "Mozilla/5.0 Chrome/142.0.0.0 Safari/537.36",
+			Accept:       "text/html",
+			AcceptLang:   "en-US,en;q=0.9",
+			SecFetchSite: "none",
+			SecFetchMode: "navigate",
+			SecFetchDest: "document",
+			HeaderCount:  25,
+			HasCookies:   false,
+			JA4HHash:     "ge11nn25enus_abc123_000000000000_000000000000",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+1)") {
+		t.Errorf("Browser UA + no cookies + zeroed C/D should get ja4h-no-cookies(+1), got %s", s.ScoreBreakdown)
+	}
+	// With cookies present, no penalty
+	fp.HTTP.HasCookies = true
+	fp.HTTP.JA4HHash = "ge11cn25enus_abc123_a1b2c3d4e5f6_f6e5d4c3b2a1"
+	s = fingerprint.ExtractSignals(fp)
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+1)") {
+		t.Error("HasCookies true should not get ja4h-no-cookies penalty")
+	}
+}
+
+func TestExtractSignals_SecChUA_ModernOrder(t *testing.T) {
+	for _, secChUA := range []string{`"Not:A-Brand";v="99"`, `"Not_A Brand";v="99"`, `"Not:A-Brand";v="99", "Chromium";v="120"`} {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{SecChUA: secChUA},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.SecChUAModernOrder {
+			t.Errorf("SecChUA %q should set SecChUAModernOrder true", secChUA)
+		}
+	}
+}
+
+func TestExtractSignals_SecChUA_ChromiumFirst(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			SecChUA: `"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"`,
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.SecChUAModernOrder {
+		t.Error("Chromium first should set SecChUAModernOrder false")
+	}
+}
+
+func TestCalculateScores_SecChUAModernOrder_BrowserBonus(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:  "Mozilla/5.0 Chrome/120.0.0.0",
+			SecChUA:    `"Not:A-Brand";v="99", "Google Chrome";v="120"`,
+			Accept:     "text/html",
+			AcceptLang: "en-US",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !strings.Contains(s.ScoreBreakdown, "sec-ch-ua-modern(+1)") {
+		t.Errorf("SecChUAModernOrder should add sec-ch-ua-modern(+1), got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestCalculateScores_RealBrowserLike_KeepsBrowserScore(t *testing.T) {
+	// Fingerprint similar to reference_browser: early accept/accept-language, cookies, optional Sec-CH-UA modern
+	order := []string{"x-fp-h2", "accept", "accept-language", "priority", "user-agent", "sec-ch-ua", "cookie", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-encoding"}
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Version:    "TLS 1.3",
+			ALPN:       "h2",
+			FromProxy:  true,
+			SSLGreased: "1",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder:   order,
+			HeaderCount:   len(order),
+			UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/145.0.0.0 Safari/537.36",
+			Accept:        "text/html,application/xhtml+xml",
+			AcceptLang:    "ru-RU,ru;q=0.9",
+			AcceptEnc:     "gzip, deflate, br, zstd",
+			SecFetchSite:  "none",
+			SecFetchMode:  "navigate",
+			SecFetchDest:  "document",
+			SecChUA:       `"Not:A-Brand";v="99", "Google Chrome";v="145"`,
+			HasCookies:    true,
+			JA4HHash:      "ge11cn26ruru_e9eb613b7ad4_68abb940d098_7b022c4b1588",
+			H2Fingerprint: "1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p",
+		},
+	}
+	fp.HTTP.H2Parsed = fingerprint.ParseH2Fingerprint(fp.HTTP.H2Fingerprint)
+	s := fingerprint.ExtractSignals(fp)
+	if !s.BrowserLikeHeaderOrder {
+		t.Error("Real browser-like order should have BrowserLikeHeaderOrder true")
+	}
+	if s.JA4HZeroedCookieHashes {
+		t.Error("Real browser with cookies should not have JA4HZeroedCookieHashes")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+1)") {
+		t.Error("Real browser-like fingerprint should not get ja4h-no-cookies in breakdown")
+	}
+	if s.BrowserScore < 22 {
+		t.Errorf("Real browser-like should have browser score >= 22, got %d", s.BrowserScore)
+	}
+}
+
+func TestExtractSignals_HasCacheControl(t *testing.T) {
+	t.Run("present", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				Headers: map[string]string{"cache-control": "max-age=0"},
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.HasCacheControl {
+			t.Error("HasCacheControl should be true when cache-control header is present")
+		}
+	})
+	t.Run("absent", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				Headers: map[string]string{"accept": "text/html"},
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if s.HasCacheControl {
+			t.Error("HasCacheControl should be false when cache-control header is absent")
+		}
+	})
+	t.Run("empty_value", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				Headers: map[string]string{"cache-control": "   "},
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if s.HasCacheControl {
+			t.Error("HasCacheControl should be false when cache-control value is empty/whitespace")
+		}
+	})
+}
+
+func TestExtractSignals_AcceptLangRich(t *testing.T) {
+	tests := []struct {
+		name       string
+		acceptLang string
+		wantRich   bool
+	}{
+		{"rich_three_parts", "ru-RU,ru;q=0.9,en-GB;q=0.8", true},
+		{"rich_long", "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6", true},
+		{"short_two_parts", "en-US,en;q=0.9", false},
+		{"single", "en-US", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fp := fingerprint.Fingerprint{
+				HTTP: fingerprint.HTTPFingerprint{
+					AcceptLang: tt.acceptLang,
+				},
+			}
+			s := fingerprint.ExtractSignals(fp)
+			if s.AcceptLangRich != tt.wantRich {
+				t.Errorf("AcceptLangRich: accept_lang %q => got %v, want %v", tt.acceptLang, s.AcceptLangRich, tt.wantRich)
+			}
+		})
+	}
+}
+
+func TestCalculateScores_CacheControlAndAcceptLangRich_BrowserBonus(t *testing.T) {
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:  "Mozilla/5.0 Chrome/120.0.0.0",
+			Accept:     "text/html",
+			AcceptLang: "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7",
+			Headers:    map[string]string{"cache-control": "max-age=0"},
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.HasCacheControl {
+		t.Error("test fingerprint should have HasCacheControl true")
+	}
+	if !s.AcceptLangRich {
+		t.Error("test fingerprint should have AcceptLangRich true")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "cache-control(+1)") {
+		t.Errorf("breakdown should contain cache-control(+1), got %s", s.ScoreBreakdown)
+	}
+	if !strings.Contains(s.ScoreBreakdown, "accept-lang-rich(+1)") {
+		t.Errorf("breakdown should contain accept-lang-rich(+1), got %s", s.ScoreBreakdown)
 	}
 }

@@ -29,6 +29,30 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 - `TestIsBrowserLikeH2InitialWindow`: 6291456 browser-like, 10485760 not browser-like.
 - `TestIsKnownLibraryTLS`: curl JA3 `0149f47eabf9a20d0893e2a44e5a6323` in known-library set.
 
+### Classifier: impersonate / curl_cffi detection
+
+Improves separation of real browsers from impersonators (e.g. curl_cffi, curl-impersonate) that send browser-like TLS/H2 and Sec-Fetch headers but differ in header order, absence of cookies, and Sec-CH-UA brand order. See [Appendix I](docs/METHODOLOGY.md#appendix-i-impersonate-and-header-order-detection).
+
+**New signals:**
+- **BrowserLikeHeaderOrder**: Accept and Accept-Language in the first 8 positions of `HeaderOrder` → +1 browser (`header-order`). Browser UA but Accept or Accept-Language at index ≥ 10 → +1 bot (`header-order-late`) to separate impersonators.
+- **JA4HZeroedCookieHashes**: JA4H parts C and D are `000000000000`. When User-Agent is browser-like and request has no Cookie header → +1 bot (`ja4h-no-cookies`). Applied for proxy path as well to detect automation that mimics browser but sends no cookies.
+- **SecChUAModernOrder**: First brand in Sec-CH-UA is `Not:A-Brand` or `Not_A Brand` (Chrome 109+) → +1 browser (`sec-ch-ua-modern`). No bot penalty for Chromium-first to avoid false positives on older browsers.
+- **HasCacheControl**: Request has Cache-Control header (e.g. `max-age=0` on document navigation) → +1 browser (`cache-control`). Real Chrome often sends it; curl_cffi often omits. No bot penalty when absent.
+- **AcceptLangRich**: Accept-Language has ≥3 comma-separated locales or length &gt; 40 → +1 browser (`accept-lang-rich`). Real browsers often send multiple locales; automation often short/single locale. No bot penalty for short value.
+
+**Reference payloads:**
+- `tests/testdata/reference_browser.json` and `tests/testdata/reference_bot_curl_cffi.json`: canonical fixtures from real browser and curl_cffi /debug responses for implementation and tests.
+
+**Tests:**
+- `TestExtractSignals_HeaderOrder_BrowserLike`, `TestExtractSignals_HeaderOrder_NotBrowserLike`, `TestExtractSignals_HeaderOrder_EmptyOrMissing`.
+- `TestExtractSignals_JA4H_ZeroedCookieHashes`, `TestExtractSignals_JA4H_NonZeroedCookieHashes`, `TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty`.
+- `TestExtractSignals_SecChUA_ModernOrder`, `TestExtractSignals_SecChUA_ChromiumFirst`, `TestCalculateScores_SecChUAModernOrder_BrowserBonus`.
+- `TestExtractSignals_HasCacheControl`, `TestExtractSignals_AcceptLangRich`, `TestCalculateScores_CacheControlAndAcceptLangRich_BrowserBonus`.
+- `TestClassify_ImpersonateLikeFingerprint_ClassifiedAsBot`, `TestCalculateScores_RealBrowserLike_KeepsBrowserScore`.
+
+**Documentation:**
+- **METHODOLOGY.md**: New [Appendix I — Impersonate and header-order detection](docs/METHODOLOGY.md#appendix-i-impersonate-and-header-order-detection) (purpose, signals, scoring table, risks and mitigations, references). Appendix I extended with “Additional signals”: HasCacheControl, AcceptLangRich (implemented); optional “Known impersonator JA3” (operational list). Appendix D: added `ja4h_zeroed_cookie_hashes` to Signal Extraction table; Example Fingerprints note for zeroed C/D. Background Header Order: short cross-reference to Appendix I.
+
 ### X-FP-* proxy headers: JA3 hash, GREASE, obsolete TLS, JA4 ([Appendix H](docs/METHODOLOGY.md#appendix-h-ja3-ja4-and-x-fp-for-bot-detection))
 
 **JA3 hash from proxy**

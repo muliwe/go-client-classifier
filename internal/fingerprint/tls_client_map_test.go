@@ -31,6 +31,7 @@ func TestIsKnownLibraryTLS(t *testing.T) {
 		{"0149f47eabf9a20d0893e2a44e5a6323", "", true}, // cURL / OpenSSL (HTTP/2, e.g. Linux)
 		{"68b3ecfaf0034bb9fcbecd518b5ab8d4", "", true}, // PowerShell / .NET HttpClient (Windows)
 		{"fae0e5d973c96ae1888b99538efa0363", "", true}, // cURL Windows (curl.exe)
+		{"88ddb7c9e8f79ce9a304f01221a4e3a3", "", true}, // curl_cffi / curl-impersonate Chrome profile (reference_bot_curl_cffi.json)
 		{"E7D705A3286E19EA42F587B344EE6865", "", true}, // cURL uppercase normalized
 		{"", "unknown_ja4", false},
 		{"abc123def456", "", false},

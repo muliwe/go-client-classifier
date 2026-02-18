@@ -80,15 +80,20 @@ type Signals struct {
 	HasSecClientHints  bool `json:"has_sec_ch_ua"`         // Has Sec-CH-UA headers
 
 	// JA4H signals (HTTP fingerprint)
-	HasJA4HFingerprint   bool   `json:"has_ja4h_fingerprint"`   // JA4H fingerprint available
-	JA4HLanguageCode     string `json:"ja4h_language_code"`     // Language code from JA4H (e.g., "enus", "0000")
-	JA4HMissingLanguage  bool   `json:"ja4h_missing_language"`  // Language code is "0000" (no Accept-Language)
-	JA4HLowHeaderCount   bool   `json:"ja4h_low_header_count"`  // Header count from JA4H < 5
-	JA4HHighHeaderCount  bool   `json:"ja4h_high_header_count"` // Header count from JA4H >= 10
-	JA4HHasCookies       bool   `json:"ja4h_has_cookies"`       // JA4H indicates cookies present
-	JA4HHasReferer       bool   `json:"ja4h_has_referer"`       // JA4H indicates referer present
-	JA4HIsHTTP2          bool   `json:"ja4h_is_http2"`          // JA4H indicates HTTP/2
-	JA4HConsistentSignal bool   `json:"ja4h_consistent_signal"` // JA4H signals match HTTP signals
+	HasJA4HFingerprint     bool   `json:"has_ja4h_fingerprint"`      // JA4H fingerprint available
+	JA4HLanguageCode       string `json:"ja4h_language_code"`        // Language code from JA4H (e.g., "enus", "0000")
+	JA4HMissingLanguage    bool   `json:"ja4h_missing_language"`     // Language code is "0000" (no Accept-Language)
+	JA4HLowHeaderCount     bool   `json:"ja4h_low_header_count"`     // Header count from JA4H < 5
+	JA4HHighHeaderCount    bool   `json:"ja4h_high_header_count"`    // Header count from JA4H >= 10
+	JA4HHasCookies         bool   `json:"ja4h_has_cookies"`          // JA4H indicates cookies present
+	JA4HHasReferer         bool   `json:"ja4h_has_referer"`          // JA4H indicates referer present
+	JA4HIsHTTP2            bool   `json:"ja4h_is_http2"`             // JA4H indicates HTTP/2
+	JA4HConsistentSignal   bool   `json:"ja4h_consistent_signal"`    // JA4H signals match HTTP signals
+	JA4HZeroedCookieHashes bool   `json:"ja4h_zeroed_cookie_hashes"` // JA4H parts C and D are 000000000000 (no cookies)
+	BrowserLikeHeaderOrder bool   `json:"browser_like_header_order"` // Accept and Accept-Language in first N positions
+	SecChUAModernOrder     bool   `json:"sec_ch_ua_modern_order"`    // First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand (Chrome 109+)
+	HasCacheControl        bool   `json:"has_cache_control"`         // Request has Cache-Control header (browser often sends max-age=0 on navigation)
+	AcceptLangRich         bool   `json:"accept_lang_rich"`          // Accept-Language has multiple locales (>=3 parts or length > 40)
 
 	// Proxy / HTTP/2 fingerprint (e.g. from nginx TLS termination)
 	TLSFromProxy                 bool   `json:"tls_from_proxy"`                   // TLS data from trusted proxy headers

@@ -121,8 +121,9 @@ func parseAndFillJA4DB(data []byte) {
 
 // Known library/bot JA3 hashes (32-char MD5). Used for TLS vs User-Agent consistency:
 // if UA claims a browser but JA3 is in this set → tls-ua-inconsistent (+bot).
-// Sources: Scrapfly, ja3.me, curl (daniel.haxx.se), community lists.
-// JA3 may change with library/version; this is a conservative blocklist.
+// Sources: Scrapfly (ja3-fingerprint), ja3.me API, curl (daniel.haxx.se), reference payloads
+// (tests/testdata), curl-impersonate/curl_cffi measured per profile. See METHODOLOGY Appendix I
+// "Collecting JA3 hashes". JA3 may change with library/version; this is a conservative blocklist.
 var knownLibraryJA3 = map[string]bool{
 	// Python requests / urllib3 (Scrapfly, Cloudflare bot DB)
 	"599ccb0563b7bbae9962ca7e634cc462": true,
@@ -138,6 +139,8 @@ var knownLibraryJA3 = map[string]bool{
 	"68b3ecfaf0034bb9fcbecd518b5ab8d4": true,
 	// cURL on Windows (curl.exe; ALPN http/1.1, observed from PowerShell)
 	"fae0e5d973c96ae1888b99538efa0363": true,
+	// curl_cffi / curl-impersonate (Chrome profile; from reference_bot_curl_cffi.json)
+	"88ddb7c9e8f79ce9a304f01221a4e3a3": true,
 }
 
 // Known library/bot JA4 hashes (full string). Filled from ja4db.com in init().
