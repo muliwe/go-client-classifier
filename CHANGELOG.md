@@ -37,6 +37,9 @@ All notable changes to this project are documented in this file.
 - `TestCollect_TrustedProxy_ReusesNginxHeaders`: asserts `ProxyHeaders` contains X-FP-TLS-Version, X-FP-JA3-HASH, X-FP-H2.
 - `TestCollect_NoProxy_IgnoresXFPHeaders`: asserts `ProxyHeaders` is nil when not from proxy.
 
+**API**
+- **Confidence**: the classify response JSON now returns `confidence` as a **string** with 2 decimal places (e.g. `"0.95"`) to avoid float instability in JSON. Internal classification and logs keep full precision (float). Test: `TestServerHandleClassify_ConfidenceAsString`.
+
 ## v0.6.0 (2026-02-17)
 
 ### Daily request log files

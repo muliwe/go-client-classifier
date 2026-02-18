@@ -14,10 +14,10 @@ import (
 
 // Response matches the server response structure
 type Response struct {
-	Classification string  `json:"classification"`
-	Confidence     float64 `json:"confidence"`
-	Message        string  `json:"message"`
-	RequestID      string  `json:"request_id"`
+	Classification string `json:"classification"`
+	Confidence     string `json:"confidence"` // e.g. "0.95" — string for stability
+	Message        string `json:"message"`
+	RequestID      string `json:"request_id"`
 }
 
 // HealthResponse matches the health endpoint response

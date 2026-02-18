@@ -2,6 +2,7 @@ package unit
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -245,6 +246,39 @@ func TestServerHandleClassify_BrowserHeaders(t *testing.T) {
 
 	if response.Classification != "browser" {
 		t.Errorf("HandleClassify(browser headers) classification = %q, want %q", response.Classification, "browser")
+	}
+}
+
+// TestServerHandleClassify_ConfidenceAsString verifies the API returns confidence as a string with 2 decimal places (stable, no float).
+func TestServerHandleClassify_ConfidenceAsString(t *testing.T) {
+	h := createTestHandler()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	w := httptest.NewRecorder()
+	h.HandleClassify(w, req)
+
+	var response struct {
+		Confidence string `json:"confidence"`
+	}
+	if err := json.NewDecoder(w.Result().Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Confidence == "" {
+		t.Error("confidence should not be empty")
+	}
+	// Must look like "0.95" (at most 2 decimal places): e.g. "0", "0.5", "0.77", "0.99"
+	if len(response.Confidence) > 5 {
+		t.Errorf("confidence %q should be short (e.g. 0.95)", response.Confidence)
+	}
+	// Sanity: parse as float and ensure it's in [0, 1]
+	var v float64
+	if _, err := fmt.Sscanf(response.Confidence, "%f", &v); err != nil {
+		t.Errorf("confidence %q should be a number: %v", response.Confidence, err)
+	}
+	if v < 0 || v > 1 {
+		t.Errorf("confidence %q parses to %v, want in [0, 1]", response.Confidence, v)
 	}
 }
 

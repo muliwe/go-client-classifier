@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -44,7 +46,7 @@ const version = "0.7.0"
 // Response represents the API response
 type Response struct {
 	Classification string    `json:"classification"`
-	Confidence     float64   `json:"confidence"`
+	Confidence     string    `json:"confidence"` // e.g. "0.95" — string to avoid float instability in JSON
 	Message        string    `json:"message"`
 	RequestID      string    `json:"request_id"`
 	Timestamp      time.Time `json:"timestamp"`
@@ -78,6 +80,16 @@ func NewHandler(c *fingerprint.Collector, cl *classifier.Classifier, l *logger.L
 // SetQuiet enables or disables console logging
 func (h *Handler) SetQuiet(quiet bool) {
 	h.quiet = quiet
+}
+
+// formatConfidence returns confidence as a string with n decimal places for the API (avoids float instability in JSON).
+func formatConfidence(c float64, decimals int) string {
+	if decimals <= 0 {
+		return fmt.Sprintf("%.0f", math.Round(c))
+	}
+	pow := math.Pow(10, float64(decimals))
+	rounded := math.Round(c*pow) / pow
+	return fmt.Sprintf("%.*f", decimals, rounded)
 }
 
 // HandleClassify handles the main classification endpoint.
@@ -122,7 +134,7 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(Response{
 		Classification: result.Classification,
-		Confidence:     result.Confidence,
+		Confidence:     formatConfidence(result.Confidence, 2),
 		Message:        message,
 		RequestID:      result.RequestID,
 		Timestamp:      result.Timestamp,
