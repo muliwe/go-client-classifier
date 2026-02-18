@@ -1683,7 +1683,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 **Scoring**: +1 browser (`header-order(+1)`) only when `header_order_from_proxy` is true. When User-Agent is browser-like but the order is not browser-like (either index ≥ 12), we add +2 bot (`header-order-late(+2)`) to separate impersonators (only when order from proxy).
 
-**Dependency**: Header order must be preserved from client to backend (e.g. Go 1.22+ or proxy passing order through).
+**Dependency**: Meaningful header order is only available when the proxy passes it explicitly: nginx with Lua sets `X-Original-Header-Order`. When TLS is terminated by Go (stream → Go :8443), `net/http` parses the request and stores headers in a map, so order is **not** preserved; we only have order when it comes from that header.
 
 **References**: JA4H uses header structure and order; ThreatRelay JA4H, WebDecoy headless detection; internal comparison of real browser vs curl_cffi payloads (see reference fixtures in `tests/testdata/reference_browser.json`, `reference_bot_curl_cffi.json`).
 

@@ -328,6 +328,9 @@ func (c *Collector) collectHTTP(r *http.Request) HTTPFingerprint {
 			fp.HeaderOrderFromProxy = true
 		}
 	}
+	// When not from proxy (e.g. TLS terminated by Go): net/http stores Header as a map, so order is not preserved.
+	// We only have meaningful order when X-Original-Header-Order is set (nginx with Lua). Otherwise we fill order
+	// from map iteration (unpredictable) so header-order signals are not applied (HeaderOrderFromProxy stays false).
 	if len(fp.HeaderOrder) == 0 {
 		for key := range r.Header {
 			fp.HeaderOrder = append(fp.HeaderOrder, strings.ToLower(key))
