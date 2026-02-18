@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.7.0 (2026-02-18)
+
+### X-FP-* proxy headers: JA3 hash, GREASE, obsolete TLS, JA4 ([Appendix H](docs/METHODOLOGY.md#appendix-h-ja3-ja4-and-x-fp-for-bot-detection))
+
+**JA3 hash from proxy**
+- **X-FP-JA3-HASH** is now preferred for classification: when present (32-char MD5), it is used as `fingerprint.tls.ja3_hash`; otherwise the backend uses X-FP-JA3 (as hash if it looks like MD5, else computes MD5 of the raw JA3 string). Ensures TLS vs User-Agent checks work regardless of whether nginx sends raw JA3 or hash. Constants: `HeaderFPJA3Hash`, `HeaderFPSSLGreased`, `HeaderFPJA4` in `internal/fingerprint/proxy_headers.go`.
+- New helpers: `resolveJA3HashFromProxy`, `isMD5Hex`, `ja3RawToMD5Hash` in collector.
+
+**New proxy headers consumed**
+- **X-FP-SSL-GREASED**: stored in `fingerprint.tls.ssl_greased`; when non-empty with modern TLS and non-bot UA → +1 browser (`ssl-greased`).
+- **X-FP-JA4**: read when set (e.g. from foxio-llc/ja4-nginx); used for known-library/browser checks and H2 vs ALPN consistency.
+- **X-FP-TLS-Version** (obsolete): when TLS 1.0 or 1.1 → +1 bot (`obsolete-tls`). New signals: `TLSObsolete`, `HasSSLGreased`.
+
+**Scoring**
+- Obsolete TLS (1.0/1.1) → +1 bot (`obsolete-tls(+1)`).
+- GREASE present (X-FP-SSL-GREASED non-empty) + modern TLS + non-bot UA → +1 browser (`ssl-greased(+1)`).
+- JA3 hash resolution and JA4 from proxy integrated into existing TLS vs UA and H2 vs JA4 rules.
+
+**Logging for ML and post-hoc analysis**
+- **`fingerprint.proxy_headers`**: when the request is from a trusted proxy, the log now includes a map of all raw X-FP-* header values (X-FP-TLS-Version, X-FP-TLS-Cipher, X-FP-TLS-ALPN, X-FP-TLS-SNI, X-FP-JA3, X-FP-JA3-HASH, X-FP-SSL-GREASED, X-FP-JA4, X-FP-H2). Only non-empty values are present. Supports ML training and post-hoc analysis (recomputing hashes, feature engineering). List of header names: `ProxyHeaderNames` in `proxy_headers.go`.
+
+**Documentation**
+- **METHODOLOGY.md**: New **Appendix H — JA3, JA4 and X-FP-* for bot detection**: scope of headers, best practices (prefer JA3-HASH, JA3 limitation, multi-layer detection, GREASE, obsolete TLS, trust), scoring summary, references (publications/sources), future TODOs (temporal inconsistency, JA4 at edge, GREASE format, validation dataset).
+- Appendix G “Our current implementation”: added Done items for obsolete TLS, GREASE, JA3 hash from proxy.
+- Phase 2 table: X-FP-* proxy headers (JA3-HASH, GREASE, obsolete TLS) and X-FP-JA4 consumption marked Done; implementation details block for X-FP-* best practices.
+- Phase 3 table: TLS/HTTP version mismatch marked Done (direct TLS only); temporal inconsistency marked Planned with TODO.
+- Log Format (JSONL): described `fingerprint.proxy_headers` and derived fields for proxy path.
+- **docs/nginx.md**: Example config with X-FP-JA3-HASH, X-FP-SSL-GREASED, optional X-FP-JA4; “Best practices” subsection; JA4 options (nginx module / Fingerproxy).
+
+**Tests**
+- `TestCollect_TrustedProxy_JA3HashPreference`, `TestCollect_TrustedProxy_JA3RawHashedWhenNotMD5`; proxy test updated to use X-FP-JA3-HASH (32 chars).
+- `TestCalculateScores_ObsoleteTLS`, `TestCalculateScores_SSLGreased_BrowserBonus`.
+- `TestCollect_TrustedProxy_ReusesNginxHeaders`: asserts `ProxyHeaders` contains X-FP-TLS-Version, X-FP-JA3-HASH, X-FP-H2.
+- `TestCollect_NoProxy_IgnoresXFPHeaders`: asserts `ProxyHeaders` is nil when not from proxy.
+
 ## v0.6.0 (2026-02-17)
 
 ### Daily request log files

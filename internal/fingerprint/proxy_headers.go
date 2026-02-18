@@ -12,8 +12,18 @@ const (
 	HeaderFPTLSALPN     = "X-FP-TLS-ALPN"
 	HeaderFPTLSSNI      = "X-FP-TLS-SNI"
 	HeaderFPJA3         = "X-FP-JA3"
+	HeaderFPJA3Hash     = "X-FP-JA3-HASH"
 	HeaderFPH2          = "X-FP-H2"
+	HeaderFPSSLGreased  = "X-FP-SSL-GREASED"
+	HeaderFPJA4         = "X-FP-JA4"
 )
+
+// ProxyHeaderNames lists all X-FP-* header names captured for logging (ML and post-hoc analysis).
+// When request is from trusted proxy, Collector fills Fingerprint.ProxyHeaders with these keys.
+var ProxyHeaderNames = []string{
+	HeaderFPTLSVersion, HeaderFPTLSCipher, HeaderFPTLSALPN, HeaderFPTLSSNI,
+	HeaderFPJA3, HeaderFPJA3Hash, HeaderFPSSLGreased, HeaderFPJA4, HeaderFPH2,
+}
 
 // IsTrustedProxy returns true if the request is marked as coming from a trusted
 // TLS-terminating proxy (e.g. nginx with fingerprint modules). The backend must

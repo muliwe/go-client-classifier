@@ -39,7 +39,7 @@ func ClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-const version = "0.6.0"
+const version = "0.7.0"
 
 // Response represents the API response
 type Response struct {

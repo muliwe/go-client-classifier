@@ -4,28 +4,30 @@ import "time"
 
 // Fingerprint contains all collected signals from a request
 type Fingerprint struct {
-	TLS  TLSFingerprint  `json:"tls"`
-	HTTP HTTPFingerprint `json:"http"`
+	TLS          TLSFingerprint    `json:"tls"`
+	HTTP         HTTPFingerprint   `json:"http"`
+	ProxyHeaders map[string]string `json:"proxy_headers,omitempty"` // Raw X-FP-* header values when from trusted proxy (for ML and post-hoc analysis)
 }
 
 // TLSFingerprint contains TLS-level signals
 type TLSFingerprint struct {
-	Version            string   `json:"version"`             // TLS version (e.g., "TLS 1.3")
-	CipherSuite        string   `json:"cipher_suite"`        // Negotiated cipher suite
-	ALPN               string   `json:"alpn"`                // Negotiated protocol (h2, http/1.1)
-	ServerName         string   `json:"server_name"`         // SNI hostname
-	CipherSuitesCount  int      `json:"cipher_suites_count"` // Number of offered cipher suites
-	ExtensionsCount    int      `json:"extensions_count"`    // Number of TLS extensions
-	SupportedVersions  []string `json:"supported_versions"`  // Client-offered TLS versions
-	SignatureSchemes   []string `json:"signature_schemes"`   // Supported signature algorithms
-	SupportedGroups    []string `json:"supported_groups"`    // Supported elliptic curves
-	HasSessionTicket   bool     `json:"has_session_ticket"`  // Session resumption support
-	HasEarlyData       bool     `json:"has_early_data"`      // 0-RTT support
-	JA3Hash            string   `json:"ja3_hash,omitempty"`  // JA3 fingerprint hash
-	JA4Hash            string   `json:"ja4_hash,omitempty"`  // JA4 fingerprint hash
-	CertificateRequest bool     `json:"certificate_request"` // Client cert requested
-	Available          bool     `json:"available"`           // TLS info was available
-	FromProxy          bool     `json:"from_proxy"`          // TLS data came from trusted proxy headers (e.g. nginx)
+	Version            string   `json:"version"`               // TLS version (e.g., "TLS 1.3")
+	CipherSuite        string   `json:"cipher_suite"`          // Negotiated cipher suite
+	ALPN               string   `json:"alpn"`                  // Negotiated protocol (h2, http/1.1)
+	ServerName         string   `json:"server_name"`           // SNI hostname
+	CipherSuitesCount  int      `json:"cipher_suites_count"`   // Number of offered cipher suites
+	ExtensionsCount    int      `json:"extensions_count"`      // Number of TLS extensions
+	SupportedVersions  []string `json:"supported_versions"`    // Client-offered TLS versions
+	SignatureSchemes   []string `json:"signature_schemes"`     // Supported signature algorithms
+	SupportedGroups    []string `json:"supported_groups"`      // Supported elliptic curves
+	HasSessionTicket   bool     `json:"has_session_ticket"`    // Session resumption support
+	HasEarlyData       bool     `json:"has_early_data"`        // 0-RTT support
+	JA3Hash            string   `json:"ja3_hash,omitempty"`    // JA3 fingerprint hash (32-char MD5)
+	JA4Hash            string   `json:"ja4_hash,omitempty"`    // JA4 fingerprint hash
+	SSLGreased         string   `json:"ssl_greased,omitempty"` // GREASE values from proxy (X-FP-SSL-GREASED); format depends on nginx module
+	CertificateRequest bool     `json:"certificate_request"`   // Client cert requested
+	Available          bool     `json:"available"`             // TLS info was available
+	FromProxy          bool     `json:"from_proxy"`            // TLS data came from trusted proxy headers (e.g. nginx)
 }
 
 // HTTPFingerprint contains HTTP-level signals
@@ -90,6 +92,8 @@ type Signals struct {
 
 	// Proxy / HTTP/2 fingerprint (e.g. from nginx TLS termination)
 	TLSFromProxy                 bool   `json:"tls_from_proxy"`                   // TLS data from trusted proxy headers
+	TLSObsolete                  bool   `json:"tls_obsolete"`                     // TLS 1.0 or 1.1 (outdated client)
+	HasSSLGreased                bool   `json:"has_ssl_greased"`                  // GREASE present from proxy (X-FP-SSL-GREASED)
 	HasHTTP2Fingerprint          bool   `json:"has_http2_fingerprint"`            // HTTP/2 fingerprint present
 	HasHTTP2FingerprintFromProxy bool   `json:"has_http2_fingerprint_from_proxy"` // HTTP/2 fingerprint from X-FP-H2
 	H2SettingsParsed             bool   `json:"h2_settings_parsed"`               // H2 fingerprint string parsed (SETTINGS, window, priority)

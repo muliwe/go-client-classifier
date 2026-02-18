@@ -515,6 +515,48 @@ func TestCalculateScores_TLSUA_BotUA_BrowserTLS(t *testing.T) {
 	}
 }
 
+func TestCalculateScores_ObsoleteTLS(t *testing.T) {
+	// TLS 1.0 or 1.1 from proxy → obsolete-tls +1 bot
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available: true,
+			Version:   "TLS 1.0",
+		},
+		HTTP: fingerprint.HTTPFingerprint{UserAgent: "Mozilla/5.0"},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.TLSObsolete {
+		t.Error("TLSObsolete should be true for TLS 1.0")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "obsolete-tls(+1)") {
+		t.Error("Breakdown should contain obsolete-tls(+1)")
+	}
+}
+
+func TestCalculateScores_SSLGreased_BrowserBonus(t *testing.T) {
+	// GREASE present + modern TLS + non-bot UA → ssl-greased +1 browser
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:  true,
+			Version:    "TLS 1.3",
+			SSLGreased: "0x1a1a,0x2a2a",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent: "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.HasSSLGreased {
+		t.Error("HasSSLGreased should be true")
+	}
+	if !s.HasModernTLS {
+		t.Error("HasModernTLS should be true")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "ssl-greased(+1)") {
+		t.Error("Breakdown should contain ssl-greased(+1) when GREASE present and modern TLS and browser UA")
+	}
+}
+
 func TestCalculateScores_TLSALPNVsHTTPInconsistent(t *testing.T) {
 	// Direct TLS: ALPN h2 but request is HTTP/1.1 → tls-alpn-http-inconsistent +2 bot
 	fp := fingerprint.Fingerprint{

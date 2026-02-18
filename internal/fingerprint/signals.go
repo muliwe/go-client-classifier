@@ -101,6 +101,8 @@ func ExtractSignals(fp Fingerprint) Signals {
 
 	// Proxy / HTTP/2 fingerprint (e.g. nginx TLS termination)
 	s.TLSFromProxy = fp.TLS.FromProxy
+	s.TLSObsolete = fp.TLS.Version == "TLS 1.0" || fp.TLS.Version == "TLS 1.1"
+	s.HasSSLGreased = strings.TrimSpace(fp.TLS.SSLGreased) != ""
 	s.HasHTTP2Fingerprint = fp.HTTP.H2Fingerprint != ""
 	s.HasHTTP2FingerprintFromProxy = fp.TLS.FromProxy && fp.HTTP.H2Fingerprint != ""
 	if fp.HTTP.H2Parsed != nil && fp.HTTP.H2Parsed.ParsedOK {
@@ -372,6 +374,12 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "modern-tls(+1)")
 	}
 
+	// GREASE present (from proxy X-FP-SSL-GREASED) - real browsers send GREASE; optional +1 browser when TLS is modern
+	if s.HasSSLGreased && s.HasModernTLS && !s.UserAgentIsBot {
+		browserScore++
+		browserReasons = append(browserReasons, "ssl-greased(+1)")
+	}
+
 	// TLS fingerprint signals (from ClientHello) - only when UA is not bot; CLI libraries also have rich TLS
 	if !s.UserAgentIsBot && s.HasTLSFingerprint {
 		// High cipher suite count - browsers offer 15-20 cipher suites
@@ -423,6 +431,12 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	// ==========================================
 	// Bot-positive signals
 	// ==========================================
+
+	// Obsolete TLS (1.0/1.1) - outdated clients, often automation or legacy
+	if s.TLSObsolete {
+		botScore++
+		botReasons = append(botReasons, "obsolete-tls(+1)")
+	}
 
 	// Known bot User-Agent pattern
 	if s.UserAgentIsBot {

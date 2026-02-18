@@ -20,6 +20,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix E: Performance Benchmarks](#appendix-e-performance-benchmarks)
 - [Appendix F: Nginx TLS Termination and Proxy Header Reuse](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)
 - [Appendix G: Cross-validation of transport vs application fingerprints](#appendix-g-cross-validation-of-transport-vs-application-fingerprints)
+- [Appendix H: JA3, JA4 and X-FP-* for bot detection](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection)
 
 ---
 
@@ -441,6 +442,8 @@ TLS and H2 fingerprint are taken from trusted proxy headers (X-FP-TLS-*, X-FP-JA
 }
 ```
 
+When the request is from a **trusted proxy** (X-Internal-Proxy: 1), the log also includes **`fingerprint.proxy_headers`**: a map of raw X-FP-* header values as received (X-FP-TLS-Version, X-FP-TLS-Cipher, X-FP-TLS-ALPN, X-FP-TLS-SNI, X-FP-JA3, X-FP-JA3-HASH, X-FP-SSL-GREASED, X-FP-JA4, X-FP-H2). Only non-empty values are present. This supports ML training and post-hoc analysis (recomputing hashes, comparing raw vs derived fields, feature engineering). The derived fields `fingerprint.tls` (e.g. `ja3_hash`, `ja4_hash`, `ssl_greased`, `from_proxy`) and `signals` (e.g. `tls_obsolete`, `has_ssl_greased`) are always present when applicable.
+
 ---
 
 ## Limitations & Future Work
@@ -503,6 +506,8 @@ Based on recent research (2025-2026), the following development roadmap addresse
 | [x] HTTP/2 fingerprint consumption from proxy (X-FP-H2) in Go | High | Appendix F, [29] | Done (v0.5.0) |
 | [x] HTTP/2 SETTINGS + PRIORITY in fingerprint at nginx | High | Akamai [4], [29] | Done by module (deploy nginx) |
 | [x] Flow control / window in fingerprint | Medium | Akamai [4], [29] | Done by module (in $http2_fingerprint) |
+| [x] X-FP-* proxy headers: JA3-HASH preference, X-FP-SSL-GREASED, obsolete TLS (1.0/1.1) in scoring | High | Appendix H, F | Done |
+| [x] X-FP-JA4 consumption when provided by JA4-capable module | Medium | Appendix F, H | Done |
 | [ ] H2/H3 ratio tracking (per-client behavioral) | Medium | Cloudflare signals | Planned |
 
 *Note*: [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint) implements Akamai’s method: one variable `$http2_fingerprint` includes SETTINGS (incl. INITIAL_WINDOW_SIZE), PRIORITY, and flow-control/window behaviour (RFC 7540 §10.8). Deploy nginx with the module to use; no separate WINDOW_UPDATE variable — it is part of the combined fingerprint.
@@ -510,6 +515,10 @@ Based on recent research (2025-2026), the following development roadmap addresse
 **Implementation details (v0.5.0)**:
 - Collector reuses `X-FP-H2` when `X-Internal-Proxy: 1`; TLS and H2 from proxy headers (see [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
 - New signals: `has_http2_fingerprint`, `has_http2_fingerprint_from_proxy`, `tls_from_proxy`; +1 browser score for H2 fingerprint.
+
+**Implementation details (X-FP-* best practices, 2025–2026)**:
+- JA3 hash from proxy: prefer **X-FP-JA3-HASH** (32-char MD5); fallback to X-FP-JA3 as hash or MD5(raw). Signals/scoring: `has_tls_fingerprint`, `tls-ua-inconsistent` / `tls-ua-consistent` (Appendix G).
+- **X-FP-SSL-GREASED** non-empty + modern TLS + non-bot UA → +1 browser (`ssl-greased`). **X-FP-TLS-Version** TLS 1.0/1.1 → +1 bot (`obsolete-tls`). **X-FP-JA4** read when set; used for known-client and H2 vs ALPN consistency. See [Appendix H](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection).
 
 **Why**: HTTP/2 implementation details (initial window size, max concurrent streams, header table size) create passive fingerprints that are hard to spoof [4]. Using nginx at the edge for H2 fingerprinting is a rational choice when no equivalent Go libraries exist and avoids reimplementing protocol parsing.
 
@@ -522,9 +531,9 @@ Based on recent research (2025-2026), the following development roadmap addresse
 | Task | Priority | Reference | Status |
 |------|----------|-----------|--------|
 | [x] Spatial inconsistency detection (cross-signal) | High | FP-Inconsistent [7] | Done (v0.4.0) |
-| [ ] Temporal inconsistency tracking (same client, different FPs) | High | FP-Inconsistent [7] | Planned |
-| [ ] TLS/HTTP version mismatch detection | Medium | FP-Inconsistent [7] | Planned |
-| [ ] Header-UA consistency validation | Medium | Radware [10] | Planned |
+| [x] TLS/HTTP version mismatch detection (direct TLS only; ALPN vs request HTTP version) | Medium | FP-Inconsistent [7], Appendix G | Done; proxy path intentionally skips (backend may be HTTP/1.1) |
+| [ ] Temporal inconsistency tracking (same client, different FPs) | High | FP-Inconsistent [7] | Planned — TODO: Appendix H |
+| [ ] Header-UA consistency validation (beyond TLS vs UA) | Medium | Radware [10] | Planned |
 
 **Implementation details (v0.4.0)**:
 - JA4H consistency checking compares JA4H-derived signals vs HTTP-extracted signals
@@ -1409,14 +1418,17 @@ The backend treats a request as coming from a trusted TLS-terminating proxy only
 | `X-FP-TLS-Cipher` | `$ssl_cipher` | Cipher suite name |
 | `X-FP-TLS-ALPN` | `$ssl_alpn_protocol` | Negotiated protocol (h2, http/1.1) |
 | `X-FP-TLS-SNI` | `$ssl_server_name` | SNI |
-| `X-FP-JA3` | JA3 module (e.g. nginx-ssl-ja3) | JA3 hash |
+| `X-FP-JA3` | phuslu `$http_ssl_ja3` | Raw JA3 string; if not 32-char MD5, backend hashes it |
+| `X-FP-JA3-HASH` | phuslu `$http_ssl_ja3_hash` | JA3 MD5 (32 hex) — **preferred** for classification |
+| `X-FP-SSL-GREASED` | Module (e.g. phuslu) | GREASE values; non-empty → soft browser signal |
+| `X-FP-JA4` | JA4-capable module (e.g. foxio-llc/ja4-nginx) | JA4 fingerprint when available |
 | `X-FP-H2` | HTTP/2 fingerprint module (e.g. nginx-http2-fingerprint) | HTTP/2 fingerprint string |
 
 When `X-Internal-Proxy` is not `"1"`, all `X-FP-*` headers are ignored for fingerprint construction; TLS data is taken only from `r.TLS` and ConnContext (direct TLS to Go).
 
 ### New fingerprint and signal fields (v0.5.0)
 
-- **TLS**: `FromProxy` — set when TLS was built from proxy headers (no ClientHello in Go; JA4 and cipher/extension counts are then unavailable).
+- **TLS**: `FromProxy` — set when TLS was built from proxy headers (no ClientHello in Go). When from proxy: JA3 hash is resolved from **X-FP-JA3-HASH** (preferred) or **X-FP-JA3** (raw string is MD5-hashed if not 32-hex). **X-FP-JA4** is read when set (e.g. from a JA4-capable module); cipher/extension counts remain unavailable from phuslu. **SSLGreased** stores X-FP-SSL-GREASED for optional scoring.
 - **HTTP**: `H2Fingerprint` — HTTP/2 fingerprint value when provided by proxy (`X-FP-H2`). **`H2Parsed`** — when present, the backend parses the Akamai/nginx-http2-fingerprint format (`SETTINGS|WINDOW_UPDATE|PRIORITY|pseudo-header order`) into structured fields: SETTINGS map (RFC 7540 ids), INITIAL_WINDOW_SIZE (id 4), MAX_FRAME_SIZE (id 5), WINDOW_UPDATE, PRIORITY, PseudoHeaderOrder (fourth segment); see `internal/fingerprint/h2fingerprint.go`.
 - **Signals**: `tls_from_proxy`, `has_http2_fingerprint`, `has_http2_fingerprint_from_proxy`, `h2_settings_parsed`, `h2_initial_window_size`, `h2_priority_present`, `h2_window_update_present`, `h2_max_frame_size_browser_like`, `h2_pseudo_header_order_present` — used in scoring, logging, and research.
 
@@ -1428,7 +1440,7 @@ When `X-Internal-Proxy` is not `"1"`, all `X-FP-*` headers are ignored for finge
 - **Parsed H2 + WINDOW_UPDATE present**: When the connection-level WINDOW_UPDATE segment (second segment) is non-zero (`h2_window_update_present`), **+1** (`h2-window-update`). Real clients use flow control; this correlates with browser behavior (Akamai [4], Scrapfly [32]).
 - **Parsed H2 + browser-like MAX_FRAME_SIZE**: When SETTINGS id 5 (MAX_FRAME_SIZE) is 16384 (RFC default) or 16777215 (max), **+1** (`h2-max-frame`). Browsers typically use these values (RFC 7540/9113).
 - **Parsed H2 + pseudo-header order present**: When the fourth segment (pseudo-header order or flags, e.g. `m,p,a,s` in nginx module) is non-empty (`h2_pseudo_header_order_present`), **+1** (`h2-pseudo-headers`). Full fingerprint format typical of browsers (Scrapfly format [32]).
-- **TLS from proxy**: Existing TLS-based signals (e.g. `has_modern_tls`, `is_http2` via ALPN, `has_tls_fingerprint` when JA3 is present) still apply; full JA4 and cipher/extension counts are not used when `FromProxy` is true because nginx does not forward them in the current setup.
+- **TLS from proxy**: Existing TLS-based signals apply. JA3 hash is taken from X-FP-JA3-HASH (preferred) or derived from X-FP-JA3; JA4 is used when X-FP-JA4 is set (e.g. foxio-llc/ja4-nginx). Cipher/extension counts are not forwarded by phuslu. **Obsolete TLS** (1.0/1.1 from X-FP-TLS-Version) adds +1 bot; **GREASE** (X-FP-SSL-GREASED non-empty) with modern TLS adds +1 browser when UA is not bot.
 
 ### HTTP/2 scoring rules and best practices (publications)
 
@@ -1482,6 +1494,10 @@ Rules above are aligned with the following sources:
 
 - **[33] HTTP/2 fingerprinting** (lwt hiker) — Browsers send PRIORITY; libraries often omit; SETTINGS/window differ (e.g. curl); impersonation requires matching frame behaviour.  
   https://lwthiker.com/networks/2022/06/17/http2-fingerprinting.html
+
+### JA3 behind proxy and JA4 options
+
+Behind a TLS-terminating proxy (e.g. nginx with phuslu), the backend has no access to ClientHello; only headers are available. **phuslu/nginx-ssl-fingerprint** provides JA3 (raw and hash), not JA4. JA3 is weakened by Chrome’s extension-order randomization (2022+), so the same browser can yield many JA3 hashes; this can produce “unknown” fingerprints for real browsers. For more stable detection, JA4 is preferred (industry adoption: Cloudflare, Fastly, 2025–2026). **Options for JA4 when using nginx:** (a) Use a nginx module that computes JA4 (e.g. [foxio-llc/ja4-nginx](https://github.com/foxio-llc/ja4-nginx)) and pass it as **X-FP-JA4**; the Go backend already reads X-FP-JA4 and uses it in known-library/browser checks and ALPN consistency. (b) Put a JA4-capable reverse proxy (e.g. [Fingerproxy](https://github.com/wi1dcard/fingerproxy)) in front of nginx and have it inject JA4 (and optionally JA3/H2) into headers that nginx forwards to Go.
 
 ### Configuration and deployment
 
@@ -1552,7 +1568,91 @@ HTTP/2 fingerprint reflects the real client stack; it cannot be set via JavaScri
 - **Done**: Bot User-Agent and TLS/JA4H browser points — when the User-Agent is already classified as bot (e.g. curl, Python), we do not award browser points for TLS (modern-tls, high-ciphers, session-ticket, multi-groups, tls-ext≥10) or for ja4h-consistent. Primitive CLI clients have modern TLS stacks too; without this, curl would receive 6–7 browser points and the net score would be only slightly negative.  
 - **Done**: H2 vs JA4 — when JA4 is present, we parse ALPN from Part A (h2/h1/h3). If JA4 says h2 but the request is not HTTP/2 (or says h1 but it is HTTP/2), we add +2 bot (`h2-ja4-inconsistent`). See `JA4ALPN()` in `tls_client_map.go`.
 - **Done**: TLS/HTTP version mismatch — with direct TLS (not from proxy), we require ALPN to match the observed HTTP version: ALPN `h2` ↔ `HTTP/2.0`, ALPN `http/1.1` ↔ non‑HTTP/2. Mismatch → +2 bot (`tls-alpn-http-inconsistent`). When TLS is from proxy, ALPN reflects client↔proxy; the request to the backend may be HTTP/1.1, so we do not apply this check.
+- **Done**: Obsolete TLS (X-FP-TLS-Version) — when version is TLS 1.0 or TLS 1.1 we add +1 bot (`obsolete-tls(+1)`). Source: proxy header `X-FP-TLS-Version`; signals `TLSObsolete`, used in `calculateScores`. Outdated clients are often automation or legacy stacks.
+- **Done**: GREASE (X-FP-SSL-GREASED) — when the header is non-empty, TLS is modern (1.2/1.3), and UA is not bot we add +1 browser (`ssl-greased(+1)`). Real browsers send GREASE; many libraries omit or use it inconsistently (Akamai, Cloudflare). Signal `HasSSLGreased`; format of value is module-dependent (e.g. phuslu).
+- **Done**: JA3 hash from proxy — we prefer **X-FP-JA3-HASH** (32-char MD5) for classification; if absent we use X-FP-JA3 as hash when it looks like MD5, else we compute MD5 of the raw JA3 string in Go. Ensures TLS vs UA checks work regardless of whether nginx sends raw or hash. See [Appendix H](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection).
 - **Planned**: Temporal inconsistency (same attribute changes across requests from same client).
+
+---
+
+<a id="appendix-h-ja3-ja4-and-x-fp-for-bot-detection"></a>
+
+## Appendix H: JA3, JA4 and X-FP-* for bot detection
+
+This appendix summarizes industry practices and our implementation choices for using proxy-forwarded fingerprint headers (X-FP-*) in bot detection when TLS is terminated at nginx (or similar) and the Go backend receives plain HTTP with headers.
+
+### Scope of headers
+
+| Header | Typical source (nginx) | Purpose in classification |
+|--------|------------------------|---------------------------|
+| `X-FP-TLS-Version` | `$ssl_protocol` | TLS version; obsolete (1.0/1.1) → +1 bot. |
+| `X-FP-TLS-Cipher` | `$ssl_cipher` | Negotiated cipher; logged, not currently scored separately. |
+| `X-FP-TLS-ALPN` | `$ssl_alpn_protocol` | h2 vs http/1.1; used for H2 vs JA4 consistency and IsHTTP2. |
+| `X-FP-TLS-SNI` | `$ssl_server_name` | SNI; logged. |
+| `X-FP-JA3` | `$http_ssl_ja3` (phuslu) | Raw JA3 string; used when X-FP-JA3-HASH absent (hashed in Go if not 32-hex). |
+| `X-FP-JA3-HASH` | `$http_ssl_ja3_hash` | **Preferred** 32-char MD5 for known-library/browser lookups and TLS vs UA. |
+| `X-FP-SSL-GREASED` | `$http_ssl_greased` | GREASE presence; non-empty + modern TLS + non-bot UA → +1 browser. |
+| `X-FP-JA4` | JA4-capable module | JA4 fingerprint when available; used like direct-TLS JA4 (consistency, known sets). |
+| `X-FP-H2` | `$http2_fingerprint` | HTTP/2 fingerprint; parsed and scored (SETTINGS, PRIORITY, WINDOW_UPDATE, etc.). |
+
+### Best practices (2025–2026)
+
+1. **Prefer X-FP-JA3-HASH for classification**  
+   The classifier expects a 32-character MD5 for JA3 lookups (`knownLibraryJA3`, `knownBrowserJA3`). If the proxy sends only the raw JA3 string in X-FP-JA3, the backend hashes it; sending X-FP-JA3-HASH avoids ambiguity and matches phuslu’s native output. Configure nginx to set both when possible; the backend uses X-FP-JA3-HASH when present.
+
+2. **JA3 limitation behind proxy**  
+   Behind a TLS-terminating proxy only JA3 (not JA4) is available from phuslu. Chrome’s extension-order randomization (2022+) makes JA3 unstable for the same browser (many hashes). Prefer JA4 when feasible (e.g. foxio-llc/ja4-nginx or Fingerproxy) and pass it as X-FP-JA4; the backend already consumes it for consistency and known-client checks.
+
+3. **Multi-layer detection**  
+   Combine TLS (JA3/JA4), HTTP/2 fingerprint, and JA4H with consistency checks (TLS vs User-Agent, H2 vs UA, H2 vs JA4 ALPN). Single-signal spoofing is insufficient; spatial consistency is implemented (Appendix G). Temporal inconsistency (same client, changing fingerprints) is planned.
+
+4. **GREASE as a soft signal**  
+   Real browsers typically send GREASE; many automation stacks do not or do so inconsistently. We use non-empty X-FP-SSL-GREASED with modern TLS as a +1 browser signal when the User-Agent is not already classified as bot. The exact format of the header value is module-dependent (e.g. phuslu).
+
+5. **Obsolete TLS**  
+   TLS 1.0 and 1.1 are deprecated and often associated with legacy or automated clients. We add +1 bot when X-FP-TLS-Version indicates TLS 1.0 or 1.1.
+
+6. **Trust and stripping**  
+   X-FP-* and X-Internal-Proxy must only be trusted when the request comes from a controlled proxy (e.g. internal network). Strip or ignore these headers from untrusted/external traffic to prevent spoofing.
+
+### Scoring summary (proxy path)
+
+Signals derived from the above headers and used in `calculateScores` (see [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse) and `internal/fingerprint/signals.go`):
+
+| Signal | Condition | Score |
+|--------|-----------|-------|
+| `obsolete-tls` | X-FP-TLS-Version is TLS 1.0 or 1.1 | +1 bot |
+| `ssl-greased` | X-FP-SSL-GREASED non-empty, modern TLS, non-bot UA | +1 browser |
+| `has_tls_fingerprint` | JA3 or JA4 present (JA3 from X-FP-JA3-HASH or X-FP-JA3) | Enables TLS-based scoring |
+| `tls-ua-inconsistent` / `tls-ua-consistent` | JA3/JA4 vs User-Agent (known library/browser sets) | +2 bot / +1 browser |
+| H2 fingerprint rules | X-FP-H2 parsed (SETTINGS, PRIORITY, etc.) | Multiple browser/bot points |
+| `h2-ja4-inconsistent` | JA4 ALPN vs actual HTTP/2 when JA4 from X-FP-JA4 | +2 bot |
+
+### References (publications and sources)
+
+The practices in this appendix align with the following publications and documentation (numbering from the main [References](#references) section):
+
+| Topic | Source | URL / note |
+|-------|--------|------------|
+| JA3 specification and MD5 hash | **[1] JA3 - SSL/TLS Client Fingerprinting** (Salesforce, 2017) | https://github.com/salesforce/ja3 |
+| JA4+ and Chrome randomization; JA4 at edge | **[2] JA4+ Network Fingerprinting** (FoxIO, 2023-2024) | https://github.com/FoxIO-LLC/ja4 |
+| JA3/JA4 in bot management | **[3] Cloudflare JA3/JA4 Documentation** | https://developers.cloudflare.com/bots/concepts/ja3-ja4-fingerprint/ |
+| HTTP/2 fingerprint at proxy; SETTINGS/PRIORITY | **[4] Passive Fingerprinting of HTTP/2 Clients** (Akamai, Black Hat EU 2017) | https://blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf |
+| Spatial/temporal inconsistency; evasion detection | **[7] FP-Inconsistent** (2024, arXiv:2406.07647) | https://arxiv.org/abs/2406.07647 |
+| TLS fingerprint vs User-Agent; JA4 bot detection | **[34] When Handshakes Tell the Truth** (arXiv:2602.09606) | https://arxiv.org/abs/2602.09606 |
+| JA3/JA4/H2 via headers to backend | **[30] Fingerproxy** | https://github.com/wi1dcard/fingerproxy |
+| Fingerprint-based actions (JA3, JA4, JA4H, H2) | **[31] Finch** | https://github.com/0x4D31/finch |
+| TLS fingerprinting 2026; JA4+ adoption at proxy | **TLS fingerprinting in 2026** (proxies.sx) | https://www.proxies.sx/use-cases/privacy/tls-fingerprint |
+| GREASE and TLS extensibility | **RFC 8701 (GREASE)** | https://datatracker.ietf.org/doc/html/rfc8701 |
+| Bots tampering with TLS to avoid detection | **Akamai: Bots Tampering With TLS** | https://www.akamai.com/blog/security/bots-tampering-with-tls-to-avoid-detection |
+| phuslu nginx JA3 + HTTP/2 fingerprint module | **phuslu/nginx-ssl-fingerprint** | https://github.com/phuslu/nginx-ssl-fingerprint |
+
+### Future work (TODOs)
+
+- **Temporal inconsistency**: Track the same client (e.g. by IP or session) across requests; flag when JA3/JA4 or H2 fingerprint changes in an implausible way (Phase 3 in roadmap).
+- **JA4 at edge**: Evaluate production use of a JA4-capable nginx module or Fingerproxy and extend JA4-based rules when X-FP-JA4 is widely available.
+- **GREASE format**: Document the exact format of X-FP-SSL-GREASED per nginx module (phuslu and others) for optional stricter parsing or anomaly detection (e.g. TLS 1.3 with empty GREASE as soft bot signal).
+- **Validation dataset**: Collect labeled traffic (browser vs bot) with X-FP-* present and measure precision/recall for the above rules; compare with commercial solutions (e.g. FP-Inconsistent-style evaluation).
 
 ---
 

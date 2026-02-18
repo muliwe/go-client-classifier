@@ -1,7 +1,9 @@
 package fingerprint
 
 import (
+	"crypto/md5"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,6 +30,7 @@ func NewCollector() *Collector {
 // Collect extracts fingerprint from an HTTP request.
 // When the request comes from a trusted proxy (X-Internal-Proxy: 1), TLS and
 // HTTP/2 data are taken from X-FP-* headers instead of r.TLS / context.
+// Raw X-FP-* header values are stored in fp.ProxyHeaders for ML and post-hoc analysis.
 func (c *Collector) Collect(r *http.Request) Fingerprint {
 	fp := Fingerprint{
 		TLS:  c.collectTLS(r),
@@ -39,6 +42,13 @@ func (c *Collector) Collect(r *http.Request) Fingerprint {
 		if h2 := r.Header.Get(HeaderFPH2); h2 != "" {
 			fp.HTTP.H2Fingerprint = h2
 			fp.HTTP.H2Parsed = ParseH2Fingerprint(h2)
+		}
+		// Capture all X-FP-* headers for logging (ML training and post-hoc analysis)
+		fp.ProxyHeaders = make(map[string]string, len(ProxyHeaderNames))
+		for _, name := range ProxyHeaderNames {
+			if v := r.Header.Get(name); v != "" {
+				fp.ProxyHeaders[name] = v
+			}
 		}
 	}
 
@@ -99,6 +109,7 @@ func (c *Collector) collectTLS(r *http.Request) TLSFingerprint {
 
 // collectTLSFromProxy builds TLS fingerprint from trusted proxy headers
 // (e.g. nginx with ssl_ja3 and proxy_set_header X-FP-*).
+// JA3 hash: prefer X-FP-JA3-HASH (32-char MD5); else X-FP-JA3 if it looks like MD5; else compute MD5 from raw JA3 string.
 func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	fp := TLSFingerprint{
 		Available: true,
@@ -111,9 +122,47 @@ func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	fp.CipherSuite = r.Header.Get(HeaderFPTLSCipher)
 	fp.ALPN = r.Header.Get(HeaderFPTLSALPN)
 	fp.ServerName = r.Header.Get(HeaderFPTLSSNI)
-	fp.JA3Hash = r.Header.Get(HeaderFPJA3)
-	// JA4, cipher count, extensions, etc. are not available from nginx in current setup
+	fp.JA3Hash = resolveJA3HashFromProxy(r.Header.Get(HeaderFPJA3Hash), r.Header.Get(HeaderFPJA3))
+	fp.JA4Hash = r.Header.Get(HeaderFPJA4)
+	fp.SSLGreased = r.Header.Get(HeaderFPSSLGreased)
 	return fp
+}
+
+// resolveJA3HashFromProxy returns the 32-char JA3 MD5 hash for use in known-library/browser lookups.
+// Prefer hashHeader (X-FP-JA3-HASH); else if ja3Raw looks like MD5 use it; else compute MD5(ja3Raw).
+func resolveJA3HashFromProxy(hashHeader, ja3Raw string) string {
+	hashHeader = strings.TrimSpace(strings.ToLower(hashHeader))
+	ja3Raw = strings.TrimSpace(ja3Raw)
+	if hashHeader != "" && isMD5Hex(hashHeader) {
+		return hashHeader
+	}
+	if ja3Raw != "" {
+		ja3Lower := strings.ToLower(ja3Raw)
+		if isMD5Hex(ja3Lower) {
+			return ja3Lower
+		}
+		return ja3RawToMD5Hash(ja3Raw)
+	}
+	return ""
+}
+
+// isMD5Hex returns true if s is exactly 32 lowercase hex characters (MD5 hash).
+func isMD5Hex(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// ja3RawToMD5Hash returns MD5 hash of the raw JA3 string (comma-separated), as 32 lowercase hex chars.
+func ja3RawToMD5Hash(raw string) string {
+	h := md5.Sum([]byte(raw))
+	return hex.EncodeToString(h[:])
 }
 
 // normalizeTLSVersionFromProxy maps proxy TLS version strings to our format

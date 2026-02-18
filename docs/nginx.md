@@ -256,8 +256,12 @@ server {
         proxy_set_header X-FP-TLS-ALPN      $ssl_alpn_protocol;
         proxy_set_header X-FP-TLS-SNI       $ssl_server_name;
 
-        # JA3 (if module is built)
-        proxy_set_header X-FP-JA3 $ssl_ja3; # form phuslu fork $http_ssl_ja3
+        # JA3 (if module is built). Prefer X-FP-JA3-HASH (MD5) for classifier; X-FP-JA3 can be raw string for logs.
+        proxy_set_header X-FP-JA3        $http_ssl_ja3;       # phuslu: raw JA3 string
+        proxy_set_header X-FP-JA3-HASH  $http_ssl_ja3_hash;  # phuslu: MD5 of JA3 (32 hex) — preferred for classification
+        # Optional: GREASE and JA4 (if your nginx build exposes them)
+        proxy_set_header X-FP-SSL-GREASED $http_ssl_greased;
+        # proxy_set_header X-FP-JA4 $ja4;  # when using a JA4-capable module (e.g. foxio-llc/ja4-nginx)
 
         # HTTP/2 fingerprint
         proxy_set_header X-FP-H2 $http2_fingerprint;
@@ -456,26 +460,32 @@ Checking headers in the Go backend:
 X-FP-TLS-Version
 X-FP-TLS-Cipher
 X-FP-TLS-ALPN
-X-FP-JA3
-X-FP-H2
+X-FP-TLS-SNI
+X-FP-JA3          # raw JA3 string (optional; used if X-FP-JA3-HASH absent and value is not 32-char MD5)
+X-FP-JA3-HASH     # MD5 of JA3 (32 hex) — preferred for classification
+X-FP-SSL-GREASED  # GREASE values (format depends on nginx module)
+X-FP-JA4          # JA4 fingerprint (when using a JA4-capable module)
+X-FP-H2           # HTTP/2 fingerprint
 ```
 
 ---
 
 # Reading fingerprint in Go
 
-The collector uses these headers when `X-Internal-Proxy` is `"1"` (see [METHODOLOGY.md](METHODOLOGY.md) Appendix F). JA3 and H2 are also used for cross-validation (TLS vs User-Agent, H2 vs UA; see Appendix G).
+The collector uses these headers when `X-Internal-Proxy` is `"1"` (see [METHODOLOGY.md](METHODOLOGY.md) Appendix F). JA3 hash resolution: **X-FP-JA3-HASH** (32-char MD5) is preferred; if absent, **X-FP-JA3** is used — if it looks like an MD5 it is taken as the hash, otherwise the raw JA3 string is hashed (MD5) in Go. JA3/JA4 and H2 are used for cross-validation (TLS vs User-Agent, H2 vs UA; see Appendix G).
 
 ```go
 if r.Header.Get("X-Internal-Proxy") == "1" {
     tlsVersion := r.Header.Get("X-FP-TLS-Version")
     tlsCipher  := r.Header.Get("X-FP-TLS-Cipher")
-    ja3        := r.Header.Get("X-FP-JA3")
+    ja3Hash    := r.Header.Get("X-FP-JA3-HASH")  // preferred for classifier
+    ja3Raw     := r.Header.Get("X-FP-JA3")
     h2fp       := r.Header.Get("X-FP-H2")
 
     _ = tlsVersion
     _ = tlsCipher
-    _ = ja3
+    _ = ja3Hash
+    _ = ja3Raw
     _ = h2fp
 }
 ```
