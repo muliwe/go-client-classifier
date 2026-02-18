@@ -73,3 +73,4 @@ certs/
 internal/fingerprint/data/ja4db.json
 !internal/fingerprint/data/.gitkeep
 docs/nginx_prod.md
+tools/python/poetry.lock

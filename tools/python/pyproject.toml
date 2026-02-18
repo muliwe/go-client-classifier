@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "go-client-slassifier-tools"
+version = "0.1.0"
+description = "Python tools for go-client-slassifier (antibot tests, etc.)"
+readme = "README.md"
+authors = []
+packages = []
+
+[tool.poetry.dependencies]
+python = "^3.12"
+curl-cffi = "^0.14"
+
+[tool.poetry.group.dev.dependencies]
+# add dev deps here if needed, e.g. pytest, ruff
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

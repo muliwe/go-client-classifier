@@ -66,6 +66,13 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 - **Confidence**: the classify response JSON now returns `confidence` as a **string** with 2 decimal places (e.g. `"0.95"`) to avoid float instability in JSON. Internal classification and logs keep full precision (float). Test: `TestServerHandleClassify_ConfidenceAsString`.
 - **Debug endpoint** (`/debug`): response now includes top-level `classification`, `score` (weighted net), and `reason` (text summary) so one request gives both the verdict and full fingerprint/signals without calling `/` separately.
 
+### Python tools (antibot testing)
+
+- **tools/python**: New Python tooling with Poetry for scripts that hit the classifier/antibot service.
+- **pyproject.toml**: Poetry project (Python ^3.12, dependency `curl-cffi`).
+- **antibot_test.py**: Script using curl_cffi to test antibot bypass (browser TLS/HTTP2 impersonation): single-request test and multi-profile run (chrome, chrome110, chrome116, safari, safari_ios).
+- **README**: Install (`poetry install`), run (`poetry run python antibot_test.py`), and dependency management.
+
 ## v0.6.0 (2026-02-17)
 
 ### Daily request log files
