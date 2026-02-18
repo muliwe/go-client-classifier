@@ -316,6 +316,21 @@ Tests verify:
 | `GET /health` | Health check |
 | `GET /debug` | Debug info with full fingerprint (dev only) |
 
+**Example API response (GET /):**
+
+```json
+{
+  "classification": "browser",
+  "confidence": "0.95",
+  "message": "You appear to be using a browser",
+  "request_id": "uuid",
+  "timestamp": "2026-02-18T12:00:00Z",
+  "version": "0.7.0"
+}
+```
+
+(`confidence` is a string with 2 decimal places to avoid float instability.)
+
 ## Log Format
 
 Each request is logged as one JSON line (JSONL) with full fingerprint data. Log files are written by day in UTC: `logs/requests_YYYYMMDD.jsonl` (e.g. `logs/requests_20260217.jsonl`). The server rotates to a new file automatically when the date changes.
