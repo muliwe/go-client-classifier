@@ -12,6 +12,7 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 - **no-session**: Bot penalty for missing session ticket is not applied when TLS is from proxy (X-FP-* does not convey session ticket presence).
 - **JA4H consistency**: When TLS is from proxy, JA4H version (11/10) is not compared with `is_http2` in the consistency check; the backend sees HTTP/1.x from the proxy, so the version mismatch is not treated as inconsistency.
 - **JA4H bot penalties**: When TLS is from proxy, the three JA4H-based bot penalties are not applied (`ja4h-no-lang`, `ja4h-low-headers`, `ja4h-inconsistent`). JA4H is computed from the request as seen by the backend (after nginx); the header set can differ from what the client sent, so these penalties are skipped to avoid false bot points for real browsers.
+- **h2-ua-inconsistent**: When TLS is from proxy, the H2 vs User-Agent inconsistency penalty is not applied. X-FP-H2 may omit some SETTINGS (e.g. id 5 MAX_FRAME_SIZE); with missing MAX_FRAME_SIZE the fingerprint is treated as library-like and would otherwise add +2 bot for real browsers (e.g. Chrome).
 
 **Browser-like H2 and TLS:**
 - **INITIAL_WINDOW_SIZE 6291456** (Chrome 6 MiB) is now treated as browser-like (`h2-init-window`). Value 10485760 (typical for curl/libraries) remains non–browser-like.
@@ -24,7 +25,7 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 - **net_score = browser_score − 4×bot_score** (constant `BotScoreWeight = 4` in classifier). A few bot points now strongly reduce net so that curl with spoofed headers (e.g. 19 browser, 6 bot → net −5) is classified as bot; real browser with 1–2 bot points (e.g. 20 browser, 2 bot → net 12) stays browser. Threshold unchanged (default 8). See [Scoring Algorithm](docs/METHODOLOGY.md#scoring-algorithm).
 
 **Tests:**
-- `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`.
+- `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped`, `TestCalculateScores_FromProxy_H2UAInconsistent_Skipped`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`.
 - `TestIsBrowserLikeH2InitialWindow`: 6291456 browser-like, 10485760 not browser-like.
 - `TestIsKnownLibraryTLS`: curl JA3 `0149f47eabf9a20d0893e2a44e5a6323` in known-library set.
 

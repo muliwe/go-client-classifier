@@ -534,8 +534,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		}
 	}
 
-	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like
-	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.HasHTTP2Fingerprint && isH2LibraryLike(s) {
+	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like.
+	// Skip when from proxy: X-FP-H2 may omit some SETTINGS (e.g. MAX_FRAME_SIZE id 5), so isH2LibraryLike can false-positive on real browsers.
+	if !fp.TLS.FromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && s.HasHTTP2Fingerprint && isH2LibraryLike(s) {
 		botScore += 2
 		botReasons = append(botReasons, "h2-ua-inconsistent(+2)")
 	}

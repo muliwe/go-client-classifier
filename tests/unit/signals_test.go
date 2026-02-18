@@ -751,6 +751,43 @@ func TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty(t *testing.T) {
 	}
 }
 
+func TestCalculateScores_FromProxy_H2UAInconsistent_Skipped(t *testing.T) {
+	// From proxy: H2 fingerprint may omit SETTINGS (e.g. id 5 MAX_FRAME_SIZE) so isH2LibraryLike can be true for real Chrome.
+	// We must NOT add h2-ua-inconsistent when from proxy.
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			ALPN:       "h2",
+			FromProxy:  true,
+			SSLGreased: "1",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
+			H2Fingerprint: "1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p", // no id 5 → MaxFrameSize 0 → library-like
+			H2Parsed:      fingerprint.ParseH2Fingerprint("1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p"),
+			HeaderCount:   28,
+			Accept:        "text/html,application/xhtml+xml",
+			AcceptEnc:     "gzip, deflate, br",
+			AcceptLang:    "ru-RU,ru;q=0.9",
+			SecFetchSite:  "none",
+			SecFetchMode:  "navigate",
+			SecFetchDest:  "document",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.TLSFromProxy || !s.UserAgentIsBrowser || !s.HasHTTP2Fingerprint {
+		t.Fatal("Setup: from proxy, browser UA, H2 fingerprint")
+	}
+	if s.H2MaxFrameSizeBrowserLike {
+		t.Error("H2 fingerprint has no SETTINGS id 5, so H2MaxFrameSizeBrowserLike should be false")
+	}
+	if strings.Contains(s.ScoreBreakdown, "h2-ua-inconsistent(+2)") {
+		t.Error("From proxy: should NOT add h2-ua-inconsistent (X-FP-H2 may omit MAX_FRAME_SIZE)")
+	}
+	if s.BotScore != 0 {
+		t.Errorf("From proxy + browser-like request, H2 without id 5: BotScore want 0, got %d (breakdown: %s)", s.BotScore, s.ScoreBreakdown)
+	}
+}
+
 func TestCalculateScores_H2JA4Inconsistent(t *testing.T) {
 	// JA4 says h2 but request is HTTP/1.1 (no ALPN h2, no H2 fingerprint) → h2-ja4-inconsistent +2 bot
 	fp := fingerprint.Fingerprint{
