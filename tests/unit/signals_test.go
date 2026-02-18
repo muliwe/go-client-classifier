@@ -780,6 +780,35 @@ func TestCalculateScores_BrowserUA_NoGrease_FromProxy_HTTPToHTTP_NoPenalty(t *te
 	}
 }
 
+func TestCalculateScores_JA4HNoCookies_HTTPToHTTP_NoPenalty(t *testing.T) {
+	// HTTP→HTTP proxy: no client TLS; no cookies is normal (first visit). Do NOT add ja4h-no-cookies.
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Available:   true,
+			FromProxy:   true,
+			Version:     "",
+			ALPN:        "",
+			JA3Hash:     "",
+			CipherSuite: "",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
+			Accept:     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+			AcceptEnc:  "gzip, deflate",
+			AcceptLang: "ru-RU,ru;q=0.9,en;q=0.8",
+			HasCookies: false,
+			JA4HHash:   "ge11nn11ruru_365e380d999b_000000000000_000000000000",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.TLSFromProxy || !s.UserAgentIsBrowser || !s.JA4HZeroedCookieHashes {
+		t.Error("Setup: from proxy, browser UA, no cookies, zeroed C/D")
+	}
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
+		t.Errorf("HTTP→HTTP proxy must NOT get ja4h-no-cookies (no client TLS; cookies rare), got %s", s.ScoreBreakdown)
+	}
+}
+
 func TestCalculateScores_FromProxy_H2UAInconsistent_Skipped(t *testing.T) {
 	// From proxy: H2 fingerprint may omit SETTINGS (e.g. id 5 MAX_FRAME_SIZE) so isH2LibraryLike can be true for real Chrome.
 	// We must NOT add h2-ua-inconsistent when from proxy.
@@ -1152,8 +1181,9 @@ func TestExtractSignals_JA4H_NonZeroedCookieHashes(t *testing.T) {
 }
 
 func TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty(t *testing.T) {
+	// Proxy forwarded client TLS (ALPN) + no cookies + zeroed C/D → ja4h-no-cookies(+3)
 	fp := fingerprint.Fingerprint{
-		TLS: fingerprint.TLSFingerprint{FromProxy: true, SSLGreased: "1", Version: "TLS 1.3"},
+		TLS: fingerprint.TLSFingerprint{FromProxy: true, SSLGreased: "1", Version: "TLS 1.3", ALPN: "h2"},
 		HTTP: fingerprint.HTTPFingerprint{
 			UserAgent:    "Mozilla/5.0 Chrome/142.0.0.0 Safari/537.36",
 			Accept:       "text/html",
@@ -1168,7 +1198,7 @@ func TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty(t *testing.T) {
 	}
 	s := fingerprint.ExtractSignals(fp)
 	if !strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
-		t.Errorf("Browser UA + no cookies + zeroed C/D should get ja4h-no-cookies(+3), got %s", s.ScoreBreakdown)
+		t.Errorf("Browser UA + no cookies + zeroed C/D (proxy with client TLS) should get ja4h-no-cookies(+3), got %s", s.ScoreBreakdown)
 	}
 	// With cookies present, no penalty
 	fp.HTTP.HasCookies = true

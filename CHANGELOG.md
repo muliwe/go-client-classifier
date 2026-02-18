@@ -35,13 +35,17 @@ Improves separation of real browsers from curl (or similar) when requests arrive
 **New bot signal (stronger detection of spoofed headers):**
 - **ua-browser-no-grease**: When TLS is from proxy, User-Agent looks like a browser, and X-FP-SSL-GREASED is empty, +3 bot. Real browsers send GREASE; curl and many HTTP libraries do not.
 
+**HTTP→HTTP proxy (fewer false bots):** When the request arrives via HTTP→HTTP proxy (TLS from proxy but no client TLS forwarded: ALPN, JA3, cipher all empty), two bot penalties are now skipped so normal browsers are not classified as bot:
+- **ua-browser-no-grease**: Applied only when the proxy actually forwarded client TLS (ALPN or JA3 or cipher non-empty). For HTTP→HTTP we never see client GREASE, so the penalty is skipped.
+- **ja4h-no-cookies**: Skipped when TLS is from proxy and no client TLS was forwarded. No cookies on first request or over HTTP is common; the +3 bot penalty is reserved for the HTTPS path where we have other signals (e.g. TLS vs UA).
+
 **Strengthened bot signals (smoking guns):** Several high-confidence bot indicators now carry stronger weight so automation is classified more reliably: **ua-browser-no-grease** +3, **tls-ua-inconsistent** +3 (browser UA + library TLS or bot UA + browser TLS), **no-ua** +3 (missing User-Agent), **missing-typical** +2 (no Sec-Fetch and missing Accept or Accept-Encoding). **header-order-late** was +2 but is now disabled (0 points) because vanilla nginx does not preserve header order. See METHODOLOGY Appendix I and H.
 
 **Weighted bot score (classification):**
 - **net_score = browser_score − 4×bot_score** (constant `BotScoreWeight = 4` in classifier). A few bot points now strongly reduce net so that curl with spoofed headers is classified as bot; real browser with 1–2 bot points stays browser. Default threshold was 8; see subsection *Spoofable signals and header-order* for reduction to 4. See [Scoring Algorithm](docs/METHODOLOGY.md#scoring-algorithm).
 
 **Tests:**
-- `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped`, `TestCalculateScores_FromProxy_H2UAInconsistent_Skipped`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`.
+- `TestCalculateScores_FromProxy_NoSession_NoPenalty`, `TestCalculateScores_FromProxy_JA4HVersion_Consistent`, `TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped`, `TestCalculateScores_FromProxy_H2UAInconsistent_Skipped`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_BotPenalty`, `TestCalculateScores_BrowserUA_NoGrease_FromProxy_HTTPToHTTP_NoPenalty`, `TestCalculateScores_JA4HNoCookies_HTTPToHTTP_NoPenalty`.
 - `TestIsBrowserLikeH2InitialWindow`: 6291456 browser-like, 10485760 not browser-like.
 - `TestIsKnownLibraryTLS`: curl JA3 `0149f47eabf9a20d0893e2a44e5a6323` in known-library set.
 
@@ -51,7 +55,7 @@ Improves separation of real browsers from impersonators (e.g. curl_cffi, curl-im
 
 **New signals:**
 - **BrowserLikeHeaderOrder**: Accept and Accept-Language in the first 8 positions of `HeaderOrder` → +1 browser (`header-order`). Browser UA but Accept or Accept-Language at index ≥ 10 → +2 bot (`header-order-late`) to separate impersonators.
-- **JA4HZeroedCookieHashes**: JA4H parts C and D are `000000000000`. When User-Agent is browser-like and request has no Cookie header → **+3 bot** (`ja4h-no-cookies`). Strong (smoking-gun) signal for automation; applied for proxy path as well.
+- **JA4HZeroedCookieHashes**: JA4H parts C and D are `000000000000`. When User-Agent is browser-like and request has no Cookie header → **+3 bot** (`ja4h-no-cookies`). Strong (smoking-gun) signal for automation; applied when TLS is direct or proxy forwarded client TLS; skipped for HTTP→HTTP proxy (see above).
 - **SecChUAModernOrder**: First brand in Sec-CH-UA is `Not:A-Brand` or `Not_A Brand` (Chrome 109+) → +1 browser (`sec-ch-ua-modern`). No bot penalty for Chromium-first to avoid false positives on older browsers.
 - **HasCacheControl**: Request has Cache-Control header (e.g. `max-age=0` on document navigation) → +1 browser (`cache-control`). Real Chrome often sends it; curl_cffi often omits. No bot penalty when absent.
 - **AcceptLangRich**: Accept-Language has ≥3 comma-separated locales or length &gt; 40 → +1 browser (`accept-lang-rich`). Real browsers often send multiple locales; automation often short/single locale. No bot penalty for short value.

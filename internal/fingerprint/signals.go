@@ -566,8 +566,13 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		}
 	}
 
+	// When TLS is from proxy but no client TLS was forwarded (HTTP→HTTP), we skip cookie/grease bot penalties.
+	proxyHasClientTLS := fp.TLS.ALPN != "" || fp.TLS.JA3Hash != "" || fp.TLS.CipherSuite != ""
+
 	// JA4H zeroed C/D with browser UA and no cookies: smoking gun for automation (e.g. curl_cffi). Strong penalty.
-	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !fp.HTTP.HasCookies && s.JA4HZeroedCookieHashes {
+	// Skip when HTTP→HTTP proxy: no client TLS visible; no cookies on first request or over HTTP is normal.
+	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !fp.HTTP.HasCookies && s.JA4HZeroedCookieHashes &&
+		!(fp.TLS.FromProxy && !proxyHasClientTLS) {
 		botScore += 3
 		botReasons = append(botReasons, "ja4h-no-cookies(+3)")
 	}
@@ -595,8 +600,7 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	}
 
 	// Browser UA but no GREASE when TLS from proxy: real browsers send GREASE; curl/libraries typically do not. Smoking gun.
-	// Only apply when proxy actually forwarded client TLS (ALPN, JA3, or cipher). For HTTP→HTTP proxy, client did no TLS to us, so no GREASE is expected — do not penalize.
-	proxyHasClientTLS := fp.TLS.ALPN != "" || fp.TLS.JA3Hash != "" || fp.TLS.CipherSuite != ""
+	// Only apply when proxy actually forwarded client TLS. For HTTP→HTTP proxy, no GREASE is expected — do not penalize.
 	if s.TLSFromProxy && proxyHasClientTLS && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased {
 		botScore += 3
 		botReasons = append(botReasons, "ua-browser-no-grease(+3)")

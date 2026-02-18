@@ -1693,7 +1693,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 **Computation**: In `extractJA4HSignals`, after splitting JA4H by `_`, we set the signal when `len(parts) >= 4` and `parts[2] == "000000000000"` and `parts[3] == "000000000000"`.
 
-**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add **+3 bot** (`ja4h-no-cookies(+3)`). This is a strong (smoking-gun) signal for automation that mimics browser but sends no cookies; applied even when TLS is from proxy.
+**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add **+3 bot** (`ja4h-no-cookies(+3)`). This is a strong (smoking-gun) signal for automation that mimics browser but sends no cookies. **Skipped for HTTP→HTTP proxy** (TLS from proxy but no ALPN/JA3/cipher): no client TLS is visible and no cookies on first request or over HTTP is common, so we do not penalize.
 
 **References**: [2] FoxIO JA4+ Network Fingerprinting, JA4H technical details (https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md).
 
@@ -1733,7 +1733,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 |--------|-----------|--------|--------|
 | `header-order` | Accept and Accept-Language in first 8 positions of HeaderOrder | +1 browser | JA4H header structure; WebDecoy/ThreatRelay; internal payload comparison |
 | `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 12 | +2 bot | Same |
-| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +3 bot | [2] FoxIO JA4H; smoking-gun for automation |
+| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +3 bot; skipped for HTTP→HTTP proxy (no client TLS) | [2] FoxIO JA4H; smoking-gun for automation |
 | `sec-ch-ua-modern` | First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand | +1 browser | Chrome 109+ Client Hints; no bot penalty for Chromium-first |
 
 ### Risks and mitigations
