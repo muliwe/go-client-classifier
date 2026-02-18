@@ -6,16 +6,17 @@ import "net/http"
 // and fingerprint data is forwarded to the Go backend. Only used when
 // X-Internal-Proxy is "1" (trusted proxy marker).
 const (
-	HeaderInternalProxy = "X-Internal-Proxy"
-	HeaderFPTLSVersion  = "X-FP-TLS-Version"
-	HeaderFPTLSCipher   = "X-FP-TLS-Cipher"
-	HeaderFPTLSALPN     = "X-FP-TLS-ALPN"
-	HeaderFPTLSSNI      = "X-FP-TLS-SNI"
-	HeaderFPJA3         = "X-FP-JA3"
-	HeaderFPJA3Hash     = "X-FP-JA3-HASH"
-	HeaderFPH2          = "X-FP-H2"
-	HeaderFPSSLGreased  = "X-FP-SSL-GREASED"
-	HeaderFPJA4         = "X-FP-JA4"
+	HeaderInternalProxy       = "X-Internal-Proxy"
+	HeaderFPTLSVersion        = "X-FP-TLS-Version"
+	HeaderFPTLSCipher         = "X-FP-TLS-Cipher"
+	HeaderFPTLSALPN           = "X-FP-TLS-ALPN"
+	HeaderFPTLSSNI            = "X-FP-TLS-SNI"
+	HeaderFPJA3               = "X-FP-JA3"
+	HeaderFPJA3Hash           = "X-FP-JA3-HASH"
+	HeaderFPH2                = "X-FP-H2"
+	HeaderFPSSLGreased        = "X-FP-SSL-GREASED"
+	HeaderFPJA4               = "X-FP-JA4"
+	HeaderOriginalHeaderOrder = "X-Original-Header-Order"
 )
 
 // ProxyHeaderNames lists all X-FP-* header names captured for logging (ML and post-hoc analysis).

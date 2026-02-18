@@ -1677,11 +1677,11 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 #### BrowserLikeHeaderOrder
 
-**Definition**: Accept and Accept-Language appear in the first N positions of the request header order (as received by the backend). We use N=8 so that 1–2 proxy-added headers (e.g. x-fp-h2, x-forwarded-for) do not disqualify real browsers.
+**Definition**: Accept and Accept-Language appear in the first N positions of the request header order (as received by the backend). We use **N=12** so that real Chrome and similar browsers pass: observed Chrome order (e.g. [fingerprints.bablosoft.com](https://fingerprints.bablosoft.com/headersorder)) has host, connection, pragma, cache-control, sec-ch-ua*, user-agent, **accept-language (9)**, **accept (10)**, sec-fetch-*, accept-encoding. Firefox and Safari differ but typically send Accept/Accept-Language in the first dozen positions; libraries often put them much later.
 
-**Computation**: From `fingerprint.http.header_order` (lowercase), we take the first index of `"accept"` and `"accept-language"`. If both are present and both indices are &lt; 8, the signal is true.
+**Computation**: From `fingerprint.http.header_order` (lowercase), we take the first index of `"accept"` and `"accept-language"`. If both are present and both indices are &lt; 12 (`browserLikeHeaderOrderMaxIdx`), the signal is true. When order is from proxy (X-Original-Header-Order) and not browser-like, we check if either index ≥ 12 (`headerOrderLateMinIdx`) for the late penalty.
 
-**Scoring**: +1 browser (`header-order(+1)`). When User-Agent is browser-like but the order is not browser-like (either index ≥ 10), we add +2 bot (`header-order-late(+2)`) to separate impersonators (strong signal).
+**Scoring**: +1 browser (`header-order(+1)`) only when `header_order_from_proxy` is true. When User-Agent is browser-like but the order is not browser-like (either index ≥ 12), we add +2 bot (`header-order-late(+2)`) to separate impersonators (only when order from proxy).
 
 **Dependency**: Header order must be preserved from client to backend (e.g. Go 1.22+ or proxy passing order through).
 
@@ -1732,13 +1732,13 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 | Signal | Condition | Effect | Source |
 |--------|-----------|--------|--------|
 | `header-order` | Accept and Accept-Language in first 8 positions of HeaderOrder | +1 browser | JA4H header structure; WebDecoy/ThreatRelay; internal payload comparison |
-| `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 10 | +2 bot | Same |
+| `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 12 | +2 bot | Same |
 | `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +3 bot | [2] FoxIO JA4H; smoking-gun for automation |
 | `sec-ch-ua-modern` | First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand | +1 browser | Chrome 109+ Client Hints; no bot penalty for Chromium-first |
 
 ### Risks and mitigations
 
-- **Header order altered by proxy**: If a proxy or CDN reorders headers, a real browser may lose the browser-like order. We use a threshold of 8 and do not rely on header order alone; we only add a bot point for “late” order when both Accept and Accept-Language are present and at least one is at index ≥ 10.
+- **Header order altered by proxy**: If a proxy or CDN reorders headers, a real browser may lose the browser-like order. We use a N=12 (see Appendix I) and do not rely on header order alone; we only add a bot point for “late” order when both Accept and Accept-Language are present and at least one is at index ≥ 12 (only when order from X-Original-Header-Order).
 - **Real users without cookies**: Incognito or first visit can yield zeroed JA4H C/D and no Cookie header. We add the +3 bot penalty only when User-Agent is browser-like; a typical real browser with cookies and browser-like order still classifies as browser; first-visit/incognito may need other browser signals to outweigh the penalty.
 - **Older browsers**: Browsers that do not send Not:A-Brand first simply do not get the sec-ch-ua-modern bonus; we do not penalize them.
 

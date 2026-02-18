@@ -956,9 +956,67 @@ func TestExtractSignals_HeaderOrder_BrowserLike(t *testing.T) {
 	if !s.BrowserLikeHeaderOrder {
 		t.Error("Accept and accept-language in first 8 positions should set BrowserLikeHeaderOrder true")
 	}
-	// header-order gives 0 points (easily spoofable / order lost behind nginx); signal still computed
+	// Without HeaderOrderFromProxy we don't give header-order points (order may be from nginx)
 	if strings.Contains(s.ScoreBreakdown, "header-order(+1)") {
-		t.Errorf("header-order is disabled for scoring; breakdown should not contain header-order(+1), got %s", s.ScoreBreakdown)
+		t.Errorf("without HeaderOrderFromProxy breakdown should not contain header-order(+1), got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_HeaderOrder_FromProxy_BrowserLike_GetsPoint(t *testing.T) {
+	// When order came from X-Original-Header-Order (nginx Lua), we give +1 for browser-like order
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder:          []string{"x-fp-h2", "accept", "accept-language", "user-agent"},
+			HeaderOrderFromProxy: true,
+			HeaderCount:          4,
+			UserAgent:            "Mozilla/5.0 Chrome/120.0.0.0",
+			Accept:               "text/html",
+			AcceptLang:           "en-US,en;q=0.9",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !strings.Contains(s.ScoreBreakdown, "header-order(+1)") {
+		t.Errorf("with HeaderOrderFromProxy and browser-like order should get header-order(+1), got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_HeaderOrder_ChromeLike_FromProxy_BrowserLike_NoLate(t *testing.T) {
+	// Real Chrome order (e.g. bablosoft): accept-language ~9, accept ~10; both < 12 → browser-like, no header-order-late
+	order := make([]string, 16)
+	for i := range order {
+		order[i] = "x"
+	}
+	order[0] = "host"
+	order[1] = "connection"
+	order[2] = "pragma"
+	order[3] = "cache-control"
+	order[4] = "sec-ch-ua"
+	order[5] = "sec-ch-ua-mobile"
+	order[6] = "sec-ch-ua-platform"
+	order[7] = "upgrade-insecure-requests"
+	order[8] = "user-agent"
+	order[9] = "accept-language"
+	order[10] = "accept"
+	order[11] = "sec-fetch-site"
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder:          order,
+			HeaderOrderFromProxy: true,
+			HeaderCount:          len(order),
+			UserAgent:            "Mozilla/5.0 Chrome/138.0.0.0 Safari/537.36",
+			Accept:               "text/html",
+			AcceptLang:           "en-US,en;q=0.9",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.BrowserLikeHeaderOrder {
+		t.Error("Chrome-like order (accept 10, accept-language 9) should be browser-like with threshold 12")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "header-order(+1)") {
+		t.Errorf("Chrome-like order from proxy should get header-order(+1), got %s", s.ScoreBreakdown)
+	}
+	if strings.Contains(s.ScoreBreakdown, "header-order-late") {
+		t.Errorf("Chrome-like order should NOT get header-order-late, got %s", s.ScoreBreakdown)
 	}
 }
 
@@ -988,9 +1046,38 @@ func TestExtractSignals_HeaderOrder_NotBrowserLike(t *testing.T) {
 	if s.BrowserLikeHeaderOrder {
 		t.Error("Accept or accept-language at index >= 8 should set BrowserLikeHeaderOrder false")
 	}
-	// header-order-late is disabled: order is not preserved through vanilla nginx, so we do not penalize late order.
+	// Without HeaderOrderFromProxy we don't apply header-order-late (order may be from nginx)
 	if strings.Contains(s.ScoreBreakdown, "header-order-late") {
-		t.Errorf("header-order-late is disabled; breakdown should not contain it, got %s", s.ScoreBreakdown)
+		t.Errorf("without HeaderOrderFromProxy breakdown should not contain header-order-late, got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_HeaderOrder_FromProxy_Late_GetsBotPoint(t *testing.T) {
+	// When order from proxy and late → header-order-late(+2)
+	order := make([]string, 30)
+	for i := range order {
+		order[i] = "x"
+	}
+	order[10] = "accept"
+	order[24] = "accept-language"
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{FromProxy: true},
+		HTTP: fingerprint.HTTPFingerprint{
+			HeaderOrder:          order,
+			HeaderOrderFromProxy: true,
+			HeaderCount:          30,
+			UserAgent:            "Mozilla/5.0 Chrome/142.0.0.0 Safari/537.36",
+			Accept:               "text/html",
+			AcceptLang:           "en-US,en;q=0.9",
+			SecFetchSite:         "none",
+			SecFetchMode:         "navigate",
+			SecFetchDest:         "document",
+			JA4HHash:             "ge11nn25enus_fc343ccb8320_000000000000_000000000000",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !strings.Contains(s.ScoreBreakdown, "header-order-late(+2)") {
+		t.Errorf("with HeaderOrderFromProxy and late order should get header-order-late(+2), got %s", s.ScoreBreakdown)
 	}
 }
 

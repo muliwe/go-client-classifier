@@ -308,12 +308,29 @@ func (c *Collector) collectHTTP(r *http.Request) HTTPFingerprint {
 		HeaderCount: len(r.Header),
 	}
 
-	// Collect headers in order (Go 1.21+ preserves order)
+	// Populate fp.Headers from request
 	for key, values := range r.Header {
 		lowerKey := strings.ToLower(key)
-		fp.HeaderOrder = append(fp.HeaderOrder, lowerKey)
 		if len(values) > 0 {
 			fp.Headers[lowerKey] = values[0]
+		}
+	}
+	// Header order: when from trusted proxy, use X-Original-Header-Order (set by nginx Lua) so we use
+	// the client's real order instead of nginx's reordered headers
+	if IsTrustedProxy(r) {
+		if raw := r.Header.Get(HeaderOriginalHeaderOrder); raw != "" {
+			for _, name := range strings.Split(raw, ":") {
+				name = strings.TrimSpace(strings.ToLower(name))
+				if name != "" {
+					fp.HeaderOrder = append(fp.HeaderOrder, name)
+				}
+			}
+			fp.HeaderOrderFromProxy = true
+		}
+	}
+	if len(fp.HeaderOrder) == 0 {
+		for key := range r.Header {
+			fp.HeaderOrder = append(fp.HeaderOrder, strings.ToLower(key))
 		}
 	}
 

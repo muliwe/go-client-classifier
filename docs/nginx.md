@@ -244,6 +244,22 @@ server {
     ssl_prefer_server_ciphers off;
 
     location / {
+        access_by_lua_block {
+            local raw = ngx.req.raw_header(true)
+            if raw and raw ~= "" then
+                local names = {}
+                for line in (raw .. "\n"):gmatch("(.-)\r?\n") do
+                    local name = line:match("^([^:]+):")
+                    if name then
+                        name = name:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+                        if name ~= "" then names[#names + 1] = name end
+                    end
+                end
+                if #names > 0 then
+                    ngx.req.set_header("X-Original-Header-Order", table.concat(names, ":"))
+                end
+            end
+        }
         proxy_pass http://127.0.0.1:8080;
 
         proxy_set_header Host $host;
@@ -292,6 +308,66 @@ sudo apt install nginx-full
 Confirm with `nginx -V 2>&1` that the binary has stream support, then `sudo nginx -t && sudo nginx -s reload`.
 
 **Important:** Stream config must **not** be in `sites-available` or `sites-enabled` — those are included inside `http { }`, so nginx would parse it as HTTP and fail with `"proxy_pass" directive is not allowed here`. Use a separate path and include it only from a top-level `stream { }` block.
+
+### Optional: HTTP Lua module (header order)
+
+Vanilla nginx does not preserve original HTTP header order when proxying. To pass it to the backend (e.g. for fingerprinting), you need the Lua module (or OpenResty).
+
+**Install (when available):**
+
+```bash
+sudo apt install libnginx-mod-http-lua
+```
+
+The package installs the module under `/usr/lib/nginx/modules/`. Check the exact `.so` name:
+
+```bash
+dpkg -L libnginx-mod-http-lua | grep '\.so$'
+```
+
+**Note:** On Ubuntu 20.04 and later, `libnginx-mod-http-lua` was removed from the repositories. Use **OpenResty** instead: [openresty.org/en/linux-packages.html](https://openresty.org/en/linux-packages.html). OpenResty includes the Lua module and provides `ngx.req.raw_header()` to read headers in order; in the config you load the module the same way (OpenResty’s nginx is built with Lua, so no separate `load_module` is needed when using the OpenResty binary).
+
+**Load the module** at the very top of `nginx.conf` (before `events { }` and `http { }`). On Debian/Ubuntu the package may drop a snippet in `/etc/nginx/modules-enabled/` that already contains `load_module`; then `nginx.conf` should include it at top level, e.g. `include /etc/nginx/modules-enabled/*.conf;`. Otherwise add explicitly:
+
+```nginx
+load_module /usr/lib/nginx/modules/mod-http-lua.so;
+```
+
+Use the actual `.so` filename from `dpkg -L libnginx-mod-http-lua | grep '\.so$'` (e.g. `mod-http-lua.so` on Debian).
+
+**Recipe: set `X-Original-Header-Order` before `proxy_pass`**
+
+In the `location` block that proxies to your backend, add `access_by_lua_block` **before** `proxy_pass`. The Lua code reads the raw request headers (in order), collects header names, and sets a single header the backend can use (e.g. for fingerprinting). `ngx.req.raw_header()` does not work for HTTP/2.
+
+```nginx
+location / {
+    access_by_lua_block {
+        local raw = ngx.req.raw_header(true)
+        if raw and raw ~= "" then
+            local names = {}
+            for line in (raw .. "\n"):gmatch("(.-)\r?\n") do
+                local name = line:match("^([^:]+):")
+                if name then
+                    name = name:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+                    if name ~= "" then
+                        names[#names + 1] = name
+                    end
+                end
+            end
+            if #names > 0 then
+                ngx.req.set_header("X-Original-Header-Order", table.concat(names, ":"))
+            end
+        end
+    }
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # ... rest of proxy_set_header (X-FP-*, etc.)
+}
+```
+
+Backend: read `X-Original-Header-Order` (e.g. `host:user-agent:accept:accept-language:...`) and use it for header-order checks. Our classifier currently gives **0 points** for header-order when behind vanilla nginx; if you pass order via this header, you could use it in your own logic or a future classifier option (see CHANGELOG and METHODOLOGY Appendix I). The same recipe is in [docs/nginx_prod.md](nginx_prod.md) for a production-style config.
 
 **1. Create the stream config** in a path that is **not** under `sites-enabled`, for example:
 
@@ -392,6 +468,22 @@ server {
     listen 80;
     server_name your.domain.tld;
     location / {
+        access_by_lua_block {
+            local raw = ngx.req.raw_header(true)
+            if raw and raw ~= "" then
+                local names = {}
+                for line in (raw .. "\n"):gmatch("(.-)\r?\n") do
+                    local name = line:match("^([^:]+):")
+                    if name then
+                        name = name:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+                        if name ~= "" then names[#names + 1] = name end
+                    end
+                end
+                if #names > 0 then
+                    ngx.req.set_header("X-Original-Header-Order", table.concat(names, ":"))
+                end
+            end
+        }
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -170,6 +170,46 @@ func TestCollect_TrustedProxy_JA3RawHashedWhenNotMD5(t *testing.T) {
 	}
 }
 
+func TestCollect_TrustedProxy_UsesOriginalHeaderOrder(t *testing.T) {
+	req := mustRequest("GET", "https://example.com/", nil)
+	req.Header.Set("X-Internal-Proxy", "1")
+	req.Header.Set("X-Original-Header-Order", "host:user-agent:accept:accept-language:sec-fetch-site")
+	req.Header.Set("Host", "example.com")
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Accept", "text/html")
+
+	c := fingerprint.NewCollector()
+	fp := c.Collect(req)
+
+	want := []string{"host", "user-agent", "accept", "accept-language", "sec-fetch-site"}
+	if len(fp.HTTP.HeaderOrder) != len(want) {
+		t.Errorf("HeaderOrder len = %d, want %d", len(fp.HTTP.HeaderOrder), len(want))
+	}
+	for i, name := range want {
+		if i >= len(fp.HTTP.HeaderOrder) || fp.HTTP.HeaderOrder[i] != name {
+			t.Errorf("HeaderOrder[%d] = %v, want %q", i, fp.HTTP.HeaderOrder, name)
+			break
+		}
+	}
+}
+
+func TestCollect_NoProxy_IgnoresOriginalHeaderOrder(t *testing.T) {
+	req := mustRequest("GET", "https://example.com/", nil)
+	req.Header.Set("X-Original-Header-Order", "host:user-agent:accept")
+	// No X-Internal-Proxy
+
+	c := fingerprint.NewCollector()
+	fp := c.Collect(req)
+
+	// Order should come from Go's r.Header iteration, not from the header (we don't trust it)
+	if len(fp.HTTP.HeaderOrder) != 1 {
+		t.Errorf("HeaderOrder should have one entry (x-original-header-order), got %d", len(fp.HTTP.HeaderOrder))
+	}
+	if len(fp.HTTP.HeaderOrder) > 0 && fp.HTTP.HeaderOrder[0] != "x-original-header-order" {
+		t.Errorf("HeaderOrder = %v (expected Go order, not parsed from header)", fp.HTTP.HeaderOrder)
+	}
+}
+
 func mustRequest(method, url string, body interface{}) *http.Request {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {

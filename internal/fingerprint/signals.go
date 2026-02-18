@@ -2,6 +2,12 @@ package fingerprint
 
 import "strings"
 
+// Header-order thresholds from real browser observations (e.g. Chrome: accept-language ~9, accept ~10; bablosoft, JA4H).
+const (
+	browserLikeHeaderOrderMaxIdx = 12 // Accept and Accept-Language both before this index → browser-like
+	headerOrderLateMinIdx        = 12 // Either at or after this index → "late" (impersonator signal)
+)
+
 // Known bot User-Agent patterns
 var botPatterns = []string{
 	// HTTP libraries
@@ -170,8 +176,8 @@ func ExtractSignals(fp Fingerprint) Signals {
 		extractJA4HSignals(&s, fp.HTTP.JA4HHash, fp)
 	}
 
-	// Header order: Accept and Accept-Language in first N positions (browser-like). Threshold 8 allows 1-2 proxy headers first.
-	s.BrowserLikeHeaderOrder = isBrowserLikeHeaderOrder(fp.HTTP.HeaderOrder, 8)
+	// Header order: Accept and Accept-Language in first N positions (browser-like). See browserLikeHeaderOrderMaxIdx.
+	s.BrowserLikeHeaderOrder = isBrowserLikeHeaderOrder(fp.HTTP.HeaderOrder, browserLikeHeaderOrderMaxIdx)
 
 	// Sec-CH-UA: Chrome 109+ sends Not:A-Brand or Not_A Brand first; automation often sends Chromium first.
 	s.SecChUAModernOrder = isSecChUAModernOrder(fp.HTTP.SecChUA)
@@ -371,8 +377,11 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		browserReasons = append(browserReasons, "sec-ch-ua(+1)")
 	}
 
-	// Browser-like header order — disabled as signal (order not preserved through nginx); no browser points
-	_ = s.BrowserLikeHeaderOrder
+	// Browser-like header order: +1 only when order came from proxy (X-Original-Header-Order), else 0 (nginx reorders)
+	if fp.HTTP.HeaderOrderFromProxy && s.BrowserLikeHeaderOrder {
+		browserScore++
+		browserReasons = append(browserReasons, "header-order(+1)")
+	}
 
 	// Sec-CH-UA modern order — easily spoofable; no browser points
 	_ = s.SecChUAModernOrder
@@ -563,11 +572,13 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "ja4h-no-cookies(+3)")
 	}
 
-	// Browser UA but header order not browser-like (Accept or Accept-Language late).
-	// Disabled: 0 points — header order is not preserved when proxying through vanilla nginx.
-	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.BrowserLikeHeaderOrder && s.HasAcceptLanguage && s.HasAccept {
+	// Browser UA but header order not browser-like (Accept or Accept-Language late). Only when order from proxy (X-Original-Header-Order).
+	if fp.HTTP.HeaderOrderFromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.BrowserLikeHeaderOrder && s.HasAcceptLanguage && s.HasAccept {
 		idxAccept, idxLang := indexOfHeader(fp.HTTP.HeaderOrder, "accept"), indexOfHeader(fp.HTTP.HeaderOrder, "accept-language")
-		_ = idxAccept >= 10 || idxLang >= 10 // header-order-late disabled: 0 points (proxy reorders headers)
+		if idxAccept >= headerOrderLateMinIdx || idxLang >= headerOrderLateMinIdx {
+			botScore += 2
+			botReasons = append(botReasons, "header-order-late(+2)")
+		}
 	}
 
 	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like.

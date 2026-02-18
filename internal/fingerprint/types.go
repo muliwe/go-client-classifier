@@ -32,29 +32,30 @@ type TLSFingerprint struct {
 
 // HTTPFingerprint contains HTTP-level signals
 type HTTPFingerprint struct {
-	Version       string               `json:"version"`                  // HTTP version (HTTP/1.1, HTTP/2)
-	Method        string               `json:"method"`                   // Request method
-	Path          string               `json:"path"`                     // Request path
-	Headers       map[string]string    `json:"headers"`                  // All headers (lowercased keys)
-	HeaderOrder   []string             `json:"header_order"`             // Order of headers as received
-	HeaderCount   int                  `json:"header_count"`             // Total header count
-	UserAgent     string               `json:"user_agent"`               // User-Agent header
-	Accept        string               `json:"accept"`                   // Accept header
-	AcceptLang    string               `json:"accept_lang"`              // Accept-Language header
-	AcceptEnc     string               `json:"accept_enc"`               // Accept-Encoding header
-	Connection    string               `json:"connection"`               // Connection header
-	SecFetchSite  string               `json:"sec_fetch_site"`           // Sec-Fetch-Site header
-	SecFetchMode  string               `json:"sec_fetch_mode"`           // Sec-Fetch-Mode header
-	SecFetchDest  string               `json:"sec_fetch_dest"`           // Sec-Fetch-Dest header
-	SecFetchUser  string               `json:"sec_fetch_user"`           // Sec-Fetch-User header
-	SecChUA       string               `json:"sec_ch_ua"`                // Sec-CH-UA header
-	HasCookies    bool                 `json:"has_cookies"`              // Has Cookie header
-	HasReferer    bool                 `json:"has_referer"`              // Has Referer header
-	ContentType   string               `json:"content_type"`             // Content-Type header
-	ContentLength int64                `json:"content_length"`           // Content-Length value
-	JA4HHash      string               `json:"ja4h_hash,omitempty"`      // JA4H HTTP fingerprint hash
-	H2Fingerprint string               `json:"h2_fingerprint,omitempty"` // HTTP/2 fingerprint (e.g. from nginx X-FP-H2)
-	H2Parsed      *H2FingerprintParsed `json:"h2_parsed,omitempty"`      // Parsed H2 fingerprint (SETTINGS, window, priority)
+	Version              string               `json:"version"`                  // HTTP version (HTTP/1.1, HTTP/2)
+	Method               string               `json:"method"`                   // Request method
+	Path                 string               `json:"path"`                     // Request path
+	Headers              map[string]string    `json:"headers"`                  // All headers (lowercased keys)
+	HeaderOrder          []string             `json:"header_order"`             // Order of headers as received
+	HeaderOrderFromProxy bool                 `json:"header_order_from_proxy"`  // True when order came from X-Original-Header-Order (nginx Lua)
+	HeaderCount          int                  `json:"header_count"`             // Total header count
+	UserAgent            string               `json:"user_agent"`               // User-Agent header
+	Accept               string               `json:"accept"`                   // Accept header
+	AcceptLang           string               `json:"accept_lang"`              // Accept-Language header
+	AcceptEnc            string               `json:"accept_enc"`               // Accept-Encoding header
+	Connection           string               `json:"connection"`               // Connection header
+	SecFetchSite         string               `json:"sec_fetch_site"`           // Sec-Fetch-Site header
+	SecFetchMode         string               `json:"sec_fetch_mode"`           // Sec-Fetch-Mode header
+	SecFetchDest         string               `json:"sec_fetch_dest"`           // Sec-Fetch-Dest header
+	SecFetchUser         string               `json:"sec_fetch_user"`           // Sec-Fetch-User header
+	SecChUA              string               `json:"sec_ch_ua"`                // Sec-CH-UA header
+	HasCookies           bool                 `json:"has_cookies"`              // Has Cookie header
+	HasReferer           bool                 `json:"has_referer"`              // Has Referer header
+	ContentType          string               `json:"content_type"`             // Content-Type header
+	ContentLength        int64                `json:"content_length"`           // Content-Length value
+	JA4HHash             string               `json:"ja4h_hash,omitempty"`      // JA4H HTTP fingerprint hash
+	H2Fingerprint        string               `json:"h2_fingerprint,omitempty"` // HTTP/2 fingerprint (e.g. from nginx X-FP-H2)
+	H2Parsed             *H2FingerprintParsed `json:"h2_parsed,omitempty"`      // Parsed H2 fingerprint (SETTINGS, window, priority)
 }
 
 // Signals contains extracted classification signals
