@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## v0.7.0 (2026-02-18)
+## v0.7.0 (2026-02-19)
 
 ### Permissive TLS and smoking-gun signals (obsolete TLS, exotic ALPN)
 
