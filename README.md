@@ -17,12 +17,12 @@ Academic research project for classifying automated HTTP clients (bots, LLMs, cr
 
 | Endpoint | RPS | RPM | Latency avg |
 |----------|-----|-----|-------------|
-| GET / (classify) | **~1,017** | ~61K | ~49.2 ms |
-| GET /health | ~1,073 | ~64K | ~46.7 ms |
+| GET / (classify) | **~2,640** | ~158K | ~18.9 ms |
+| GET /health | ~4,242 | ~255K | ~11.8 ms |
 
-**Summary:** On localhost the server sustains `~8–11K RPS` with **sub-6 ms** latency.  
-Over the network behind nginx/TLS it reaches `~1K RPS` with **~50 ms** latency.  
-Pure classification latency (classify vs health over the network) is **~2–2.5 ms** — the rest is transport.
+**Summary:** On localhost the server sustains **8–11K RPS** with **sub-6 ms** latency.  
+Over the network behind nginx/TLS it reaches **~2.6K RPS** (classify) / **~4.2K RPS** (health) with **~12–19 ms** latency.  
+Pure classification overhead (classify vs health over the network) is **~7 ms** — the rest is transport.
 
 ## Project Goal
 
