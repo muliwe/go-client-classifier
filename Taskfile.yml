@@ -48,14 +48,14 @@ tasks:
       - go build -ldflags="-s -w" -o bin/server ./cmd/server
 
   test:
-    desc: Run all tests
+    desc: Run all tests (internal, tests, tools, and any other packages)
     cmds:
-      - go test ./internal/... ./tests/... -v
+      - go test ./... -v
 
   test:short:
     desc: Run tests (short mode)
     cmds:
-      - go test ./internal/... ./tests/... -short
+      - go test ./... -short
 
   lint:
     desc: Run golangci-lint
@@ -97,18 +97,18 @@ tasks:
           {{if eq OS "windows"}}powershell -ExecutionPolicy Bypass -File ./tools/shell/integration_test.ps1 {{.BASE_URL}} -SkipCertCheck{{else}}./tools/shell/integration_test.sh {{.BASE_URL}} --insecure{{end}}
 
   bench:
-    desc: Run HTTP benchmark against server (HTTP mode)
+    desc: Run HTTP benchmark (pass URL to test different routes, e.g. URL=http://localhost:8080/path or task bench -- http://localhost:8080/path)
     vars:
-      URL: '{{.URL | default "http://localhost:8080/"}}'
+      URL: '{{or .URL .CLI_ARGS "http://localhost:8080/"}}'
       DURATION: '{{.DURATION | default "10s"}}'
       CONCURRENCY: '{{.CONCURRENCY | default "10"}}'
     cmds:
       - go run ./tools/benchmark -url={{.URL}} -duration={{.DURATION}} -c={{.CONCURRENCY}}
 
   bench:tls:
-    desc: Run HTTP benchmark against HTTPS server
+    desc: Run HTTP benchmark over HTTPS (pass URL to test different routes, e.g. URL=https://localhost:8443/path or task bench:tls -- https://localhost:8443/path)
     vars:
-      URL: '{{.URL | default "https://localhost:8443/"}}'
+      URL: '{{or .URL .CLI_ARGS "https://localhost:8443/"}}'
       DURATION: '{{.DURATION | default "10s"}}'
       CONCURRENCY: '{{.CONCURRENCY | default "10"}}'
     cmds:

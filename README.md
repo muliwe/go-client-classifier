@@ -6,14 +6,23 @@ Academic research project for classifying automated HTTP clients (bots, LLMs, cr
 
 ### Performance Highlights
 
-Benchmarks: localhost, 30s, 50 concurrent connections; Go server only (no nginx in front).
+**Localhost** (10s, 50 concurrent connections; Go server only, no nginx in front):
 
 | Mode | RPS | RPM | Latency avg |
 |------|-----|-----|--------------|
 | HTTP (no TLS) | **~11,550** | ~693K | ~4.3 ms |
 | HTTPS (TLS fingerprinting, JA3/JA4/JA4H) | **~8,210** | ~493K | ~6.1 ms |
 
-Classification logic: **~7µs** per request. Benchmarks with nginx (TLS termination + X-FP-* at edge) will be added later.
+**Over the network** (patched nginx + TLS termination + X-FP-* at edge, 10s, 50 concurrent, HTTPS):
+
+| Endpoint | RPS | RPM | Latency avg |
+|----------|-----|-----|-------------|
+| GET / (classify) | **~1,017** | ~61K | ~49.2 ms |
+| GET /health | ~1,073 | ~64K | ~46.7 ms |
+
+**Summary:** On localhost the server sustains `~8–11K RPS` with **sub-6 ms** latency.  
+Over the network behind nginx/TLS it reaches `~1K RPS` with **~50 ms** latency.  
+Pure classification latency (classify vs health over the network) is **~2–2.5 ms** — the rest is transport.
 
 ## Project Goal
 
@@ -27,14 +36,11 @@ Create a single HTTP endpoint that classifies clients as `browser` or `bot` base
 
 ## Current Status
 
-Phase 1 (TLS + HTTP Fingerprinting) and Phase 2/3 (HTTP/2 + cross-validation) in place:
-- Full ClientHello capture with custom TLS listener; JA3 and JA4 hash computation
-- JA4H HTTP fingerprinting (method, version, cookies, headers, language)
-- TLS and HTTP-based classification signals integrated into scoring
-- Consistency checking between JA4H and HTTP signals (evasion detection)
-- HTTPS server mode with configurable certificates
+**Phase 1 [COMPLETED]** — TLS + HTTP fingerprinting: ClientHello capture, JA3/JA4/JA4H, TLS and HTTP signals in scoring, JA4H↔HTTP consistency (evasion detection), HTTPS server mode.
 
-**Planned**: HTTP/2 frame-level statistics (SETTINGS, WINDOW_UPDATE, PRIORITY) will be collected via **nginx modules** in front of the Go backend, rather than implementing low-level H2 parsing in Go — mature HTTP/2 fingerprinting libraries for Go are not available, while nginx with add-on modules (e.g. [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)) provides proven passive fingerprinting at the edge. See [docs/nginx.md](docs/nginx.md) and [Methodology → Phase 2](docs/METHODOLOGY.md#phase-2-http2-deep-inspection) for rationale and references.
+**Phase 2** — HTTP/2: H2 fingerprint consumed from proxy (`X-FP-H2`); SETTINGS/PRIORITY/window come from **nginx modules** at the edge (e.g. [nginx-http2-fingerprint](https://github.com/Xetera/nginx-http2-fingerprint)) and are used in classification when present. No low-level H2 parsing in Go. *Planned*: H2/H3 ratio tracking. See [docs/nginx.md](docs/nginx.md) and [Methodology → Phase 2](docs/METHODOLOGY.md#phase-2-http2-deep-inspection).
+
+**Phase 3** — Inconsistency detection: spatial (JA4H vs HTTP, TLS/HTTP version mismatch) in place. *Planned*: temporal inconsistency (same client, changing FPs), header–UA validation. See [Methodology → Phase 3](docs/METHODOLOGY.md#phase-3-fingerprint-inconsistency-detection).
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
@@ -280,20 +286,26 @@ task integration:tls BASE_URL=https://localhost:8443
 
 ### Benchmark
 
-Run HTTP performance benchmark against a running server:
+Run HTTP performance benchmark against a running server. You can pass a **URL** to test different routes (e.g. `/`, `/health`, `/debug`).
 
 ```bash
 # Start server
 task run:tls                # HTTPS mode (terminal 1)
 
 # Run benchmark (terminal 2)
-task bench:tls              # Default: 10s, 10 concurrent connections
+task bench:tls              # Default URL: https://localhost:8443/, 10s, 10 concurrent
 
-# Custom parameters
+# Pass URL to test a specific path (variable or positional after --)
+task bench:tls URL=https://localhost:8443/debug
+task bench:tls -- https://localhost:8443/health
+
+# Custom duration and concurrency
 task bench:tls DURATION=30s CONCURRENCY=50
 
-# HTTP mode
-task bench URL=http://localhost:8080/ DURATION=10s CONCURRENCY=10
+# HTTP mode (default URL: http://localhost:8080/)
+task bench
+task bench URL=http://localhost:8080/health DURATION=10s CONCURRENCY=10
+task bench -- http://localhost:8080/
 ```
 
 Benchmark output includes RPS, RPM, and latency statistics (avg/min/max).

@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## v0.7.0 (2026-02-19)
 
+### Benchmark: URL for routing tests
+
+- **`task bench`** and **`task bench:tls`** accept a target URL so you can test different routes (e.g. `/`, `/health`, `/debug`). Pass via variable: `task bench URL=http://localhost:8080/path`, or positionally: `task bench -- http://localhost:8080/path`. Defaults remain `http://localhost:8080/` and `https://localhost:8443/` respectively.
+- README Benchmark section updated with URL examples.
+
+### Benchmark: tests
+
+- **`tools/benchmark`**: Logic extracted into `runBenchmark()` for testability. Tests added: `TestRunBenchmark_usesGivenURL` (benchmark hits the given URL/path), `TestRunBenchmark_differentPaths` (e.g. `/health`). Benchmark tool now covered by `go test ./...`.
+
+### Test tasks and coverage
+
+- **`task test`** and **`task test:short`** now run **`go test ./...`** so all packages are tested (internal, tests, tools, cmd). Previously only `./internal/...` and `./tests/...` were listed; `./tools/...` was added, then replaced with `./...` for future-proofing.
+- **`cmd/server`**: Dummy test (`TestDummy`) added so the package is no longer reported as `[no test files]` when running `go test ./...`.
+
 ### Permissive TLS and smoking-gun signals (obsolete TLS, exotic ALPN)
 
 **Server (direct TLS termination):** Accept all TLS versions and ALPN protocols we can handle instead of rejecting at handshake. Goal: accept connections and classify as bot from fingerprint.
