@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## v0.7.0 (2026-02-18)
 
+### Permissive TLS and smoking-gun signals (obsolete TLS, exotic ALPN)
+
+**Server (direct TLS termination):** Accept all TLS versions and ALPN protocols we can handle instead of rejecting at handshake. Goal: accept connections and classify as bot from fingerprint.
+- **MinVersion** TLS 1.0 (was 1.2); **NextProtos** include `h2`, `http/1.1`, `http/1.0`, `http/0.9`, `spdy/3`, `spdy/2`, `spdy/1`, `h2c`, `hq`. Eliminates "client offered only unsupported versions" and "unsupported application protocols" handshake errors so scanners/bots are scored rather than dropped.
+
+**Bot signals (smoking gun, +3 each):**
+- **obsolete-tls**: TLS 1.0 or 1.1 → +3 bot (was +1). Outdated clients are often automation or legacy.
+- **exotic-alpn**: Negotiated ALPN is legacy/exotic (http/0.9, http/1.0, spdy/*, h2c, hq) → +3 bot. Scanners and bots often send these; real browsers use h2 or http/1.1.
+
+**Tests:** `TestCalculateScores_ObsoleteTLS`, `TestCalculateScores_ExoticALPN` (expect +3 in breakdown).
+
 ### Spoofable signals and header-order
 
 **header-order-late disabled:** The bot signal `header-order-late` (+2) is no longer applied (0 points). Vanilla nginx does not preserve HTTP header order when proxying; late Accept/Accept-Language can be a proxy artifact. Logic remains in code for possible future use (e.g. when order is passed via a dedicated header from OpenResty).
@@ -82,10 +93,11 @@ Improves separation of real browsers from impersonators (e.g. curl_cffi, curl-im
 **New proxy headers consumed**
 - **X-FP-SSL-GREASED**: stored in `fingerprint.tls.ssl_greased`; when non-empty with modern TLS and non-bot UA → +1 browser (`ssl-greased`).
 - **X-FP-JA4**: read when set (e.g. from foxio-llc/ja4-nginx); used for known-library/browser checks and H2 vs ALPN consistency.
-- **X-FP-TLS-Version** (obsolete): when TLS 1.0 or 1.1 → +1 bot (`obsolete-tls`). New signals: `TLSObsolete`, `HasSSLGreased`.
+- **X-FP-TLS-Version** (obsolete): when TLS 1.0 or 1.1 → +3 bot (`obsolete-tls`). New signals: `TLSObsolete`, `HasSSLGreased`, `TLSExoticALPN`.
 
 **Scoring**
-- Obsolete TLS (1.0/1.1) → +1 bot (`obsolete-tls(+1)`).
+- Obsolete TLS (1.0/1.1) → +3 bot (`obsolete-tls(+3)`), smoking gun.
+- Exotic ALPN (http/0.9, http/1.0, spdy/*, h2c, hq) → +3 bot (`exotic-alpn(+3)`), smoking gun.
 - GREASE present (X-FP-SSL-GREASED non-empty) + modern TLS + non-bot UA → +1 browser (`ssl-greased(+1)`).
 - JA3 hash resolution and JA4 from proxy integrated into existing TLS vs UA and H2 vs JA4 rules.
 

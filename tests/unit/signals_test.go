@@ -516,7 +516,7 @@ func TestCalculateScores_TLSUA_BotUA_BrowserTLS(t *testing.T) {
 }
 
 func TestCalculateScores_ObsoleteTLS(t *testing.T) {
-	// TLS 1.0 or 1.1 from proxy → obsolete-tls +1 bot
+	// TLS 1.0 or 1.1 from proxy → obsolete-tls +3 bot (smoking gun)
 	fp := fingerprint.Fingerprint{
 		TLS: fingerprint.TLSFingerprint{
 			Available: true,
@@ -528,8 +528,29 @@ func TestCalculateScores_ObsoleteTLS(t *testing.T) {
 	if !s.TLSObsolete {
 		t.Error("TLSObsolete should be true for TLS 1.0")
 	}
-	if !strings.Contains(s.ScoreBreakdown, "obsolete-tls(+1)") {
-		t.Error("Breakdown should contain obsolete-tls(+1)")
+	if !strings.Contains(s.ScoreBreakdown, "obsolete-tls(+3)") {
+		t.Error("Breakdown should contain obsolete-tls(+3)")
+	}
+}
+
+func TestCalculateScores_ExoticALPN(t *testing.T) {
+	// Exotic ALPN (spdy, h2c, hq, http/0.9) → exotic-alpn +1 bot
+	for _, alpn := range []string{"h2c", "hq", "http/0.9", "http/1.0", "spdy/3"} {
+		fp := fingerprint.Fingerprint{
+			TLS: fingerprint.TLSFingerprint{
+				Available: true,
+				Version:   "TLS 1.2",
+				ALPN:      alpn,
+			},
+			HTTP: fingerprint.HTTPFingerprint{UserAgent: "Mozilla/5.0"},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.TLSExoticALPN {
+			t.Errorf("TLSExoticALPN should be true for ALPN %q", alpn)
+		}
+		if !strings.Contains(s.ScoreBreakdown, "exotic-alpn(+3)") {
+			t.Errorf("Breakdown should contain exotic-alpn(+3) for ALPN %q, got: %s", alpn, s.ScoreBreakdown)
+		}
 	}
 }
 

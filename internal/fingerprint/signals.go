@@ -152,6 +152,7 @@ func ExtractSignals(fp Fingerprint) Signals {
 	// TLS signals (from ClientHello or from proxy headers)
 	s.HasModernTLS = fp.TLS.Version == "TLS 1.2" || fp.TLS.Version == "TLS 1.3"
 	s.HasALPN = fp.TLS.ALPN != ""
+	s.TLSExoticALPN = isExoticALPN(fp.TLS.ALPN)
 	s.HighCipherCount = fp.TLS.CipherSuitesCount > 10 // Browsers typically have 15-20
 	s.HasSessionSupport = fp.TLS.HasSessionTicket     // Session resumption
 	s.HasTLSFingerprint = fp.TLS.JA3Hash != "" || fp.TLS.JA4Hash != ""
@@ -467,10 +468,16 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	// Bot-positive signals
 	// ==========================================
 
-	// Obsolete TLS (1.0/1.1) - outdated clients, often automation or legacy
+	// Obsolete TLS (1.0/1.1) - outdated clients, often automation or legacy; smoking gun
 	if s.TLSObsolete {
-		botScore++
-		botReasons = append(botReasons, "obsolete-tls(+1)")
+		botScore += 3
+		botReasons = append(botReasons, "obsolete-tls(+3)")
+	}
+
+	// Exotic ALPN (http/0.9, spdy, h2c, hq) - scanners/bots often send these; smoking gun
+	if s.TLSExoticALPN {
+		botScore += 3
+		botReasons = append(botReasons, "exotic-alpn(+3)")
 	}
 
 	// Known bot User-Agent pattern
@@ -673,6 +680,17 @@ func isSSLGreasedPresent(raw string) bool {
 		return false
 	}
 	return true
+}
+
+// exoticALPNProtocols are ALPN values we accept for handshake but treat as bot signal.
+var exoticALPNProtocols = map[string]bool{
+	"http/0.9": true, "http/1.0": true,
+	"spdy/1": true, "spdy/2": true, "spdy/3": true,
+	"h2c": true, "hq": true,
+}
+
+func isExoticALPN(alpn string) bool {
+	return exoticALPNProtocols[alpn]
 }
 
 // containsAny checks if string contains any of the substrings

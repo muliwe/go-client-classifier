@@ -57,6 +57,21 @@ func DefaultConfig() Config {
 	}
 }
 
+// serverTLSConfig returns a permissive TLS config: accept TLS 1.0+ and all ALPN
+// protocols we can handle (including legacy/spdy/h2c/hq). Goal: accept connections
+// and classify as bot from fingerprint, not reject at handshake.
+func serverTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS10,
+		NextProtos: []string{
+			"h2", "http/1.1",
+			"http/1.0", "http/0.9",
+			"spdy/3", "spdy/2", "spdy/1",
+			"h2c", "hq",
+		},
+	}
+}
+
 // Server represents the HTTP server (and optional HTTPS server when TLSAddr is set)
 type Server struct {
 	cfg        Config
@@ -105,18 +120,12 @@ func New(cfg Config) (*Server, error) {
 			ReadTimeout:  cfg.ReadTimeout,
 			WriteTimeout: cfg.WriteTimeout,
 			IdleTimeout:  cfg.IdleTimeout,
-			TLSConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-				NextProtos: []string{"h2", "http/1.1"},
-			},
-			ConnContext: connContextWithTLSFingerprint,
+			TLSConfig:    serverTLSConfig(),
+			ConnContext:  connContextWithTLSFingerprint,
 		}
 	} else if cfg.TLSEnabled {
 		// TLS-only mode (single listener on Addr)
-		httpServer.TLSConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			NextProtos: []string{"h2", "http/1.1"}, // Enable HTTP/2
-		}
+		httpServer.TLSConfig = serverTLSConfig()
 		httpServer.ConnContext = connContextWithTLSFingerprint
 	}
 
@@ -246,11 +255,9 @@ func (s *Server) runTLS() error {
 	fpListener := fingerprintlistener.NewListener(listener)
 	// Wrap so Accept() errors from a single connection (EOF, reset) don't kill Serve()
 	s.listener = &acceptRetryListener{inner: fpListener}
-	s.tlsServer.TLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-		NextProtos:   []string{"h2", "http/1.1"},
-	}
+	cfg := serverTLSConfig().Clone()
+	cfg.Certificates = []tls.Certificate{cert}
+	s.tlsServer.TLSConfig = cfg
 	log.Printf("TLS fingerprinting active (JA3/JA4) on %s", s.cfg.TLSAddr)
 	return s.tlsServer.ServeTLS(s.listener, "", "")
 }
@@ -323,11 +330,9 @@ func (s *Server) startTLS() error {
 
 	// Configure TLS on the http.Server (not on listener)
 	// This way ServeTLS wraps the connection, but we can unwrap in ConnContext
-	s.httpServer.TLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-		NextProtos:   []string{"h2", "http/1.1"},
-	}
+	cfg := serverTLSConfig().Clone()
+	cfg.Certificates = []tls.Certificate{cert}
+	s.httpServer.TLSConfig = cfg
 
 	log.Printf("TLS fingerprinting active (JA3/JA4)")
 	// Use ServeTLS which handles TLS on top of our fingerprint listener
