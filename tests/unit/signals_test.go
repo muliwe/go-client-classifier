@@ -533,8 +533,68 @@ func TestCalculateScores_ObsoleteTLS(t *testing.T) {
 	}
 }
 
+func TestCalculateScores_BlindProbe(t *testing.T) {
+	// Path != "/" or method != GET → blind-probe +3 bot (smoking gun)
+	t.Run("non_root_path", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				Method:    "GET",
+				Path:      "/actuator/gateway/routes",
+				UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.RequestIsProbe {
+			t.Error("RequestIsProbe should be true for path != /")
+		}
+		if !strings.Contains(s.ScoreBreakdown, "blind-probe(+3)") {
+			t.Errorf("Breakdown should contain blind-probe(+3), got: %s", s.ScoreBreakdown)
+		}
+	})
+	t.Run("non_get_method", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				Method:    "POST",
+				Path:      "/",
+				UserAgent: "python-requests/2.20.0",
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.RequestIsProbe {
+			t.Error("RequestIsProbe should be true for method != GET")
+		}
+		if !strings.Contains(s.ScoreBreakdown, "blind-probe(+3)") {
+			t.Errorf("Breakdown should contain blind-probe(+3), got: %s", s.ScoreBreakdown)
+		}
+	})
+	t.Run("get_root_no_probe", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{Method: "GET", Path: "/", UserAgent: "curl/8.0"},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if s.RequestIsProbe {
+			t.Error("RequestIsProbe should be false for GET /")
+		}
+		if strings.Contains(s.ScoreBreakdown, "blind-probe") {
+			t.Errorf("GET / should not get blind-probe, got: %s", s.ScoreBreakdown)
+		}
+	})
+	t.Run("get_debug_no_probe", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{Method: "GET", Path: "/debug", UserAgent: "curl/8.0"},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if s.RequestIsProbe {
+			t.Error("RequestIsProbe should be false for GET /debug (allowed path)")
+		}
+		if strings.Contains(s.ScoreBreakdown, "blind-probe") {
+			t.Errorf("GET /debug should not get blind-probe, got: %s", s.ScoreBreakdown)
+		}
+	})
+}
+
 func TestCalculateScores_ExoticALPN(t *testing.T) {
-	// Exotic ALPN (spdy, h2c, hq, http/0.9) → exotic-alpn +1 bot
+	// Exotic ALPN (spdy, h2c, hq, http/0.9) → exotic-alpn +3 bot
 	for _, alpn := range []string{"h2c", "hq", "http/0.9", "http/1.0", "spdy/3"} {
 		fp := fingerprint.Fingerprint{
 			TLS: fingerprint.TLSFingerprint{
@@ -708,6 +768,8 @@ func TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped(t *testing.T) {
 			SSLGreased: "1",
 		},
 		HTTP: fingerprint.HTTPFingerprint{
+			Method:       "GET",
+			Path:         "/",
 			Version:      "HTTP/1.1",
 			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
 			JA4HHash:     "ge11cn030000_abc123def456_111111111111_222222222222", // c=cookies, 03 headers, 0000 lang; C/D non-zero so no ja4h-no-cookies
@@ -840,6 +902,8 @@ func TestCalculateScores_FromProxy_H2UAInconsistent_Skipped(t *testing.T) {
 			SSLGreased: "1",
 		},
 		HTTP: fingerprint.HTTPFingerprint{
+			Method:        "GET",
+			Path:          "/",
 			UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
 			H2Fingerprint: "1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p", // no id 5 → MaxFrameSize 0 → library-like
 			H2Parsed:      fingerprint.ParseH2Fingerprint("1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p"),

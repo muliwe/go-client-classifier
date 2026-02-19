@@ -112,6 +112,9 @@ type Signals struct {
 	H2JA4Inconsistent            bool   `json:"h2_ja4_inconsistent"`              // JA4 ALPN (h2/h1) disagrees with actual HTTP/2 (Appendix G)
 	TLSALPNVsHTTPInconsistent    bool   `json:"tls_alpn_vs_http_inconsistent"`    // ALPN (h2/http/1.1) disagrees with request HTTP version (direct TLS only; Appendix G)
 
+	// Request context (path/method — blind probe detection)
+	RequestIsProbe bool `json:"request_is_probe"` // Path != "/" or method != "GET"; bots often probe blindly
+
 	// Heuristic signals
 	UserAgentIsBot       bool `json:"ua_is_bot"`        // UA contains bot indicators
 	UserAgentIsAICrawler bool `json:"ua_is_ai_crawler"` // UA contains AI/LLM crawler indicators

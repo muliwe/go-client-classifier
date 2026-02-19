@@ -201,6 +201,9 @@ func ExtractSignals(fp Fingerprint) Signals {
 	s.HasBrowserHeaders = s.HasSecFetchHeaders || s.HasAcceptLanguage
 	s.MissingTypicalHeader = !s.HasAccept || !s.HasAcceptEncoding
 
+	// Blind probe: path not in allowed list (/, /debug) or non-GET. /health is not scored. See server mux: /, /health, /debug.
+	s.RequestIsProbe = !isAllowedPathForScoring(fp.HTTP.Path) || strings.TrimSpace(strings.ToUpper(fp.HTTP.Method)) != "GET"
+
 	// Calculate scores with breakdown
 	s.BrowserScore, s.BotScore, s.ScoreBreakdown = calculateScores(s, fp)
 
@@ -480,6 +483,12 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 		botReasons = append(botReasons, "exotic-alpn(+3)")
 	}
 
+	// Blind probe: path != "/" or method != GET — we return 404 for these; bots often probe blindly; smoking gun
+	if s.RequestIsProbe {
+		botScore += 3
+		botReasons = append(botReasons, "blind-probe(+3)")
+	}
+
 	// Known bot User-Agent pattern
 	if s.UserAgentIsBot {
 		botScore += 3
@@ -691,6 +700,16 @@ var exoticALPNProtocols = map[string]bool{
 
 func isExoticALPN(alpn string) bool {
 	return exoticALPNProtocols[alpn]
+}
+
+// allowedPathsForScoring are paths that return 200 and run the classifier (server mux: / → HandleClassify, /debug → HandleDebug). /health is not in the list (HandleHealth does not call classifier).
+var allowedPathsForScoring = map[string]bool{
+	"/":      true,
+	"/debug": true,
+}
+
+func isAllowedPathForScoring(path string) bool {
+	return allowedPathsForScoring[path]
 }
 
 // containsAny checks if string contains any of the substrings

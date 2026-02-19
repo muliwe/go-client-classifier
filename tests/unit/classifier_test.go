@@ -54,6 +54,8 @@ func TestClassify_Browser(t *testing.T) {
 
 	fp := fingerprint.Fingerprint{
 		HTTP: fingerprint.HTTPFingerprint{
+			Method:       "GET",
+			Path:         "/",
 			Version:      "HTTP/2.0",
 			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
 			Accept:       "text/html,application/xhtml+xml",

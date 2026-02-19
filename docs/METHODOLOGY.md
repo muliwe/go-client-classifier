@@ -521,7 +521,7 @@ Based on recent research (2025-2026), the following development roadmap addresse
 
 **Implementation details (X-FP-* best practices, 2025–2026)**:
 - JA3 hash from proxy: prefer **X-FP-JA3-HASH** (32-char MD5); fallback to X-FP-JA3 as hash or MD5(raw). Signals/scoring: `has_tls_fingerprint`, `tls-ua-inconsistent` / `tls-ua-consistent` (Appendix G).
-- **X-FP-SSL-GREASED** non-empty + modern TLS + non-bot UA → +1 browser (`ssl-greased`). **X-FP-TLS-Version** TLS 1.0/1.1 → +3 bot (`obsolete-tls`). **Exotic ALPN** (http/0.9, spdy, h2c, hq) → +3 bot (`exotic-alpn`). **X-FP-JA4** read when set; used for known-client and H2 vs ALPN consistency. See [Appendix H](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection).
+- **X-FP-SSL-GREASED** non-empty + modern TLS + non-bot UA → +1 browser (`ssl-greased`). **X-FP-TLS-Version** TLS 1.0/1.1 → +3 bot (`obsolete-tls`). **Exotic ALPN** (http/0.9, spdy, h2c, hq) → +3 bot (`exotic-alpn`). **Blind probe** (path ≠ `/` and ≠ `/debug`, or method ≠ GET) → +3 bot (`blind-probe`). **X-FP-JA4** read when set; used for known-client and H2 vs ALPN consistency. See [Appendix H](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection).
 
 **Why**: HTTP/2 implementation details (initial window size, max concurrent streams, header table size) create passive fingerprints that are hard to spoof [4]. Using nginx at the edge for H2 fingerprinting is a rational choice when no equivalent Go libraries exist and avoids reimplementing protocol parsing.
 
@@ -1574,6 +1574,7 @@ HTTP/2 fingerprint reflects the real client stack; it cannot be set via JavaScri
 - **Done**: TLS/HTTP version mismatch — with direct TLS (not from proxy), we require ALPN to match the observed HTTP version: ALPN `h2` ↔ `HTTP/2.0`, ALPN `http/1.1` ↔ non‑HTTP/2. Mismatch → +2 bot (`tls-alpn-http-inconsistent`). When TLS is from proxy, ALPN reflects client↔proxy; the request to the backend may be HTTP/1.1, so we do not apply this check.
 - **Done**: Obsolete TLS (X-FP-TLS-Version) — when version is TLS 1.0 or TLS 1.1 we add +3 bot (`obsolete-tls(+3)`). Source: proxy header `X-FP-TLS-Version` or direct TLS; signal `TLSObsolete`. Smoking gun; outdated clients are often automation or legacy stacks.
 - **Done**: Exotic ALPN — when negotiated ALPN is http/0.9, http/1.0, spdy/1, spdy/2, spdy/3, h2c, or hq we add +3 bot (`exotic-alpn(+3)`). Signal `TLSExoticALPN`. Smoking gun; scanners and bots often send these; real browsers use h2 or http/1.1. Server accepts these in ALPN so the connection is established and then scored.
+- **Done**: Blind probe — when request path is not in the allowed list (`/`, `/debug`) or method is not GET we add +3 bot (`blind-probe(+3)`). Signal `RequestIsProbe`. Smoking gun; bots often probe blindly (e.g. GET /actuator/gateway/routes, POST /cgi-bin/...). Allowed paths match server mux (`/` → HandleClassify, `/debug` → HandleDebug); `/health` is not scored (HandleHealth does not call classifier).
 - **Done**: GREASE (X-FP-SSL-GREASED) — when the header is non-empty, TLS is modern (1.2/1.3), and UA is not bot we add +1 browser (`ssl-greased(+1)`). Real browsers send GREASE; many libraries omit or use it inconsistently (Akamai, Cloudflare). Signal `HasSSLGreased`; format of value is module-dependent (e.g. phuslu).
 - **Done**: Browser UA + no GREASE when TLS from proxy — when TLS is from proxy, **proxy forwarded client TLS** (ALPN or JA3 or cipher non-empty), UA looks like a browser, and X-FP-SSL-GREASED is empty we add +3 bot (`ua-browser-no-grease(+3)`). Strong (smoking-gun) signal; typical of curl or HTTP libraries spoofing browser headers; real browsers send GREASE. For **HTTP→HTTP proxy** (client did no TLS to us; ALPN/JA3/cipher all empty) we do *not* apply this penalty, since no GREASE is expected.
 - **Done**: From-proxy scoring adjustments — (1) **no-session**: we do *not* add +1 bot for missing session ticket when TLS is from proxy, because X-FP-* does not convey session ticket presence. (2) **JA4H consistency**: when TLS is from proxy, we do *not* compare JA4H version (11/10) with `is_http2` in the consistency check; the backend always sees HTTP/1.x from the proxy, so JA4H version reflects that, while `is_http2` comes from ALPN and is correct for the client.
@@ -1627,6 +1628,9 @@ This appendix summarizes industry practices and our implementation choices for u
 7. **Trust and stripping**  
    X-FP-* and X-Internal-Proxy must only be trusted when the request comes from a controlled proxy (e.g. internal network). Strip or ignore these headers from untrusted/external traffic to prevent spoofing.
 
+8. **Blind probe (path/method)**  
+   Requests to non-existent paths or with non-GET method (we return 404 for these) are treated as a smoking-gun bot signal (`blind-probe` +3). Allowed paths are `/` and `/debug` (match server mux); `/health` is not scored (no classifier). Bots often probe blindly (e.g. GET /actuator/gateway/routes, POST /cgi-bin/...).
+
 ### Scoring summary (proxy path)
 
 Signals derived from the above headers and used in `calculateScores` (see [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse) and `internal/fingerprint/signals.go`):
@@ -1635,6 +1639,7 @@ Signals derived from the above headers and used in `calculateScores` (see [Appen
 |--------|-----------|-------|
 | `obsolete-tls` | X-FP-TLS-Version is TLS 1.0 or 1.1 | +3 bot (smoking gun) |
 | `exotic-alpn` | Negotiated ALPN is http/0.9, http/1.0, spdy/*, h2c, hq | +3 bot (smoking gun) |
+| `blind-probe` | Request path not in allowed list (`/`, `/debug`) or method ≠ GET | +3 bot (smoking gun) |
 | `ssl-greased` | X-FP-SSL-GREASED non-empty, modern TLS, non-bot UA | +1 browser |
 | `ua-browser-no-grease` | TLS from proxy **and** proxy forwarded client TLS (ALPN/JA3/cipher), browser UA, X-FP-SSL-GREASED empty | +3 bot; skipped for HTTP→HTTP (no client TLS) |
 | `has_tls_fingerprint` | JA3 or JA4 present (JA3 from X-FP-JA3-HASH or X-FP-JA3) | Enables TLS-based scoring |

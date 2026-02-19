@@ -163,6 +163,9 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 	if s.JA4HLowHeaderCount {
 		reasons = append(reasons, "low header count (JA4H)")
 	}
+	if s.RequestIsProbe {
+		reasons = append(reasons, "blind probe (non-GET or non-root path)")
+	}
 
 	if len(reasons) == 0 {
 		return "Classified as bot based on overall signal score"

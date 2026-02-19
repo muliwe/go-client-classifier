@@ -12,8 +12,9 @@ All notable changes to this project are documented in this file.
 **Bot signals (smoking gun, +3 each):**
 - **obsolete-tls**: TLS 1.0 or 1.1 → +3 bot (was +1). Outdated clients are often automation or legacy.
 - **exotic-alpn**: Negotiated ALPN is legacy/exotic (http/0.9, http/1.0, spdy/*, h2c, hq) → +3 bot. Scanners and bots often send these; real browsers use h2 or http/1.1.
+- **blind-probe**: Path not in allowed list (`/`, `/debug`) or method ≠ GET → +3 bot. Bots often probe blindly (e.g. GET /actuator/gateway/routes, POST /cgi-bin/...). Allowed paths match server mux; `/health` is not scored (no classifier). Signal `RequestIsProbe`.
 
-**Tests:** `TestCalculateScores_ObsoleteTLS`, `TestCalculateScores_ExoticALPN` (expect +3 in breakdown).
+**Tests:** `TestCalculateScores_ObsoleteTLS`, `TestCalculateScores_ExoticALPN`, `TestCalculateScores_BlindProbe` (expect +3 in breakdown; GET `/` and GET `/debug` no probe).
 
 ### Spoofable signals and header-order
 
@@ -93,11 +94,12 @@ Improves separation of real browsers from impersonators (e.g. curl_cffi, curl-im
 **New proxy headers consumed**
 - **X-FP-SSL-GREASED**: stored in `fingerprint.tls.ssl_greased`; when non-empty with modern TLS and non-bot UA → +1 browser (`ssl-greased`).
 - **X-FP-JA4**: read when set (e.g. from foxio-llc/ja4-nginx); used for known-library/browser checks and H2 vs ALPN consistency.
-- **X-FP-TLS-Version** (obsolete): when TLS 1.0 or 1.1 → +3 bot (`obsolete-tls`). New signals: `TLSObsolete`, `HasSSLGreased`, `TLSExoticALPN`.
+- **X-FP-TLS-Version** (obsolete): when TLS 1.0 or 1.1 → +3 bot (`obsolete-tls`). New signals: `TLSObsolete`, `HasSSLGreased`, `TLSExoticALPN`, `RequestIsProbe` (blind-probe).
 
 **Scoring**
 - Obsolete TLS (1.0/1.1) → +3 bot (`obsolete-tls(+3)`), smoking gun.
 - Exotic ALPN (http/0.9, http/1.0, spdy/*, h2c, hq) → +3 bot (`exotic-alpn(+3)`), smoking gun.
+- Blind probe (path ≠ `/` and ≠ `/debug`, or method ≠ GET) → +3 bot (`blind-probe(+3)`), smoking gun.
 - GREASE present (X-FP-SSL-GREASED non-empty) + modern TLS + non-bot UA → +1 browser (`ssl-greased(+1)`).
 - JA3 hash resolution and JA4 from proxy integrated into existing TLS vs UA and H2 vs JA4 rules.
 
