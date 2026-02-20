@@ -53,7 +53,7 @@
     "accept-language": 0,
     "browser-headers": 0,
     "sec-ch-ua-modern": 0,
-    "accept-lang-rich": 0,
+    "accept-lang-rich": 1,
     "high-header-count": 0,
     "no-bot-red-flags": 0
   },

@@ -2,6 +2,7 @@ package fingerprint
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -58,8 +59,8 @@ func defaultBrowserScoresMap() map[string]int {
 		"header-order": 1, "cache-control": 1, "cookies": 1, "modern-tls": 1, "ssl-greased": 1,
 		"high-ciphers": 2, "session-ticket": 1, "multi-groups": 1, "tls-ext>=10": 1,
 		"ja4h-headers>=10": 1, "ja4h-referer": 1, "ja4h-consistent": 1, "tls-ua-consistent": 1,
-		"accept-language": 0, "browser-headers": 0, "sec-ch-ua-modern": 0, "accept-lang-rich": 0, "high-header-count": 0,
-		"no-bot-red-flags": 0,
+		"accept-language": 0, "browser-headers": 0, "sec-ch-ua-modern": 0, "accept-lang-rich": 1, "sec-purpose": 2,
+		"high-header-count": 0, "no-bot-red-flags": 0,
 	}
 	return m
 }
@@ -72,7 +73,8 @@ func defaultBotScoresMap() map[string]int {
 		"ja4h-no-lang": 1, "ja4h-low-headers": 1, "ja4h-inconsistent": 2, "ja4h-no-cookies": 2,
 		"header-order-late": 2, "h2-ua-inconsistent": 2, "tls-ua-inconsistent": 3,
 		"ua-browser-no-grease": 3, "h2-ja4-inconsistent": 2, "tls-alpn-http-inconsistent": 2,
-		"no-sni": 1, "no-alpn": 1,
+		"no-sni": 1, "no-alpn": 1, "accept-lang-simple": 1,
+		"sec-purpose-invalid": 1, "sec-purpose-no-sec-fetch": 2,
 	}
 	return m
 }
@@ -321,6 +323,15 @@ func ExtractSignals(fp Fingerprint) Signals {
 	// Accept-Language richness: multiple locales typical for real browsers; automation often short/single locale.
 	s.AcceptLangRich = acceptLangRich(fp.HTTP.AcceptLang)
 
+	// Sec-Purpose: prefetch/prerender (W3C nav-speculation); forbidden header, only real browsers send it in that context.
+	if v, ok := fp.HTTP.Headers["sec-purpose"]; ok {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			s.HasSecPurpose = true
+			s.SecPurposeValid = isSecPurposeValid(v)
+		}
+	}
+
 	// User-Agent analysis
 	uaLower := strings.ToLower(fp.HTTP.UserAgent)
 	s.UserAgentIsBot = containsAny(uaLower, botPatterns)
@@ -542,6 +553,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	if s.AcceptLangRich {
 		browserScore += addBrowser(&browserReasons, "accept-lang-rich")
 	}
+	if s.HasSecPurpose && s.SecPurposeValid {
+		browserScore += addBrowser(&browserReasons, "sec-purpose")
+	}
 	if fp.HTTP.HasCookies {
 		browserScore += addBrowser(&browserReasons, "cookies")
 	}
@@ -581,6 +595,12 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	// Bot-positive signals
 	// ==========================================
 
+	if s.HasSecPurpose && !s.SecPurposeValid {
+		botScore += addBot(&botReasons, "sec-purpose-invalid")
+	}
+	if s.HasSecPurpose && !s.HasSecFetchHeaders {
+		botScore += addBot(&botReasons, "sec-purpose-no-sec-fetch")
+	}
 	if s.TLSObsolete {
 		botScore += addBot(&botReasons, "obsolete-tls")
 	}
@@ -611,8 +631,13 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	if fp.HTTP.Accept == "*/*" {
 		botScore += addBot(&botReasons, "accept-*/*")
 	}
-	if !s.HasAcceptLanguage && !s.HasSecFetchHeaders {
+	// Missing Accept-Language: anomaly per Radware (browser-like requests should include accept-language).
+	// Applied whenever header is absent; Sec-Fetch present + no Accept-Language is a strong inconsistency.
+	if !s.HasAcceptLanguage {
 		botScore += addBot(&botReasons, "no-accept-lang")
+	}
+	if s.HasAcceptLanguage && !s.AcceptLangRich {
+		botScore += addBot(&botReasons, "accept-lang-simple")
 	}
 	if s.HasTLSFingerprint {
 		if fp.TLS.CipherSuitesCount > 0 && fp.TLS.CipherSuitesCount < lowCipherMax {
@@ -813,7 +838,8 @@ func isSecChUAModernOrder(secChUA string) bool {
 	return firstNorm == "not:a-brand" || firstNorm == "not_abrand" || firstNorm == "not_a_brand"
 }
 
-// acceptLangRich returns true when Accept-Language has multiple locales or long string (thresholds from config).
+// acceptLangRich returns true when Accept-Language has multiple locales, sufficient length, and varied q-values.
+// Canonical browser example: ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6. Impersonators (curl_cffi, undici, Playwright) often send 1–2 languages with a single q (e.g. en-US,en;q=0.9). Rich = (>= minParts OR length > minLen) AND at least 2 distinct explicit q-values (so "three parts all 0.9" is not rich). See METHODOLOGY.md and bot-detection sources: Radware (Accept-Language spoofing), FP-Inconsistent (arXiv:2406.07647, fingerprint consistency), JA4H (Accept-Language in HTTP fingerprint).
 func acceptLangRich(acceptLang string) bool {
 	s := strings.TrimSpace(acceptLang)
 	if s == "" {
@@ -824,19 +850,40 @@ func acceptLangRich(acceptLang string) bool {
 	if minLen <= 0 {
 		minLen = 40
 	}
-	if len(s) > minLen {
-		return true
-	}
 	minParts := t.AcceptLangMinLocaleParts
 	if minParts <= 0 {
 		minParts = 3
 	}
 	parts := strings.Split(s, ",")
 	count := 0
+	explicitQ := make(map[float64]struct{})
 	for _, p := range parts {
-		if strings.TrimSpace(p) != "" {
-			count++
+		part := strings.TrimSpace(p)
+		if part == "" {
+			continue
+		}
+		count++
+		if idx := strings.Index(part, ";q="); idx >= 0 {
+			qStr := strings.TrimSpace(part[idx+3:])
+			if end := strings.IndexAny(qStr, " ,;"); end >= 0 {
+				qStr = qStr[:end]
+			}
+			if q, err := strconv.ParseFloat(qStr, 64); err == nil && q >= 0 && q <= 1 {
+				explicitQ[q] = struct{}{}
+			}
 		}
 	}
-	return count >= minParts
+	passCountOrLen := count >= minParts || len(s) > minLen
+	if !passCountOrLen {
+		return false
+	}
+	return len(explicitQ) >= 2
+}
+
+// isSecPurposeValid returns true when value is prefetch or prefetch;prerender (W3C nav-speculation).
+// Normalize: trim, lowercase, collapse space after semicolon.
+func isSecPurposeValid(val string) bool {
+	s := strings.ToLower(strings.TrimSpace(val))
+	s = strings.ReplaceAll(s, "; ", ";")
+	return s == "prefetch" || s == "prefetch;prerender"
 }

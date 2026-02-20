@@ -111,11 +111,12 @@ func defaultBrowserScores() map[string]int {
 		"ja4h-referer":      1,
 		"ja4h-consistent":   1,
 		"tls-ua-consistent": 1,
+		"accept-lang-rich":  1,
+		"sec-purpose":       2,
 		// zero points (documented in config, tunable later)
 		"accept-language":   0,
 		"browser-headers":   0,
 		"sec-ch-ua-modern":  0,
-		"accept-lang-rich":  0,
 		"high-header-count": 0,
 		"no-bot-red-flags":  0,
 	}
@@ -149,6 +150,9 @@ func defaultBotScores() map[string]int {
 		"tls-alpn-http-inconsistent": 2,
 		"no-sni":                     1,
 		"no-alpn":                    1,
+		"accept-lang-simple":         1,
+		"sec-purpose-invalid":        1,
+		"sec-purpose-no-sec-fetch":   2,
 	}
 }
 

@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## v0.8.0 (2026-02-20)
 
+### Accept-Language as transport-signal (rich vs simple)
+
+- **accept-lang-rich** (+1 browser): Enabled in config and defaults. **Rich** = (≥3 parts or length &gt; 40) **and** at least 2 distinct explicit q-values (after `;q=`). Canonical browser example: `ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6`. Single weight (e.g. all 0.9) no longer counts as rich.
+- **accept-lang-simple** (+1 bot): Accept-Language present but not rich (1–2 languages or single q-value) → +1 bot. Improves separation from impersonators (curl_cffi, undici, playwright-stealth typically send `en-US,en;q=0.9`). Incognito/first visit with simple profile get the penalty by design.
+- **Config:** `browser_scores["accept-lang-rich"]`: 1; `bot_scores["accept-lang-simple"]`: 1. [docs/METHODOLOGY.md](docs/METHODOLOGY.md) Appendix I updated: AcceptLangRich and accept-lang-simple, scoring table, canonical example.
+
+### Sec-Purpose (prefetch / prerender)
+
+- **sec-purpose** (+2 browser): When the `Sec-Purpose` header is present and its value is `prefetch` or `prefetch;prerender` (W3C nav-speculation). Forbidden header — only real browsers send it in prefetch context; curl_cffi, undici, Playwright do not send it by default.
+- **sec-purpose-invalid** (+1 bot): Sec-Purpose present but value not in the allowed set (spoofed or broken).
+- **sec-purpose-no-sec-fetch** (+2 bot): Sec-Purpose present but no Sec-Fetch-* headers (prefetch in spec always sends fetch metadata). No penalty for missing cookies when Sec-Purpose is present (cross-origin prefetch may have no cookies).
+- **Config:** `browser_scores["sec-purpose"]`: 2; `bot_scores["sec-purpose-invalid"]`: 1; `bot_scores["sec-purpose-no-sec-fetch"]`: 2. [docs/METHODOLOGY.md](docs/METHODOLOGY.md) Appendix I: new subsection Sec-Purpose (prefetch/prerender) and scoring table entries.
+
 ### Tools: antibot test cookie jar
 
 - **tools/python/antibot_test.py** — Запросы к antibot.invent.sale выполняются с cookie jar: добавлена константа `INVENT_COOKIES` (в т.ч. `__Secure-authjs.callback-url`) и передача `cookies` в `test_antibot()` и `test_antibot_with_profiles()`.

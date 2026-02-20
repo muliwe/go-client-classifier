@@ -59,7 +59,7 @@ func TestClassify_Browser(t *testing.T) {
 			Version:      "HTTP/2.0",
 			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
 			Accept:       "text/html,application/xhtml+xml",
-			AcceptLang:   "en-US,en;q=0.9",
+			AcceptLang:   "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6",
 			AcceptEnc:    "gzip, deflate, br",
 			SecFetchSite: "none",
 			SecFetchMode: "navigate",

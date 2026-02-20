@@ -53,7 +53,8 @@
     "accept-language": 0,
     "browser-headers": 0,
     "sec-ch-ua-modern": 0,
-    "accept-lang-rich": 0,
+    "accept-lang-rich": 1,
+    "sec-purpose": 2,
     "high-header-count": 0,
     "no-bot-red-flags": 0
   },
@@ -83,6 +84,9 @@
     "h2-ja4-inconsistent": 2,
     "tls-alpn-http-inconsistent": 2,
     "no-sni": 1,
-    "no-alpn": 1
+    "no-alpn": 1,
+    "accept-lang-simple": 1,
+    "sec-purpose-invalid": 1,
+    "sec-purpose-no-sec-fetch": 2
   }
 }

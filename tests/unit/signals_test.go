@@ -775,7 +775,7 @@ func TestCalculateScores_FromProxy_JA4HBotPenalties_Skipped(t *testing.T) {
 			JA4HHash:     "ge11cn030000_abc123def456_111111111111_222222222222", // c=cookies, 03 headers, 0000 lang; C/D non-zero so no ja4h-no-cookies
 			HeaderCount:  26,
 			HasCookies:   true,
-			AcceptLang:   "ru-RU,ru;q=0.9", // present → inconsistent with JA4H 0000
+			AcceptLang:   "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6", // rich → no accept-lang-simple; present → inconsistent with JA4H 0000
 			Accept:       "text/html,application/xhtml+xml",
 			AcceptEnc:    "gzip, deflate, br",
 			SecFetchSite: "none",
@@ -910,7 +910,7 @@ func TestCalculateScores_FromProxy_H2UAInconsistent_Skipped(t *testing.T) {
 			HeaderCount:   28,
 			Accept:        "text/html,application/xhtml+xml",
 			AcceptEnc:     "gzip, deflate, br",
-			AcceptLang:    "ru-RU,ru;q=0.9",
+			AcceptLang:    "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6",
 			SecFetchSite:  "none",
 			SecFetchMode:  "navigate",
 			SecFetchDest:  "document",
@@ -1413,14 +1413,17 @@ func TestExtractSignals_HasCacheControl(t *testing.T) {
 }
 
 func TestExtractSignals_AcceptLangRich(t *testing.T) {
+	// Reference canonical browser header: ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6
 	tests := []struct {
 		name       string
 		acceptLang string
 		wantRich   bool
 	}{
-		{"rich_three_parts", "ru-RU,ru;q=0.9,en-GB;q=0.8", true},
-		{"rich_long", "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6", true},
+		{"canonical_rich", "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6", true},
+		{"rich_three_parts_varied_q", "ru-RU,ru;q=0.9,en-GB;q=0.8", true},
+		{"rich_long", "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7", true},
 		{"short_two_parts", "en-US,en;q=0.9", false},
+		{"three_parts_all_same_q", "en-US,en;q=0.9,de;q=0.9", false},
 		{"single", "en-US", false},
 		{"empty", "", false},
 	}
@@ -1440,11 +1443,12 @@ func TestExtractSignals_AcceptLangRich(t *testing.T) {
 }
 
 func TestCalculateScores_CacheControlAndAcceptLangRich_BrowserBonus(t *testing.T) {
+	// Canonical browser Accept-Language: ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6
 	fp := fingerprint.Fingerprint{
 		HTTP: fingerprint.HTTPFingerprint{
 			UserAgent:  "Mozilla/5.0 Chrome/120.0.0.0",
 			Accept:     "text/html",
-			AcceptLang: "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7",
+			AcceptLang: "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6",
 			Headers:    map[string]string{"cache-control": "max-age=0"},
 		},
 	}
@@ -1458,9 +1462,29 @@ func TestCalculateScores_CacheControlAndAcceptLangRich_BrowserBonus(t *testing.T
 	if !strings.Contains(s.ScoreBreakdown, "cache-control(+1)") {
 		t.Errorf("breakdown should contain cache-control(+1), got %s", s.ScoreBreakdown)
 	}
-	// accept-lang-rich gives 0 points (easily spoofable); signal still computed
-	if strings.Contains(s.ScoreBreakdown, "accept-lang-rich(+1)") {
-		t.Errorf("accept-lang-rich is disabled for scoring; breakdown should not contain it, got %s", s.ScoreBreakdown)
+	if !strings.Contains(s.ScoreBreakdown, "accept-lang-rich(+1)") {
+		t.Errorf("breakdown should contain accept-lang-rich(+1), got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestCalculateScores_AcceptLangSimple_BotPenalty(t *testing.T) {
+	// Simple Accept-Language (1-2 parts or single q-value) → accept-lang-simple +1 bot
+	fp := fingerprint.Fingerprint{
+		HTTP: fingerprint.HTTPFingerprint{
+			UserAgent:    "Mozilla/5.0 Chrome/120.0.0.0",
+			Accept:       "text/html",
+			AcceptLang:   "en-US,en;q=0.9",
+			SecFetchSite: "none",
+			SecFetchMode: "navigate",
+			SecFetchDest: "document",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.AcceptLangRich {
+		t.Error("en-US,en;q=0.9 should not be AcceptLangRich")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "accept-lang-simple(+1)") {
+		t.Errorf("breakdown should contain accept-lang-simple(+1), got %s", s.ScoreBreakdown)
 	}
 }
 
@@ -1495,6 +1519,106 @@ func TestExtractSignals_NoSNI_NoALPN_DirectTLS(t *testing.T) {
 	if !strings.Contains(s.ScoreBreakdown, "no-alpn") {
 		t.Errorf("breakdown should contain no-alpn, got %s", s.ScoreBreakdown)
 	}
+}
+
+func TestExtractSignals_SecPurpose(t *testing.T) {
+	tests := []struct {
+		name        string
+		secPurpose  string
+		wantPresent bool
+		wantValid   bool
+	}{
+		{"valid_prefetch", "prefetch", true, true},
+		{"valid_prefetch_prerender", "prefetch;prerender", true, true},
+		{"valid_prefetch_space", "prefetch; prerender", true, true},
+		{"invalid_value", "preload", true, false},
+		{"empty", "", false, false},
+		{"missing", "NOT_IN_HEADERS", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := map[string]string{}
+			if tt.secPurpose != "NOT_IN_HEADERS" {
+				headers["sec-purpose"] = tt.secPurpose
+			}
+			fp := fingerprint.Fingerprint{
+				HTTP: fingerprint.HTTPFingerprint{
+					Headers: headers,
+				},
+			}
+			s := fingerprint.ExtractSignals(fp)
+			if s.HasSecPurpose != tt.wantPresent {
+				t.Errorf("HasSecPurpose: got %v, want %v (value %q)", s.HasSecPurpose, tt.wantPresent, tt.secPurpose)
+			}
+			if s.SecPurposeValid != tt.wantValid {
+				t.Errorf("SecPurposeValid: got %v, want %v (value %q)", s.SecPurposeValid, tt.wantValid, tt.secPurpose)
+			}
+		})
+	}
+}
+
+func TestCalculateScores_SecPurpose(t *testing.T) {
+	// Valid Sec-Purpose + Sec-Fetch-* → +2 browser
+	t.Run("valid_with_sec_fetch", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				UserAgent:    "Mozilla/5.0 Chrome/120.0",
+				Accept:       "text/html",
+				AcceptLang:   "ru-RU,ru;q=0.9,en-GB;q=0.8",
+				SecFetchSite: "same-origin",
+				SecFetchMode: "no-cors",
+				SecFetchDest: "empty",
+				Headers:      map[string]string{"sec-purpose": "prefetch"},
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.HasSecPurpose || !s.SecPurposeValid {
+			t.Fatal("expected HasSecPurpose and SecPurposeValid")
+		}
+		if !strings.Contains(s.ScoreBreakdown, "sec-purpose(+2)") {
+			t.Errorf("breakdown should contain sec-purpose(+2), got %s", s.ScoreBreakdown)
+		}
+	})
+	// Invalid value → +1 bot
+	t.Run("invalid_value", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				UserAgent:    "Mozilla/5.0 Chrome/120.0",
+				SecFetchSite: "none",
+				SecFetchMode: "navigate",
+				SecFetchDest: "document",
+				Headers:      map[string]string{"sec-purpose": "preload"},
+			},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.HasSecPurpose || s.SecPurposeValid {
+			t.Fatal("expected HasSecPurpose and !SecPurposeValid")
+		}
+		if !strings.Contains(s.ScoreBreakdown, "sec-purpose-invalid(+1)") {
+			t.Errorf("breakdown should contain sec-purpose-invalid(+1), got %s", s.ScoreBreakdown)
+		}
+	})
+	// Sec-Purpose without Sec-Fetch-* → +2 bot
+	t.Run("no_sec_fetch", func(t *testing.T) {
+		fp := fingerprint.Fingerprint{
+			HTTP: fingerprint.HTTPFingerprint{
+				UserAgent: "Mozilla/5.0 Chrome/120.0",
+				Headers:   map[string]string{"sec-purpose": "prefetch"},
+				// no Sec-Fetch-* headers
+			},
+			TLS: fingerprint.TLSFingerprint{Available: true, Version: "TLS 1.3"},
+		}
+		s := fingerprint.ExtractSignals(fp)
+		if !s.HasSecPurpose || !s.SecPurposeValid {
+			t.Fatal("expected HasSecPurpose and SecPurposeValid")
+		}
+		if s.HasSecFetchHeaders {
+			t.Fatal("this fp has no Sec-Fetch-* fields; HasSecFetchHeaders should be false")
+		}
+		if !strings.Contains(s.ScoreBreakdown, "sec-purpose-no-sec-fetch(+2)") {
+			t.Errorf("breakdown should contain sec-purpose-no-sec-fetch(+2), got %s", s.ScoreBreakdown)
+		}
+	})
 }
 
 func TestExtractSignals_NoSNI_NoALPN_FromProxy_NotSet(t *testing.T) {
@@ -1543,7 +1667,7 @@ func TestExtractSignals_NoBotRedFlags_NoSmokingGun(t *testing.T) {
 			Path:         "/",
 			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
 			Accept:       "text/html",
-			AcceptLang:   "en-US,en;q=0.9",
+			AcceptLang:   "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6",
 			SecFetchSite: "none",
 			SecFetchMode: "navigate",
 			SecFetchDest: "document",

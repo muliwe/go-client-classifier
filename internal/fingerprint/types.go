@@ -94,7 +94,9 @@ type Signals struct {
 	BrowserLikeHeaderOrder bool   `json:"browser_like_header_order"` // Accept and Accept-Language in first N positions
 	SecChUAModernOrder     bool   `json:"sec_ch_ua_modern_order"`    // First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand (Chrome 109+)
 	HasCacheControl        bool   `json:"has_cache_control"`         // Request has Cache-Control header (browser often sends max-age=0 on navigation)
-	AcceptLangRich         bool   `json:"accept_lang_rich"`          // Accept-Language has multiple locales (>=3 parts or length > 40)
+	AcceptLangRich         bool   `json:"accept_lang_rich"`          // Accept-Language has multiple locales (>=3 parts or length > 40) and varied q-values
+	HasSecPurpose          bool   `json:"has_sec_purpose"`           // Sec-Purpose header present (prefetch/prerender; forbidden for JS)
+	SecPurposeValid        bool   `json:"sec_purpose_valid"`         // Sec-Purpose value is prefetch or prefetch;prerender (W3C nav-speculation)
 
 	// Proxy / HTTP/2 fingerprint (e.g. from nginx TLS termination)
 	TLSFromProxy                 bool   `json:"tls_from_proxy"`                   // TLS data from trusted proxy headers

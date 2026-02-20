@@ -75,7 +75,7 @@ func TestClassify_BrowserDetection(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
@@ -271,7 +271,7 @@ func TestClassifier_ScoreCalculation(t *testing.T) {
 		},
 		HTTP: fingerprint.HTTPFingerprint{
 			UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
-			AcceptLang:    "en-US",
+			AcceptLang:    "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6",
 			AcceptEnc:     "gzip, deflate, br",
 			SecFetchSite:  "none",
 			SecFetchMode:  "navigate",
@@ -285,7 +285,7 @@ func TestClassifier_ScoreCalculation(t *testing.T) {
 	}
 	browserResult := clf.Classify(browserFp)
 	if browserResult.Score <= 0 {
-		t.Errorf("Expected positive score for browser-like fingerprint (0 bot), got %d (browser=%d bot=%d)",
+		t.Errorf("Expected positive score for browser-like fingerprint, got %d (browser=%d bot=%d)",
 			browserResult.Score, browserResult.Signals.BrowserScore, browserResult.Signals.BotScore)
 	}
 

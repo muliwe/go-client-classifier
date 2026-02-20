@@ -1744,15 +1744,21 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 **References**: MDN Cache-Control; Fetch standard (max-age=0 for no-cache).
 
-#### AcceptLangRich
+#### AcceptLangRich and accept-lang-simple
 
-**Observation**: Real browsers often send multiple locales in Accept-Language with q-values (e.g. `ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6`). curl_cffi in the reference sends a short single-locale value (`en-US,en;q=0.9`). Single locale can also be privacy/incognito, so use only as a browser bonus.
+**Observation**: Real browsers often send multiple locales in Accept-Language with **varied** q-values (canonical example: `ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6` — 5 parts, four distinct explicit weights). Impersonators (curl_cffi, undici, playwright-stealth) typically send 1–2 languages and a single weight (e.g. `en-US,en;q=0.9`). This is one of the most stable transport-signals in 2025 practice.
 
-**Computation**: Accept-Language has at least 3 comma-separated parts (e.g. split by comma, trim, count) or length &gt; 40. Thresholds chosen so reference browser gets the point and reference bot does not.
+**Computation**: **Rich** = (≥3 comma-separated parts or length &gt; 40) **and** at least 2 distinct explicit q-values (after `;q=`). If all explicit weights are the same (e.g. only 0.9), the profile is not rich. Thresholds from config (`accept_lang_min_locale_parts`, `accept_lang_min_length`). Reference browser payload uses the canonical header above; reference bot uses `en-US,en;q=0.9`.
 
-**Scoring**: +1 browser when rich (`accept-lang-rich(+1)`). No bot penalty for short Accept-Language.
+**Scoring**: +1 browser when rich (`accept-lang-rich(+1)`). +1 bot when Accept-Language is present but not rich (`accept-lang-simple(+1)`). **Missing Accept-Language** → +1 bot (`no-accept-lang`) whenever the header is absent, including when Sec-Fetch-* is present (per Radware: browser-like requests should include accept-language; missing header = anomaly). Incognito or first visit with a simple profile receives the bot point by design to improve separation from impersonators.
 
-**References**: MDN Accept-Language; browser fingerprinting research (multiple locales typical for real browsers; single locale for some bots and privacy mode).
+**References (specs and docs)**: [MDN Accept-Language](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Language) (q-values, Chrome/Safari add fallbacks e.g. `en-US,en;q=0.9,zh-CN;q=0.8`; Safari/Chrome incognito send one language). [HTTP Semantics (RFC 9110) field.accept-language](https://httpwg.org/specs/rfc9110.html#field.accept-language). [WICG Reduce Accept-Language fingerprinting](https://discourse.wicg.io/t/proposal-reduce-fingerprinting-in-the-accept-language-header/5835/).
+
+**References (bot detection and fingerprinting)**:
+- **Radware Bot Manager** — [HTTP Header Anomaly-based Bot Detection](https://www.radware.com/blog/application-protection/http-header-anomaly-based-advanced-behavioural-bot-detection/): lists **Accept-Language Spoofing** as a common bot technique (bots set the header to common values to blend in); detection correlates User-Agent with expected Accept headers (accept-language, accept-encoding, etc.); deviations are treated as anomalous.
+- **FP-Inconsistent** (Venugopalan et al., IMC 2024) — [arXiv:2406.07647](https://arxiv.org/abs/2406.07647): evasive bots alter fingerprint attributes but struggle to maintain **consistency** across attributes; rules that detect spatial/temporal inconsistencies reduce evasion by ~44–48%. Our rich-vs-simple Accept-Language is a spatial consistency signal (browser UA vs. simplistic language profile).
+- **JA4H (FoxIO)** — [JA4H technical details](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md): HTTP client fingerprint includes **Accept-Language** (method, version, header order, cookie, referer, language). Used in bot/C2 detection and threat hunting.
+- **curl_cffi / Playwright** — [Impersonation FAQ](https://curl-cffi.readthedocs.io/en/latest/impersonate/faq.html) (other fields detectable beyond TLS/HTTP2); [Playwright #23732](https://github.com/microsoft/playwright/issues/23732) (Firefox/WebKit ignore custom Accept-Language in automation; automation often sends wrong or simplistic values). Internal payload comparison: real Chrome vs curl_cffi reference.
 
 ### Scoring table
 
@@ -1762,6 +1768,22 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 | `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 12 | +2 bot | Same |
 | `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +3 bot; skipped for HTTP→HTTP proxy (no client TLS) | [2] FoxIO JA4H; smoking-gun for automation |
 | `sec-ch-ua-modern` | First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand | +1 browser | Chrome 109+ Client Hints; no bot penalty for Chromium-first |
+| `no-accept-lang` | Accept-Language header missing | +1 bot | Radware: missing standard Accept header = anomaly; applies even when Sec-Fetch-* present |
+| `accept-lang-rich` | Accept-Language has ≥3 parts or length &gt; 40 and ≥2 distinct explicit q-values | +1 browser | Canonical: ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6 |
+| `accept-lang-simple` | Accept-Language present but not rich (1–2 parts or single q-value) | +1 bot | Impersonators often send en-US,en;q=0.9 |
+| `sec-purpose` | Sec-Purpose header present and value is `prefetch` or `prefetch;prerender` | +2 browser | W3C nav-speculation; forbidden header (JS cannot set it) |
+| `sec-purpose-invalid` | Sec-Purpose present but value not in allowed set | +1 bot | Spoofed or broken header |
+| `sec-purpose-no-sec-fetch` | Sec-Purpose present but no Sec-Fetch-* headers | +2 bot | Prefetch in spec always sends fetch metadata |
+
+#### Sec-Purpose (prefetch / prerender)
+
+**Observation**: The `Sec-Purpose` request header is a fetch metadata header (W3C nav-speculation prefetch/prerender). It is a **forbidden** request header (`Sec-` prefix), so JavaScript cannot set it; only the browser engine sends it for prefetch/prerender requests. curl_cffi, undici, and Playwright do not send it by default. When present with a valid value and with Sec-Fetch-* headers, it is a strong browser signal; when present with an invalid value or without Sec-Fetch-*, it indicates spoofing or a broken client.
+
+**Computation**: Read from request headers (e.g. `Headers["sec-purpose"]`). **HasSecPurpose**: header present and non-empty after trim. **SecPurposeValid**: normalized value (trim, lowercase, collapse space after `;`) is `prefetch` or `prefetch;prerender` (per spec, the token is `prefetch` with optional `prerender` parameter).
+
+**Scoring**: +2 browser when `HasSecPurpose && SecPurposeValid` (`sec-purpose`). +1 bot when `HasSecPurpose && !SecPurposeValid` (`sec-purpose-invalid`). +2 bot when `HasSecPurpose && !HasSecFetchHeaders` (`sec-purpose-no-sec-fetch`); in the spec, prefetch requests always include fetch metadata (Sec-Fetch-*). No penalty when the header is absent (normal navigation does not send Sec-Purpose). No penalty for missing cookies when Sec-Purpose is present (cross-origin prefetch may legitimately have no cookies).
+
+**References**: [W3C nav-speculation Prefetch](https://wicg.github.io/nav-speculation/prefetch.html#sec-purpose-header), [MDN Sec-Purpose](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Purpose).
 
 ### Risks and mitigations
 
@@ -1801,12 +1823,16 @@ There is no single public "all curl-impersonate JA3" list; we maintain the list 
 
 ### References (this appendix)
 
-- [2] FoxIO JA4+ Network Fingerprinting — https://github.com/FoxIO-LLC/ja4 (JA4H technical_details/JA4H.md).
+- [2] FoxIO JA4+ Network Fingerprinting — https://github.com/FoxIO-LLC/ja4 (JA4H technical_details/JA4H.md). JA4H includes Accept-Language in HTTP client fingerprint.
 - ThreatRelay JA4H Quick Labs — https://www.threatrelay.com/Quick-Labs/JA4/JA4H (HTTP client fingerprinting).
 - WebDecoy headless/impersonate detection — headless browser detection (Playwright, Puppeteer, Selenium); JA4/JA4H for scrapers.
 - MDN Sec-CH-UA — https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Sec-CH-UA.
+- MDN Accept-Language — https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Language (q-values, browser behavior, incognito single-language).
+- Radware Bot Manager — HTTP Header Anomaly-based Bot Detection: Accept-Language spoofing; correlation of User-Agent with Accept headers — https://www.radware.com/blog/application-protection/http-header-anomaly-based-advanced-behavioural-bot-detection/.
+- FP-Inconsistent (Venugopalan et al., IMC 2024) — fingerprint inconsistencies in evasive bot traffic; spatial/temporal consistency rules — https://arxiv.org/abs/2406.07647.
 - curl_cffi impersonate — https://curl-cffi.readthedocs.io/en/latest/impersonate.html (what is mimicked: TLS, H2, headers).
-- curl_cffi Impersonation FAQ — JA3/akamai not comprehensive; other fields detectable; professional detection of curl_cffi behavior.
+- curl_cffi Impersonation FAQ — JA3/akamai not comprehensive; other fields detectable — https://curl-cffi.readthedocs.io/en/latest/impersonate/faq.html.
+- W3C nav-speculation Prefetch (Sec-Purpose) — https://wicg.github.io/nav-speculation/prefetch.html#sec-purpose-header. MDN Sec-Purpose — https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Purpose.
 
 ---
 
