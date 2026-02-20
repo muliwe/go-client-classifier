@@ -51,9 +51,14 @@ def _cookies_jar() -> dict[str, str]:
     return {c["name"]: c["value"] for c in INVENT_COOKIES}
 
 
+# Canonical "rich" Accept-Language (≥3 parts, ≥2 distinct q-values) — better browser signal
+ACCEPT_LANGUAGE_RICH = "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6"
+
+
 def test_antibot(url: str = "https://antibot.invent.sale/debug") -> dict:
     """Send a request impersonating Chrome and return the antibot verdict."""
-    response = requests.get(url, impersonate="chrome", cookies=_cookies_jar())
+    headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
+    response = requests.get(url, impersonate="chrome", cookies=_cookies_jar(), headers=headers)
     return response.json()
 
 
@@ -68,9 +73,10 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
     ]
     cookies = _cookies_jar()
 
+    headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
     for profile in profiles:
         try:
-            response = requests.get(url, impersonate=profile, cookies=cookies)
+            response = requests.get(url, impersonate=profile, cookies=cookies, headers=headers)
             data = response.json()
             status = "PASS" if data["classification"] == "browser" else "FAIL"
             print(f"[{status}] {profile:20s} -> {data['classification']} "
