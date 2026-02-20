@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## v0.8.0 (2026-02-20)
 
+### Tools: antibot test cookie jar
+
+- **tools/python/antibot_test.py** — Запросы к antibot.invent.sale выполняются с cookie jar: добавлена константа `INVENT_COOKIES` (в т.ч. `__Secure-authjs.callback-url`) и передача `cookies` в `test_antibot()` и `test_antibot_with_profiles()`.
+
 ### Absence signals (no-sni, no-alpn, no-bot-red-flags)
 
 - **Bot signals (absence of TLS traits):** When TLS is observed **directly** (not from proxy), missing Server Name Indication or ALPN is now scored as a bot signal. Real browsers send SNI and ALPN for HTTPS; many libraries and scanners do not.

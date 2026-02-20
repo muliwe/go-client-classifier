@@ -8,8 +8,8 @@ Results summary (https://antibot.invent.sale/):
   - Plain curl:                         bot  (confidence: 0.99)
   - curl + browser headers:             bot  (confidence: 0.60)
   - curl-impersonate (patched binary):  browser (confidence: 0.83)
-  - curl_cffi (Python, chrome profile): browser (confidence: 0.83)
-  - Playwright (real Chromium):         browser (confidence: 0.83)
+  - curl_cffi (chrome + cookie jar):    browser (confidence: 0.99)
+  - Playwright (real Chromium):         browser (confidence: 0.99)
 
 Key factors the antibot checks:
   1. TLS fingerprint (JA3/JA4) — cipher suites order, extensions, curves
