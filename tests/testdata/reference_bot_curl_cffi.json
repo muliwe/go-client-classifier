@@ -181,7 +181,7 @@
     "has_browser_headers": true,
     "missing_typical_header": false,
     "browser_score": 14,
-    "bot_score": 3,
-    "score_breakdown": "BROWSER[http2(+2) h2-fp(+1) h2-init-window(+1) h2-priority(+1) h2-window-update(+1) h2-pseudo-headers(+1) sec-fetch(+1) browser-ua(+1) sec-ch-ua(+1) modern-tls(+1) ssl-greased(+1) ja4h-headers>=10(+1) ja4h-consistent(+1)] BOT[ja4h-no-cookies(+3)]"
+    "bot_score": 2,
+    "score_breakdown": "BROWSER[http2(+2) h2-fp(+1) h2-init-window(+1) h2-priority(+1) h2-window-update(+1) h2-pseudo-headers(+1) sec-fetch(+1) browser-ua(+1) sec-ch-ua(+1) modern-tls(+1) ssl-greased(+1) ja4h-headers>=10(+1) ja4h-consistent(+1)] BOT[ja4h-no-cookies(+2)]"
   }
 }

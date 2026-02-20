@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.7.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 0.8.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -70,14 +70,16 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 ├── cmd/
 │   └── server/          # HTTP server entry point
 ├── internal/
+│   ├── config/          # Scoring config loader (JSON → classifier + fingerprint)
 │   ├── fingerprint/     # TLS/HTTP signal collection
 │   ├── classifier/      # Rule-based classification
 │   ├── logger/          # Structured JSON logging
 │   └── server/          # HTTP handlers
+├── config/              # Scoring config (scoring.json, scoring.default.json, README)
 ├── tests/
 │   ├── integration/     # Automated client tests
 │   ├── unit/            # Unit tests
-│   └── testdata/        # Test stubs (e.g. ja4db_fixture.json for tests)
+│   └── testdata/        # Test stubs (e.g. ja4db_fixture.json, reference_*.json)
 ├── tools/
 │   ├── benchmark/       # HTTP benchmark tool
 │   ├── python/          # Analytics tools
@@ -337,7 +339,7 @@ Tests verify:
   "message": "You appear to be using a browser",
   "request_id": "uuid",
   "timestamp": "2026-02-18T12:00:00Z",
-  "version": "0.7.0"
+  "version": "0.8.0"
 }
 ```
 
@@ -479,8 +481,11 @@ Verify: `curl http://localhost:8080/health` and `curl -k https://localhost:8443/
 | `TLS_CERT` | Path to certificate file                 | `certs/server.crt`  |
 | `TLS_KEY`  | Path to key file                         | `certs/server.key`  |
 | `DEBUG`    | Enable `/debug` endpoint                 | `true` / `false`    |
+| `SCORING_CONFIG` | Path to scoring JSON (points, thresholds, classifier) | `config/scoring.json` |
 
 If only `TLS_CERT` and `TLS_KEY` are set (no `TLS_PORT`), the service runs in HTTPS-only mode on `PORT`.
+
+**Scoring config** — All scoring points, thresholds, classifier weight and confidence parameters are read from a single JSON file at startup. Path: `SCORING_CONFIG` or default `config/scoring.json`. If the file is missing or invalid, built-in defaults are used. Tuning (e.g. reducing false bots for incognito) is done via the config without code changes. See [config/README.md](config/README.md) for the schema, smoking guns (+3), strong/weak bot signals, and zero-point (easily spoofable) signals; `config/scoring.default.json` is the reference default.
 
 ## Research Questions
 
@@ -501,6 +506,7 @@ Hooks are automatically run before each commit.
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — version history and release notes
+- [config/README.md](config/README.md) — scoring config schema, smoking guns, weak/zero signals, thresholds
 - [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references
 - [docs/nginx.md](docs/nginx.md) — nginx setup for TLS termination, HTTP/2 fingerprint (X-FP-H2), JA3 (X-FP-JA3); Go consumes headers and uses H2/JA3 in cross-validation (Appendix G)
 

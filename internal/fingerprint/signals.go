@@ -1,12 +1,123 @@
 package fingerprint
 
-import "strings"
-
-// Header-order thresholds from real browser observations (e.g. Chrome: accept-language ~9, accept ~10; bablosoft, JA4H).
-const (
-	browserLikeHeaderOrderMaxIdx = 12 // Accept and Accept-Language both before this index → browser-like
-	headerOrderLateMinIdx        = 12 // Either at or after this index → "late" (impersonator signal)
+import (
+	"fmt"
+	"strings"
+	"sync"
 )
+
+// ScoringThresholds holds numeric thresholds used in signal extraction (from scoring config).
+type ScoringThresholds struct {
+	BrowserLikeHeaderOrderMaxIdx int
+	HeaderOrderLateMinIdx        int
+	HighCipherCountMin           int
+	LowCipherCountMax            int
+	TLSExtBrowserMin             int
+	FewTLSExtMax                 int
+	SupportedGroupsMin           int
+	LowHeaderCountMax            int
+	JA4HLowHeaderCountMax        int
+	JA4HHighHeaderCountMin       int
+	AcceptLangMinLocaleParts     int
+	AcceptLangMinLength          int
+}
+
+// ScoringConfig holds points and thresholds for scoring (set at startup, no dependency on config package).
+type ScoringConfig struct {
+	Thresholds    ScoringThresholds
+	BrowserScores map[string]int
+	BotScores     map[string]int
+}
+
+// defaultScoringConfig returns the same values as original hardcoded constants (fallback).
+func defaultScoringConfig() ScoringConfig {
+	return ScoringConfig{
+		Thresholds: ScoringThresholds{
+			BrowserLikeHeaderOrderMaxIdx: 12,
+			HeaderOrderLateMinIdx:        12,
+			HighCipherCountMin:           10,
+			LowCipherCountMax:            10,
+			TLSExtBrowserMin:             10,
+			FewTLSExtMax:                 8,
+			SupportedGroupsMin:           3,
+			LowHeaderCountMax:            5,
+			JA4HLowHeaderCountMax:        5,
+			JA4HHighHeaderCountMin:       10,
+			AcceptLangMinLocaleParts:     3,
+			AcceptLangMinLength:          40,
+		},
+		BrowserScores: defaultBrowserScoresMap(),
+		BotScores:     defaultBotScoresMap(),
+	}
+}
+
+func defaultBrowserScoresMap() map[string]int {
+	m := map[string]int{
+		"http2": 2, "h2-fp": 1, "h2-init-window": 1, "h2-priority": 1, "h2-window-update": 1,
+		"h2-max-frame": 1, "h2-pseudo-headers": 1, "sec-fetch": 1, "browser-ua": 1, "sec-ch-ua": 1,
+		"header-order": 1, "cache-control": 1, "cookies": 1, "modern-tls": 1, "ssl-greased": 1,
+		"high-ciphers": 2, "session-ticket": 1, "multi-groups": 1, "tls-ext>=10": 1,
+		"ja4h-headers>=10": 1, "ja4h-referer": 1, "ja4h-consistent": 1, "tls-ua-consistent": 1,
+		"accept-language": 0, "browser-headers": 0, "sec-ch-ua-modern": 0, "accept-lang-rich": 0, "high-header-count": 0,
+	}
+	return m
+}
+
+func defaultBotScoresMap() map[string]int {
+	m := map[string]int{
+		"obsolete-tls": 3, "exotic-alpn": 3, "blind-probe": 3, "bot-ua": 3, "ai-crawler": 2,
+		"low-headers": 1, "missing-typical": 2, "no-ua": 3, "http1.1": 1, "accept-*/*": 1,
+		"no-accept-lang": 1, "low-ciphers": 1, "few-tls-ext": 1, "no-session": 1,
+		"ja4h-no-lang": 1, "ja4h-low-headers": 1, "ja4h-inconsistent": 2, "ja4h-no-cookies": 2,
+		"header-order-late": 2, "h2-ua-inconsistent": 2, "tls-ua-inconsistent": 3,
+		"ua-browser-no-grease": 3, "h2-ja4-inconsistent": 2, "tls-alpn-http-inconsistent": 2,
+	}
+	return m
+}
+
+var (
+	scoringConfigMu sync.RWMutex
+	scoringConfig   *ScoringConfig
+	defaultScoring  = defaultScoringConfig()
+)
+
+// SetScoringConfig sets the scoring config (called at server startup). If cfg is nil, defaults are used.
+func SetScoringConfig(cfg *ScoringConfig) {
+	scoringConfigMu.Lock()
+	defer scoringConfigMu.Unlock()
+	if cfg != nil {
+		scoringConfig = cfg
+	} else {
+		scoringConfig = &defaultScoring
+	}
+}
+
+func getScoringConfig() *ScoringConfig {
+	scoringConfigMu.RLock()
+	defer scoringConfigMu.RUnlock()
+	if scoringConfig != nil {
+		return scoringConfig
+	}
+	return &defaultScoring
+}
+
+func getThresholds() ScoringThresholds {
+	return getScoringConfig().Thresholds
+}
+
+func browserScore(key string) int {
+	if n, ok := getScoringConfig().BrowserScores[key]; ok {
+		return n
+	}
+	return 0
+}
+
+func botScore(key string) int {
+	if n, ok := getScoringConfig().BotScores[key]; ok {
+		return n
+	}
+	return 0
+}
 
 // Known bot User-Agent patterns
 var botPatterns = []string{
@@ -153,12 +264,21 @@ func ExtractSignals(fp Fingerprint) Signals {
 	s.HasModernTLS = fp.TLS.Version == "TLS 1.2" || fp.TLS.Version == "TLS 1.3"
 	s.HasALPN = fp.TLS.ALPN != ""
 	s.TLSExoticALPN = isExoticALPN(fp.TLS.ALPN)
-	s.HighCipherCount = fp.TLS.CipherSuitesCount > 10 // Browsers typically have 15-20
-	s.HasSessionSupport = fp.TLS.HasSessionTicket     // Session resumption
+	t := getThresholds()
+	highCipherMin := t.HighCipherCountMin
+	if highCipherMin <= 0 {
+		highCipherMin = 10
+	}
+	s.HighCipherCount = fp.TLS.CipherSuitesCount > highCipherMin
+	s.HasSessionSupport = fp.TLS.HasSessionTicket
 	s.HasTLSFingerprint = fp.TLS.JA3Hash != "" || fp.TLS.JA4Hash != ""
 	s.TLSKnownLibrary = IsKnownLibraryTLS(fp.TLS.JA3Hash, fp.TLS.JA4Hash)
 	s.TLSKnownBrowser = IsKnownBrowserTLS(fp.TLS.JA3Hash, fp.TLS.JA4Hash)
-	s.HasMultipleGroups = len(fp.TLS.SupportedGroups) >= 3 // Browsers support multiple curves
+	groupsMin := t.SupportedGroupsMin
+	if groupsMin <= 0 {
+		groupsMin = 3
+	}
+	s.HasMultipleGroups = len(fp.TLS.SupportedGroups) >= groupsMin
 	s.HasModernCiphers = fp.TLS.Version == "TLS 1.3" && fp.TLS.CipherSuitesCount > 0
 
 	// HTTP signals
@@ -177,8 +297,12 @@ func ExtractSignals(fp Fingerprint) Signals {
 		extractJA4HSignals(&s, fp.HTTP.JA4HHash, fp)
 	}
 
-	// Header order: Accept and Accept-Language in first N positions (browser-like). See browserLikeHeaderOrderMaxIdx.
-	s.BrowserLikeHeaderOrder = isBrowserLikeHeaderOrder(fp.HTTP.HeaderOrder, browserLikeHeaderOrderMaxIdx)
+	// Header order: Accept and Accept-Language in first N positions (browser-like).
+	headerOrderMax := t.BrowserLikeHeaderOrderMaxIdx
+	if headerOrderMax <= 0 {
+		headerOrderMax = 12
+	}
+	s.BrowserLikeHeaderOrder = isBrowserLikeHeaderOrder(fp.HTTP.HeaderOrder, headerOrderMax)
 
 	// Sec-CH-UA: Chrome 109+ sends Not:A-Brand or Not_A Brand first; automation often sends Chromium first.
 	s.SecChUAModernOrder = isSecChUAModernOrder(fp.HTTP.SecChUA)
@@ -197,7 +321,11 @@ func ExtractSignals(fp Fingerprint) Signals {
 	s.UserAgentIsBrowser = containsAny(uaLower, browserPatterns) && !s.UserAgentIsBot
 
 	// Header analysis
-	s.LowHeaderCount = fp.HTTP.HeaderCount < 5
+	lowHeaderMax := t.LowHeaderCountMax
+	if lowHeaderMax <= 0 {
+		lowHeaderMax = 5
+	}
+	s.LowHeaderCount = fp.HTTP.HeaderCount < lowHeaderMax
 	s.HasBrowserHeaders = s.HasSecFetchHeaders || s.HasAcceptLanguage
 	s.MissingTypicalHeader = !s.HasAccept || !s.HasAcceptEncoding
 
@@ -243,8 +371,17 @@ func extractJA4HSignals(s *Signals, ja4h string, fp Fingerprint) {
 		headerCountStr := ja4hA[6:8]
 		var headerCount int
 		if _, err := parseHeaderCount(headerCountStr, &headerCount); err == nil {
-			s.JA4HLowHeaderCount = headerCount < 5
-			s.JA4HHighHeaderCount = headerCount >= 10
+			t := getThresholds()
+			lowMax := t.JA4HLowHeaderCountMax
+			if lowMax <= 0 {
+				lowMax = 5
+			}
+			highMin := t.JA4HHighHeaderCountMin
+			if highMin <= 0 {
+				highMin = 10
+			}
+			s.JA4HLowHeaderCount = headerCount < lowMax
+			s.JA4HHighHeaderCount = headerCount >= highMin
 		}
 	}
 
@@ -307,163 +444,129 @@ func checkJA4HConsistency(s *Signals, fp Fingerprint) bool {
 	return consistent
 }
 
+// addBrowser adds points for a browser signal key and appends to reasons if points > 0.
+func addBrowser(reasons *[]string, key string) int {
+	n := browserScore(key)
+	if n > 0 {
+		*reasons = append(*reasons, fmt.Sprintf("%s(+%d)", key, n))
+	}
+	return n
+}
+
+// addBot adds points for a bot signal key and appends to reasons if points > 0.
+func addBot(reasons *[]string, key string) int {
+	n := botScore(key)
+	if n > 0 {
+		*reasons = append(*reasons, fmt.Sprintf("%s(+%d)", key, n))
+	}
+	return n
+}
+
 // calculateScores computes browser and bot scores based on signals
 func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, breakdown string) {
 	var browserReasons, botReasons []string
+	t := getThresholds()
+	tlsExtMin := t.TLSExtBrowserMin
+	if tlsExtMin <= 0 {
+		tlsExtMin = 10
+	}
+	lateIdx := t.HeaderOrderLateMinIdx
+	if lateIdx <= 0 {
+		lateIdx = 12
+	}
+	lowCipherMax := t.LowCipherCountMax
+	if lowCipherMax <= 0 {
+		lowCipherMax = 10
+	}
+	fewExtMax := t.FewTLSExtMax
+	if fewExtMax <= 0 {
+		fewExtMax = 8
+	}
 
 	// ==========================================
 	// Browser-positive signals
 	// ==========================================
 
-	// HTTP/2 - browsers prefer HTTP/2
 	if s.IsHTTP2 {
-		browserScore += 2
-		browserReasons = append(browserReasons, "http2(+2)")
+		browserScore += addBrowser(&browserReasons, "http2")
 	}
-
-	// HTTP/2 fingerprint present (from proxy or future native) - correlates with real clients
 	if s.HasHTTP2Fingerprint {
-		browserScore++
-		browserReasons = append(browserReasons, "h2-fp(+1)")
+		browserScore += addBrowser(&browserReasons, "h2-fp")
 	}
-
-	// Parsed H2 fingerprint with browser-like INITIAL_WINDOW_SIZE (SETTINGS id 4)
 	if s.H2SettingsParsed && IsBrowserLikeH2InitialWindow(s.H2InitialWindowSize) {
-		browserScore++
-		browserReasons = append(browserReasons, "h2-init-window(+1)")
+		browserScore += addBrowser(&browserReasons, "h2-init-window")
 	}
-
-	// PRIORITY segment present: browsers send PRIORITY frames, many HTTP/2 libraries omit them
 	if s.H2SettingsParsed && s.H2PriorityPresent {
-		browserScore++
-		browserReasons = append(browserReasons, "h2-priority(+1)")
+		browserScore += addBrowser(&browserReasons, "h2-priority")
 	}
-
-	// WINDOW_UPDATE present (connection-level): real clients use flow control; correlates with browser behavior
 	if s.H2SettingsParsed && s.H2WindowUpdatePresent {
-		browserScore++
-		browserReasons = append(browserReasons, "h2-window-update(+1)")
+		browserScore += addBrowser(&browserReasons, "h2-window-update")
 	}
-
-	// MAX_FRAME_SIZE (SETTINGS id 5) browser-like (16384 default or 16777215 max)
 	if s.H2SettingsParsed && s.H2MaxFrameSizeBrowserLike {
-		browserScore++
-		browserReasons = append(browserReasons, "h2-max-frame(+1)")
+		browserScore += addBrowser(&browserReasons, "h2-max-frame")
 	}
-
-	// Fourth segment (pseudo-header order / flags) present: full fingerprint typical of browsers
 	if s.H2SettingsParsed && s.H2PseudoHeaderOrderPresent {
-		browserScore++
-		browserReasons = append(browserReasons, "h2-pseudo-headers(+1)")
+		browserScore += addBrowser(&browserReasons, "h2-pseudo-headers")
 	}
-
-	// Sec-Fetch-* headers — easily spoofable; reduced weight
 	if s.HasSecFetchHeaders {
-		browserScore++
-		browserReasons = append(browserReasons, "sec-fetch(+1)")
+		browserScore += addBrowser(&browserReasons, "sec-fetch")
 	}
-
-	// Accept-Language — trivial to spoof; no browser points
-	_ = s.HasAcceptLanguage
-
-	// Browser headers combination — trivial to spoof; no browser points
-	_ = s.HasBrowserHeaders
-
-	// User-Agent looks like browser — easily spoofable; reduced weight
+	if s.HasAcceptLanguage {
+		browserScore += addBrowser(&browserReasons, "accept-language")
+	}
+	if s.HasBrowserHeaders {
+		browserScore += addBrowser(&browserReasons, "browser-headers")
+	}
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot {
-		browserScore++
-		browserReasons = append(browserReasons, "browser-ua(+1)")
+		browserScore += addBrowser(&browserReasons, "browser-ua")
 	}
-
-	// Sec-CH-UA client hints — easily spoofable; reduced weight
 	if s.HasSecClientHints {
-		browserScore++
-		browserReasons = append(browserReasons, "sec-ch-ua(+1)")
+		browserScore += addBrowser(&browserReasons, "sec-ch-ua")
 	}
-
-	// Browser-like header order: +1 only when order came from proxy (X-Original-Header-Order), else 0 (nginx reorders)
 	if fp.HTTP.HeaderOrderFromProxy && s.BrowserLikeHeaderOrder {
-		browserScore++
-		browserReasons = append(browserReasons, "header-order(+1)")
+		browserScore += addBrowser(&browserReasons, "header-order")
 	}
-
-	// Sec-CH-UA modern order — easily spoofable; no browser points
-	_ = s.SecChUAModernOrder
-
-	// Cache-Control present: real Chrome often sends max-age=0 on navigation; impersonators often omit. Appendix I.
+	if s.SecChUAModernOrder {
+		browserScore += addBrowser(&browserReasons, "sec-ch-ua-modern")
+	}
 	if s.HasCacheControl {
-		browserScore++
-		browserReasons = append(browserReasons, "cache-control(+1)")
+		browserScore += addBrowser(&browserReasons, "cache-control")
 	}
-
-	// Accept-Language rich — easily spoofable; no browser points
-	_ = s.AcceptLangRich
-
-	// Cookies present
+	if s.AcceptLangRich {
+		browserScore += addBrowser(&browserReasons, "accept-lang-rich")
+	}
 	if fp.HTTP.HasCookies {
-		browserScore++
-		browserReasons = append(browserReasons, "cookies(+1)")
+		browserScore += addBrowser(&browserReasons, "cookies")
 	}
-
-	// High header count — trivial to spoof; no browser points (fp.HTTP.HeaderCount still used elsewhere)
-
-	// Modern TLS - only count as browser signal when UA is not already a known bot (curl, etc. have modern TLS too)
 	if !s.UserAgentIsBot && s.HasModernTLS {
-		browserScore++
-		browserReasons = append(browserReasons, "modern-tls(+1)")
+		browserScore += addBrowser(&browserReasons, "modern-tls")
 	}
-
-	// GREASE present (from proxy X-FP-SSL-GREASED) - real browsers send GREASE; optional +1 browser when TLS is modern
 	if s.HasSSLGreased && s.HasModernTLS && !s.UserAgentIsBot {
-		browserScore++
-		browserReasons = append(browserReasons, "ssl-greased(+1)")
+		browserScore += addBrowser(&browserReasons, "ssl-greased")
 	}
-
-	// TLS fingerprint signals (from ClientHello) - only when UA is not bot; CLI libraries also have rich TLS
 	if !s.UserAgentIsBot && s.HasTLSFingerprint {
-		// High cipher suite count - browsers offer 15-20 cipher suites
 		if s.HighCipherCount {
-			browserScore += 2
-			browserReasons = append(browserReasons, "high-ciphers(+2)")
+			browserScore += addBrowser(&browserReasons, "high-ciphers")
 		}
-
-		// Session ticket support - browsers support session resumption
 		if s.HasSessionSupport {
-			browserScore++
-			browserReasons = append(browserReasons, "session-ticket(+1)")
+			browserScore += addBrowser(&browserReasons, "session-ticket")
 		}
-
-		// Multiple elliptic curve groups - browsers support several
 		if s.HasMultipleGroups {
-			browserScore++
-			browserReasons = append(browserReasons, "multi-groups(+1)")
+			browserScore += addBrowser(&browserReasons, "multi-groups")
 		}
-
-		// Extensions count - browsers have many TLS extensions
-		if fp.TLS.ExtensionsCount >= 10 {
-			browserScore++
-			browserReasons = append(browserReasons, "tls-ext>=10(+1)")
+		if fp.TLS.ExtensionsCount >= tlsExtMin {
+			browserScore += addBrowser(&browserReasons, "tls-ext>=10")
 		}
 	}
-
-	// JA4H fingerprint signals (browser-positive)
 	if s.HasJA4HFingerprint {
-		// High header count from JA4H - browsers send many headers
 		if s.JA4HHighHeaderCount {
-			browserScore++
-			browserReasons = append(browserReasons, "ja4h-headers>=10(+1)")
+			browserScore += addBrowser(&browserReasons, "ja4h-headers>=10")
 		}
-
-		// Has referer - often present in browser navigation
 		if s.JA4HHasReferer {
-			browserScore++
-			browserReasons = append(browserReasons, "ja4h-referer(+1)")
+			browserScore += addBrowser(&browserReasons, "ja4h-referer")
 		}
-
-		// Consistent signals - no fingerprint manipulation detected; skip for bot UA (minimal headers can be "consistent" too)
 		if !s.UserAgentIsBot && s.JA4HConsistentSignal {
-			browserScore++
-			browserReasons = append(browserReasons, "ja4h-consistent(+1)")
+			browserScore += addBrowser(&browserReasons, "ja4h-consistent")
 		}
 	}
 
@@ -471,179 +574,96 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	// Bot-positive signals
 	// ==========================================
 
-	// Obsolete TLS (1.0/1.1) - outdated clients, often automation or legacy; smoking gun
 	if s.TLSObsolete {
-		botScore += 3
-		botReasons = append(botReasons, "obsolete-tls(+3)")
+		botScore += addBot(&botReasons, "obsolete-tls")
 	}
-
-	// Exotic ALPN (http/0.9, spdy, h2c, hq) - scanners/bots often send these; smoking gun
 	if s.TLSExoticALPN {
-		botScore += 3
-		botReasons = append(botReasons, "exotic-alpn(+3)")
+		botScore += addBot(&botReasons, "exotic-alpn")
 	}
-
-	// Blind probe: path != "/" or method != GET — we return 404 for these; bots often probe blindly; smoking gun
 	if s.RequestIsProbe {
-		botScore += 3
-		botReasons = append(botReasons, "blind-probe(+3)")
+		botScore += addBot(&botReasons, "blind-probe")
 	}
-
-	// Known bot User-Agent pattern
 	if s.UserAgentIsBot {
-		botScore += 3
-		botReasons = append(botReasons, "bot-ua(+3)")
+		botScore += addBot(&botReasons, "bot-ua")
 	}
-
-	// AI/LLM crawler - extra penalty
 	if s.UserAgentIsAICrawler {
-		botScore += 2
-		botReasons = append(botReasons, "ai-crawler(+2)")
+		botScore += addBot(&botReasons, "ai-crawler")
 	}
-
-	// Low header count - bots send minimal headers
 	if s.LowHeaderCount {
-		botScore += 2
-		botReasons = append(botReasons, "low-headers(+2)")
+		botScore += addBot(&botReasons, "low-headers")
 	}
-
-	// Missing typical headers (Accept or Accept-Encoding) and no Sec-Fetch - strong library signal
 	if s.MissingTypicalHeader && !s.HasSecFetchHeaders {
-		botScore += 2
-		botReasons = append(botReasons, "missing-typical(+2)")
+		botScore += addBot(&botReasons, "missing-typical")
 	}
-
-	// Missing User-Agent - smoking gun (legitimate clients always send it)
 	if !s.HasUserAgent {
-		botScore += 3
-		botReasons = append(botReasons, "no-ua(+3)")
+		botScore += addBot(&botReasons, "no-ua")
 	}
-
-	// HTTP/1.1 without H2 when TLS was available - many bots don't support HTTP/2.
-	// Skip when TLS is not available (e.g. raw HTTP pipeline without nginx): HTTP/2 wasn't an option.
 	if fp.TLS.Available && !s.IsHTTP2 && fp.HTTP.Version == "HTTP/1.1" {
-		botScore++
-		botReasons = append(botReasons, "http1.1(+1)")
+		botScore += addBot(&botReasons, "http1.1")
 	}
-
-	// Generic Accept header (*/*) - typical for HTTP libraries
 	if fp.HTTP.Accept == "*/*" {
-		botScore++
-		botReasons = append(botReasons, "accept-*/*-(+1)")
+		botScore += addBot(&botReasons, "accept-*/*")
 	}
-
-	// Missing Accept-Language without Sec-Fetch
 	if !s.HasAcceptLanguage && !s.HasSecFetchHeaders {
-		botScore++
-		botReasons = append(botReasons, "no-accept-lang(+1)")
+		botScore += addBot(&botReasons, "no-accept-lang")
 	}
-
-	// TLS fingerprint signals indicating bot
 	if s.HasTLSFingerprint {
-		// Low cipher suite count - simple HTTP clients
-		if fp.TLS.CipherSuitesCount > 0 && fp.TLS.CipherSuitesCount < 10 {
-			botScore++
-			botReasons = append(botReasons, "low-ciphers(+1)")
+		if fp.TLS.CipherSuitesCount > 0 && fp.TLS.CipherSuitesCount < lowCipherMax {
+			botScore += addBot(&botReasons, "low-ciphers")
 		}
-
-		// Few or no TLS extensions
-		if fp.TLS.ExtensionsCount > 0 && fp.TLS.ExtensionsCount < 8 {
-			botScore++
-			botReasons = append(botReasons, "few-tls-ext(+1)")
+		if fp.TLS.ExtensionsCount > 0 && fp.TLS.ExtensionsCount < fewExtMax {
+			botScore += addBot(&botReasons, "few-tls-ext")
 		}
-
-		// No session ticket support (skip when from proxy: session ticket not passed in X-FP-*)
 		if !s.HasSessionSupport && fp.TLS.Available && !fp.TLS.FromProxy {
-			botScore++
-			botReasons = append(botReasons, "no-session(+1)")
+			botScore += addBot(&botReasons, "no-session")
 		}
 	}
-
-	// JA4H fingerprint signals (bot-positive)
-	// When TLS is from proxy, JA4H is computed from the request as seen by the backend (after nginx);
-	// header set can differ from what the client sent, so these penalties are skipped to avoid false bot points for real browsers.
 	if s.HasJA4HFingerprint && !fp.TLS.FromProxy {
-		// Missing language in JA4H - bots often don't send Accept-Language
 		if s.JA4HMissingLanguage {
-			botScore++
-			botReasons = append(botReasons, "ja4h-no-lang(+1)")
+			botScore += addBot(&botReasons, "ja4h-no-lang")
 		}
-
-		// Low header count from JA4H
 		if s.JA4HLowHeaderCount {
-			botScore++
-			botReasons = append(botReasons, "ja4h-low-headers(+1)")
+			botScore += addBot(&botReasons, "ja4h-low-headers")
 		}
-
-		// Inconsistent signals - possible fingerprint manipulation/evasion
 		if !s.JA4HConsistentSignal {
-			botScore += 2
-			botReasons = append(botReasons, "ja4h-inconsistent(+2)")
+			botScore += addBot(&botReasons, "ja4h-inconsistent")
 		}
 	}
 
-	// When TLS is from proxy but no client TLS was forwarded (HTTP→HTTP), we skip cookie/grease bot penalties.
 	proxyHasClientTLS := fp.TLS.ALPN != "" || fp.TLS.JA3Hash != "" || fp.TLS.CipherSuite != ""
-
-	// JA4H zeroed C/D with browser UA and no cookies: smoking gun for automation (e.g. curl_cffi). Strong penalty.
-	// Skip when HTTP→HTTP proxy: no client TLS visible; no cookies on first request or over HTTP is normal.
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !fp.HTTP.HasCookies && s.JA4HZeroedCookieHashes &&
 		!(fp.TLS.FromProxy && !proxyHasClientTLS) {
-		botScore += 3
-		botReasons = append(botReasons, "ja4h-no-cookies(+3)")
+		botScore += addBot(&botReasons, "ja4h-no-cookies")
 	}
 
-	// Browser UA but header order not browser-like (Accept or Accept-Language late). Only when order from proxy (X-Original-Header-Order).
 	if fp.HTTP.HeaderOrderFromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.BrowserLikeHeaderOrder && s.HasAcceptLanguage && s.HasAccept {
 		idxAccept, idxLang := indexOfHeader(fp.HTTP.HeaderOrder, "accept"), indexOfHeader(fp.HTTP.HeaderOrder, "accept-language")
-		if idxAccept >= headerOrderLateMinIdx || idxLang >= headerOrderLateMinIdx {
-			botScore += 2
-			botReasons = append(botReasons, "header-order-late(+2)")
+		if idxAccept >= lateIdx || idxLang >= lateIdx {
+			botScore += addBot(&botReasons, "header-order-late")
 		}
 	}
 
-	// H2 vs User-Agent inconsistency (Appendix G): UA claims browser but H2 fingerprint looks library-like.
-	// Skip when from proxy: X-FP-H2 may omit some SETTINGS (e.g. MAX_FRAME_SIZE id 5), so isH2LibraryLike can false-positive on real browsers.
 	if !fp.TLS.FromProxy && s.UserAgentIsBrowser && !s.UserAgentIsBot && s.HasHTTP2Fingerprint && isH2LibraryLike(s) {
-		botScore += 2
-		botReasons = append(botReasons, "h2-ua-inconsistent(+2)")
+		botScore += addBot(&botReasons, "h2-ua-inconsistent")
 	}
-
-	// TLS vs User-Agent inconsistency (Appendix G): UA claims browser but JA3/JA4 is known library (curl, Go, Python, etc.). Smoking gun.
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary && !s.TLSKnownBrowser {
-		botScore += 3
-		botReasons = append(botReasons, "tls-ua-inconsistent(+3)")
+		botScore += addBot(&botReasons, "tls-ua-inconsistent")
 	}
-
-	// Browser UA but no GREASE when TLS from proxy: real browsers send GREASE; curl/libraries typically do not. Smoking gun.
-	// Only apply when proxy actually forwarded client TLS. For HTTP→HTTP proxy, no GREASE is expected — do not penalize.
 	if s.TLSFromProxy && proxyHasClientTLS && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased {
-		botScore += 3
-		botReasons = append(botReasons, "ua-browser-no-grease(+3)")
+		botScore += addBot(&botReasons, "ua-browser-no-grease")
 	}
 
-	// TLS vs User-Agent: browser UA + known browser TLS → consistency bonus
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownBrowser {
-		browserScore++
-		browserReasons = append(browserReasons, "tls-ua-consistent(+1)")
+		browserScore += addBrowser(&browserReasons, "tls-ua-consistent")
 	}
-
-	// TLS vs User-Agent: bot UA but JA3/JA4 is known browser (e.g. spoofed UA, real browser TLS). Smoking gun.
 	if s.UserAgentIsBot && s.TLSKnownBrowser {
-		botScore += 3
-		botReasons = append(botReasons, "tls-ua-inconsistent(+3)")
+		botScore += addBot(&botReasons, "tls-ua-inconsistent")
 	}
-
-	// H2 vs JA4 inconsistency (Appendix G): JA4 says h2 but request is HTTP/1.1, or JA4 says h1 but we have HTTP/2
 	if s.H2JA4Inconsistent {
-		botScore += 2
-		botReasons = append(botReasons, "h2-ja4-inconsistent(+2)")
+		botScore += addBot(&botReasons, "h2-ja4-inconsistent")
 	}
-
-	// TLS/HTTP version mismatch (Appendix G): ALPN (h2/http/1.1) disagrees with request HTTP version (direct TLS only)
 	if s.TLSALPNVsHTTPInconsistent {
-		botScore += 2
-		botReasons = append(botReasons, "tls-alpn-http-inconsistent(+2)")
+		botScore += addBot(&botReasons, "tls-alpn-http-inconsistent")
 	}
 
 	// Build breakdown string
@@ -770,15 +790,23 @@ func isSecChUAModernOrder(secChUA string) bool {
 	return firstNorm == "not:a-brand" || firstNorm == "not_abrand" || firstNorm == "not_a_brand"
 }
 
-// acceptLangRich returns true when Accept-Language has multiple locales (>= 3 comma-separated parts) or length > 40.
-// Real browsers often send several locales with q-values; automation and curl_cffi often send a short single-locale value.
+// acceptLangRich returns true when Accept-Language has multiple locales or long string (thresholds from config).
 func acceptLangRich(acceptLang string) bool {
 	s := strings.TrimSpace(acceptLang)
 	if s == "" {
 		return false
 	}
-	if len(s) > 40 {
+	t := getThresholds()
+	minLen := t.AcceptLangMinLength
+	if minLen <= 0 {
+		minLen = 40
+	}
+	if len(s) > minLen {
 		return true
+	}
+	minParts := t.AcceptLangMinLocaleParts
+	if minParts <= 0 {
+		minParts = 3
 	}
 	parts := strings.Split(s, ",")
 	count := 0
@@ -787,5 +815,5 @@ func acceptLangRich(acceptLang string) bool {
 			count++
 		}
 	}
-	return count >= 3
+	return count >= minParts
 }

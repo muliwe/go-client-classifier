@@ -12,7 +12,7 @@ Endpoint: `https://antibot.invent.sale/debug` (или ваш инстанс за
 
 **Как воспроизвести:** В браузере перейти на `https://antibot.invent.sale/debug`. Никаких скриптов и подмены заголовков.
 
-**Ожидаемый результат (после правок v0.7.0):** `classification: "browser"`, `bot_score: 0`, `browser_score` высокий (~20–21). В fingerprint: TLS от proxy, `ssl_greased` не "0", H2 fingerprint с browser-like окном (напр. 6291456), JA3 не из knownLibraryJA3. В breakdown не должно быть: `no-session(+1)`, `ja4h-inconsistent(+2)`, `h2-ua-inconsistent(+2)`.
+**Ожидаемый результат (после правок v0.8.0):** `classification: "browser"`, `bot_score: 0`, `browser_score` высокий (~20–21). В fingerprint: TLS от proxy, `ssl_greased` не "0", H2 fingerprint с browser-like окном (напр. 6291456), JA3 не из knownLibraryJA3. В breakdown не должно быть: `no-session(+1)`, `ja4h-inconsistent(+2)`, `h2-ua-inconsistent(+2)`.
 
 ---
 
@@ -74,4 +74,4 @@ curl.exe -s "https://antibot.invent.sale/debug" -H "User-Agent: Mozilla/5.0 (Win
 | 2. curl.exe | PowerShell | bot |
 | 3. Invoke-WebRequest | PowerShell | bot |
 
-См. [METHODOLOGY.md](METHODOLOGY.md), [CHANGELOG.md](../CHANGELOG.md) v0.7.0.
+См. [METHODOLOGY.md](METHODOLOGY.md), [CHANGELOG.md](../CHANGELOG.md) v0.8.0.

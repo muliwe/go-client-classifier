@@ -887,7 +887,7 @@ func TestCalculateScores_JA4HNoCookies_HTTPToHTTP_NoPenalty(t *testing.T) {
 	if !s.TLSFromProxy || !s.UserAgentIsBrowser || !s.JA4HZeroedCookieHashes {
 		t.Error("Setup: from proxy, browser UA, no cookies, zeroed C/D")
 	}
-	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies") {
 		t.Errorf("HTTP→HTTP proxy must NOT get ja4h-no-cookies (no client TLS; cookies rare), got %s", s.ScoreBreakdown)
 	}
 }
@@ -1266,7 +1266,7 @@ func TestExtractSignals_JA4H_NonZeroedCookieHashes(t *testing.T) {
 }
 
 func TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty(t *testing.T) {
-	// Proxy forwarded client TLS (ALPN) + no cookies + zeroed C/D → ja4h-no-cookies(+3)
+	// Proxy forwarded client TLS (ALPN) + no cookies + zeroed C/D → ja4h-no-cookies(+2)
 	fp := fingerprint.Fingerprint{
 		TLS: fingerprint.TLSFingerprint{FromProxy: true, SSLGreased: "1", Version: "TLS 1.3", ALPN: "h2"},
 		HTTP: fingerprint.HTTPFingerprint{
@@ -1282,14 +1282,14 @@ func TestCalculateScores_JA4HZeroedCookieHashes_BotPenalty(t *testing.T) {
 		},
 	}
 	s := fingerprint.ExtractSignals(fp)
-	if !strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
-		t.Errorf("Browser UA + no cookies + zeroed C/D (proxy with client TLS) should get ja4h-no-cookies(+3), got %s", s.ScoreBreakdown)
+	if !strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+2)") {
+		t.Errorf("Browser UA + no cookies + zeroed C/D (proxy with client TLS) should get ja4h-no-cookies(+2), got %s", s.ScoreBreakdown)
 	}
 	// With cookies present, no penalty
 	fp.HTTP.HasCookies = true
 	fp.HTTP.JA4HHash = "ge11cn25enus_abc123_a1b2c3d4e5f6_f6e5d4c3b2a1"
 	s = fingerprint.ExtractSignals(fp)
-	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies") {
 		t.Error("HasCookies true should not get ja4h-no-cookies penalty")
 	}
 }
@@ -1368,7 +1368,7 @@ func TestCalculateScores_RealBrowserLike_KeepsBrowserScore(t *testing.T) {
 	if s.JA4HZeroedCookieHashes {
 		t.Error("Real browser with cookies should not have JA4HZeroedCookieHashes")
 	}
-	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies(+3)") {
+	if strings.Contains(s.ScoreBreakdown, "ja4h-no-cookies") {
 		t.Error("Real browser-like fingerprint should not get ja4h-no-cookies in breakdown")
 	}
 	if s.BrowserScore < 15 {

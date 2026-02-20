@@ -4,11 +4,29 @@ import (
 	"log"
 	"os"
 
+	"github.com/muliwe/go-client-classifier/internal/config"
+	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 	"github.com/muliwe/go-client-classifier/internal/server"
 )
 
 func main() {
+	// Load scoring config (points, thresholds, classifier); fallback to defaults on error
+	scoringPath := os.Getenv("SCORING_CONFIG")
+	if scoringPath == "" {
+		scoringPath = "config/scoring.json"
+	}
+	scoringCfg, err := config.Load(scoringPath)
+	if err != nil {
+		log.Printf("Scoring config load failed, using defaults: %v", err)
+		scoringCfg = config.DefaultScoringConfig()
+	} else {
+		log.Printf("Scoring config loaded from %s", scoringPath)
+	}
+	fpScoring := config.ToFingerprintScoringConfig(scoringCfg)
+	fingerprint.SetScoringConfig(&fpScoring)
+
 	cfg := server.DefaultConfig()
+	cfg.ClassifierCfg = config.ToClassifierConfig(scoringCfg)
 
 	// Port overrides from environment
 	if port := os.Getenv("PORT"); port != "" {

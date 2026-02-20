@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.8.0 (2026-02-20)
+
+### Scoring config (JSON)
+
+- **Externalized scoring** — All scoring points, thresholds, classifier weight and confidence parameters are loaded from a single JSON file at startup (`SCORING_CONFIG` or `config/scoring.json`). Missing or invalid file falls back to built-in defaults. No code changes needed to tune weights or thresholds.
+- **config/scoring.json** — Default config with current values (pretty-printed). **config/scoring.default.json** — Reference copy for diff/restore.
+- **config/README.md** — Documentation: JSON structure; smoking guns (+3); strong (+2) and weak (+1) bot signals; zero-point (easily spoofable) browser signals; thresholds table; classifier formula.
+- **Internal** — `internal/config` loads and merges JSON with defaults; `ToClassifierConfig` / `ToFingerprintScoringConfig` feed classifier and fingerprint. Fallback defaults in `internal/config/scoring.go` and `internal/fingerprint/signals.go`.
+
+### Incognito / first-visit tuning
+
+- **ja4h-no-cookies**: +3 → **+2** so browsers in incognito or first visit (no cookies, JA4H C/D zeroed) are not over-penalized; signal remains strong but no longer smoking-gun level.
+- **low-headers**: +2 → **+1** so fewer headers (common in incognito) add less bot score.
+- **Tests and reference** — Unit tests and `tests/testdata/reference_bot_curl_cffi.json` updated for new scores. README and config/README.md describe the change.
+
 ## v0.7.0 (2026-02-19)
 
 ### Benchmark: URL for routing tests

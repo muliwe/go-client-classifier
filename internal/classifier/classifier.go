@@ -11,50 +11,72 @@ import (
 const (
 	ClassificationBrowser = "browser"
 	ClassificationBot     = "bot"
-
-	// BotScoreWeight multiplies bot_score so that even a few bot signals strongly reduce net.
-	// Net = browser_score - BotScoreWeight*bot_score. With weight 4: 1–2 bot points (real browser edge case) still allow browser; 6 bot points (e.g. curl with spoofed headers) overwhelm many browser points.
-	BotScoreWeight = 4
 )
+
+// ConfidenceParams holds parameters for confidence calculation (from scoring config).
+type ConfidenceParams struct {
+	NoSignal              float64
+	HighSignalsThreshold  int
+	HighSignalsMultiplier float64
+	LowSignalsThreshold   int
+	LowSignalsMultiplier  float64
+	Min, Max              float64
+}
 
 // Classifier performs client classification based on fingerprint signals
 type Classifier struct {
-	threshold int // Score threshold for classification
+	cfg Config
 }
 
-// Config holds classifier configuration
+// Config holds classifier configuration (from scoring config or defaults).
 type Config struct {
-	// Threshold: net score (browser - BotScoreWeight*bot) must be > threshold for browser.
-	// Bot points are weighted so they can outweigh spoofable browser headers (e.g. curl with many headers).
+	// BotScoreWeight multiplies bot_score; net = browser - BotScoreWeight*bot.
+	BotScoreWeight int
+	// Threshold: net score must be > threshold for browser.
 	Threshold int
+	// Confidence params for calculateConfidence (optional; zero value uses built-in defaults).
+	Confidence ConfidenceParams
 }
 
-// DefaultConfig returns default classifier configuration
+// DefaultConfig returns default classifier configuration (fallback when config load fails).
 func DefaultConfig() Config {
 	return Config{
-		Threshold: 4, // Net (browser - 4*bot) must be > 4; tuned after reducing spoofable browser weights
+		BotScoreWeight: 4,
+		Threshold:      4,
+		Confidence: ConfidenceParams{
+			NoSignal:              0.5,
+			HighSignalsThreshold:  5,
+			HighSignalsMultiplier: 1.2,
+			LowSignalsThreshold:   3,
+			LowSignalsMultiplier:  0.8,
+			Min:                   0.5,
+			Max:                   0.99,
+		},
 	}
 }
 
 // New creates a new classifier
 func New(cfg Config) *Classifier {
-	return &Classifier{
-		threshold: cfg.Threshold,
-	}
+	return &Classifier{cfg: cfg}
 }
 
 // Classify analyzes a fingerprint and returns classification result
 func (c *Classifier) Classify(fp fingerprint.Fingerprint) fingerprint.ClassificationResult {
 	signals := fingerprint.ExtractSignals(fp)
-	netScore := signals.BrowserScore - BotScoreWeight*signals.BotScore
+	weight := c.cfg.BotScoreWeight
+	if weight <= 0 {
+		weight = 4
+	}
+	netScore := signals.BrowserScore - weight*signals.BotScore
 
+	threshold := c.cfg.Threshold
 	classification := ClassificationBot
 	var reason string
 	switch {
-	case netScore > c.threshold:
+	case netScore > threshold:
 		classification = ClassificationBrowser
 		reason = c.browserReason(signals)
-	case netScore < c.threshold:
+	case netScore < threshold:
 		reason = c.botReason(signals)
 	default:
 		// netScore == threshold: use User-Agent so that curl/python etc. with many headers stay bot
@@ -183,29 +205,50 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 
 // calculateConfidence computes confidence score based on signal strength
 func (c *Classifier) calculateConfidence(s fingerprint.Signals, netScore int) float64 {
-	totalSignals := s.BrowserScore + s.BotScore
-	if totalSignals == 0 {
-		return 0.5 // No signals, uncertain
+	p := c.cfg.Confidence
+	noSig := p.NoSignal
+	if noSig == 0 {
+		noSig = 0.5
+	}
+	highThr := p.HighSignalsThreshold
+	if highThr <= 0 {
+		highThr = 5
+	}
+	highMul := p.HighSignalsMultiplier
+	if highMul == 0 {
+		highMul = 1.2
+	}
+	lowThr := p.LowSignalsThreshold
+	if lowThr <= 0 {
+		lowThr = 3
+	}
+	lowMul := p.LowSignalsMultiplier
+	if lowMul == 0 {
+		lowMul = 0.8
+	}
+	minC, maxC := p.Min, p.Max
+	if minC == 0 {
+		minC = 0.5
+	}
+	if maxC == 0 {
+		maxC = 0.99
 	}
 
-	// Calculate confidence based on score magnitude and signal count
+	totalSignals := s.BrowserScore + s.BotScore
+	if totalSignals == 0 {
+		return noSig
+	}
+
 	absScore := netScore
 	if absScore < 0 {
 		absScore = -absScore
 	}
-
-	// Base confidence from score ratio
 	confidence := float64(absScore) / float64(totalSignals)
-
-	// Adjust for total signal count (more signals = more confident)
-	if totalSignals >= 5 {
-		confidence = min(confidence*1.2, 1.0)
-	} else if totalSignals < 3 {
-		confidence *= 0.8
+	if totalSignals >= highThr {
+		confidence = min(confidence*highMul, 1.0)
+	} else if totalSignals < lowThr {
+		confidence *= lowMul
 	}
-
-	// Clamp to 0.5-0.99 range
-	confidence = max(0.5, min(0.99, 0.5+confidence*0.49))
-
-	return confidence
+	confidence = minC + confidence*(maxC-minC)
+	return max(minC, min(maxC, confidence))
 }
