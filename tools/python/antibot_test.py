@@ -31,10 +31,29 @@ Dependencies:
 import json
 from curl_cffi import requests
 
+# Cookie jar: куки для домена .invent.sale (используются в запросах к antibot)
+INVENT_COOKIES = [
+    {
+        "name": "__Secure-authjs.callback-url",
+        "value": "https%3A%2F%2Finvent.sale",
+        "domain": ".invent.sale",
+        "path": "/",
+        "httpOnly": True,
+        "secure": True,
+        "expires": -1,
+        "sameSite": "Lax",
+    }
+]
+
+
+def _cookies_jar() -> dict[str, str]:
+    """Собирает dict name->value для передачи в requests."""
+    return {c["name"]: c["value"] for c in INVENT_COOKIES}
+
 
 def test_antibot(url: str = "https://antibot.invent.sale/debug") -> dict:
     """Send a request impersonating Chrome and return the antibot verdict."""
-    response = requests.get(url, impersonate="chrome")
+    response = requests.get(url, impersonate="chrome", cookies=_cookies_jar())
     return response.json()
 
 
@@ -47,10 +66,11 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
         "safari",       # Safari
         "safari_ios",   # Safari iOS
     ]
+    cookies = _cookies_jar()
 
     for profile in profiles:
         try:
-            response = requests.get(url, impersonate=profile)
+            response = requests.get(url, impersonate=profile, cookies=cookies)
             data = response.json()
             status = "PASS" if data["classification"] == "browser" else "FAIL"
             print(f"[{status}] {profile:20s} -> {data['classification']} "
