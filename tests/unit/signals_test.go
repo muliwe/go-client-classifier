@@ -1463,3 +1463,98 @@ func TestCalculateScores_CacheControlAndAcceptLangRich_BrowserBonus(t *testing.T
 		t.Errorf("accept-lang-rich is disabled for scoring; breakdown should not contain it, got %s", s.ScoreBreakdown)
 	}
 }
+
+func TestExtractSignals_NoSNI_NoALPN_DirectTLS(t *testing.T) {
+	// Direct TLS (not from proxy) with empty ServerName and empty ALPN → NoSNI and NoALPN true, bot score gets no-sni and no-alpn.
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Version:    "TLS 1.3",
+			ServerName: "",
+			ALPN:       "",
+			Available:  true,
+			FromProxy:  false,
+			JA3Hash:    "abc123",
+			JA4Hash:    "def456",
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:   "HTTP/1.1",
+			UserAgent: "Mozilla/5.0 (compatible; Bot/1.0)",
+			Accept:    "text/html",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if !s.NoSNI {
+		t.Error("direct TLS with empty ServerName should set NoSNI")
+	}
+	if !s.NoALPN {
+		t.Error("direct TLS with empty ALPN should set NoALPN")
+	}
+	if !strings.Contains(s.ScoreBreakdown, "no-sni") {
+		t.Errorf("breakdown should contain no-sni, got %s", s.ScoreBreakdown)
+	}
+	if !strings.Contains(s.ScoreBreakdown, "no-alpn") {
+		t.Errorf("breakdown should contain no-alpn, got %s", s.ScoreBreakdown)
+	}
+}
+
+func TestExtractSignals_NoSNI_NoALPN_FromProxy_NotSet(t *testing.T) {
+	// When TLS is from proxy, we do not set NoSNI/NoALPN (proxy may omit headers).
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Version:    "TLS 1.3",
+			ServerName: "",
+			ALPN:       "",
+			Available:  true,
+			FromProxy:  true,
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:   "HTTP/2.0",
+			UserAgent: "Mozilla/5.0 Chrome/120.0",
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if s.NoSNI {
+		t.Error("from proxy should not set NoSNI (unknown if client sent SNI)")
+	}
+	if s.NoALPN {
+		t.Error("from proxy should not set NoALPN (unknown if client sent ALPN)")
+	}
+}
+
+func TestExtractSignals_NoBotRedFlags_NoSmokingGun(t *testing.T) {
+	// Browser-like request with GET / and no smoking-gun bot signals → no blind-probe, no other smoking guns; bot score 0.
+	// no-bot-red-flags has 0 points by default so it does not appear in breakdown, but the noSmokingGun path is exercised.
+	fp := fingerprint.Fingerprint{
+		TLS: fingerprint.TLSFingerprint{
+			Version:           "TLS 1.3",
+			ALPN:              "h2",
+			ServerName:        "example.com",
+			CipherSuitesCount: 16,
+			ExtensionsCount:   12,
+			Available:         true,
+			FromProxy:         false,
+			JA3Hash:           "browser123",
+			JA4Hash:           "browser456",
+			HasSessionTicket:  true,
+		},
+		HTTP: fingerprint.HTTPFingerprint{
+			Version:      "HTTP/2.0",
+			Method:       "GET",
+			Path:         "/",
+			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+			Accept:       "text/html",
+			AcceptLang:   "en-US,en;q=0.9",
+			SecFetchSite: "none",
+			SecFetchMode: "navigate",
+			SecFetchDest: "document",
+			HeaderCount:  14,
+		},
+	}
+	s := fingerprint.ExtractSignals(fp)
+	if strings.Contains(s.ScoreBreakdown, "blind-probe") {
+		t.Errorf("GET / should not be blind-probe, got %s", s.ScoreBreakdown)
+	}
+	if s.BotScore != 0 {
+		t.Errorf("browser-like request with no smoking gun should have bot score 0, got %d, breakdown %s", s.BotScore, s.ScoreBreakdown)
+	}
+}

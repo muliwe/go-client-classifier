@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## v0.8.0 (2026-02-20)
 
+### Absence signals (no-sni, no-alpn, no-bot-red-flags)
+
+- **Bot signals (absence of TLS traits):** When TLS is observed **directly** (not from proxy), missing Server Name Indication or ALPN is now scored as a bot signal. Real browsers send SNI and ALPN for HTTPS; many libraries and scanners do not.
+  - **no-sni** (+1): TLS available but no SNI (direct TLS only). Not applied when TLS comes from proxy (X-FP-*), to avoid penalizing deployments where the proxy does not forward X-FP-TLS-SNI.
+  - **no-alpn** (+1): TLS available but no ALPN (direct TLS only). Same proxy caveat as no-sni.
+- **Optional browser signal:** **no-bot-red-flags** (default **0** points, tunable in config): small browser bonus when none of the smoking-gun bot signals fire (obsolete-tls, exotic-alpn, blind-probe, bot-ua, no-ua, tls-ua-inconsistent, ua-browser-no-grease). Intended for experiments; can be set to +1 in `browser_scores` if desired.
+- **Config and docs:** New keys in `bot_scores` (no-sni, no-alpn) and `browser_scores` (no-bot-red-flags). [config/README.md](config/README.md) documents the signals. [docs/METHODOLOGY.md](docs/METHODOLOGY.md) updated: TLS-level signal table, bot/browser weight lists, new subsection "Absence signals (2025–2026 practice)", and default threshold 4 in the formula example. [README.md](README.md) Classification Signals section mentions absence signals.
+- **Tests and fixtures:** Unit tests for NoSNI/NoALPN (direct vs proxy) and no-bot-red-flags path; classifier test browser fingerprint now sets `ServerName` so it is not penalized by no-sni; config test expects 29 browser and 26 bot score keys. Reference fixtures `reference_bot_curl_cffi.json` and `reference_browser.json` include `no_sni` and `no_alpn` in the signals object.
+
 ### Scoring config (JSON)
 
 - **Externalized scoring** — All scoring points, thresholds, classifier weight and confidence parameters are loaded from a single JSON file at startup (`SCORING_CONFIG` or `config/scoring.json`). Missing or invalid file falls back to built-in defaults. No code changes needed to tune weights or thresholds.

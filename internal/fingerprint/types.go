@@ -100,6 +100,8 @@ type Signals struct {
 	TLSFromProxy                 bool   `json:"tls_from_proxy"`                   // TLS data from trusted proxy headers
 	TLSObsolete                  bool   `json:"tls_obsolete"`                     // TLS 1.0 or 1.1 (outdated client)
 	TLSExoticALPN                bool   `json:"tls_exotic_alpn"`                  // ALPN is legacy/exotic (http/0.9, spdy, h2c, hq) — often bots/scanners
+	NoSNI                        bool   `json:"no_sni"`                           // TLS available but no Server Name Indication (browsers send SNI for HTTPS)
+	NoALPN                       bool   `json:"no_alpn"`                          // TLS available but no ALPN (modern browsers send ALPN)
 	HasSSLGreased                bool   `json:"has_ssl_greased"`                  // GREASE present from proxy (X-FP-SSL-GREASED)
 	HasHTTP2Fingerprint          bool   `json:"has_http2_fingerprint"`            // HTTP/2 fingerprint present
 	HasHTTP2FingerprintFromProxy bool   `json:"has_http2_fingerprint_from_proxy"` // HTTP/2 fingerprint from X-FP-H2

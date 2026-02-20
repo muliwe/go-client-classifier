@@ -181,6 +181,10 @@ Per Imperva 2025 Bad Bot Report:
 | `supported_versions` | TLS versions offered by client | Modern clients offer TLS 1.2+ |
 | `signature_schemes` | Signature algorithms supported | Variety suggests browser |
 | `supported_groups` | Elliptic curves (incl. GREASE) | GREASE presence suggests browser |
+| `no_sni` | TLS available but no Server Name Indication (direct TLS only) | Bot indicator: real browsers send SNI for HTTPS |
+| `no_alpn` | TLS available but no ALPN (direct TLS only) | Bot indicator: modern browsers send ALPN (h2, http/1.1) |
+
+**Note on absence signals:** When TLS is observed **directly** (not from proxy), missing SNI or ALPN is scored as a bot signal (+1 each). When TLS comes from a proxy (X-FP-*), we do not set `no_sni`/`no_alpn` because the proxy may omit those headers and we cannot infer whether the client sent them.
 
 #### HTTP-Level Signals
 
@@ -250,7 +254,20 @@ Current implementation uses the following weights:
 +1: missing_accept_language (without sec-fetch)
 +1: ja4h_missing_language (language code "0000" from JA4H)
 +1: ja4h_low_header_count (< 5 headers from JA4H)
++1: no_sni (direct TLS, no Server Name Indication; browsers send SNI for HTTPS)
++1: no_alpn (direct TLS, no ALPN; modern browsers send h2/http/1.1)
 ```
+
+**Optional browser signal (tunable, default 0):** `no_bot_red_flags` — small bonus when none of the smoking-gun bot signals fire (obsolete-tls, exotic-alpn, blind-probe, bot-ua, no-ua, tls-ua-inconsistent, ua-browser-no-grease). Used for experiments; advanced bots could avoid these and gain the bonus, so default weight is 0.
+
+### Absence signals (2025–2026 practice)
+
+Current scoring uses **presence** of traits (e.g. Sec-Fetch → +browser; bot UA → +bot). Best practice is to also treat **absence** of expected traits as a signal in the opposite direction:
+
+- **Absence of TLS traits → bot:** Real browsers send SNI and ALPN for HTTPS; scanners and many libraries omit or send a minimal set. We therefore add bot points for `no_sni` and `no_alpn` when TLS is observed **directly** (not from proxy), to avoid penalizing deployments where the proxy does not forward SNI/ALPN headers.
+- **Absence of smoking-gun bot signals → optional browser:** The `no_bot_red_flags` signal (default 0 points) gives a small browser bonus when none of the strongest bot indicators fire. This is optional and tunable; see [config/README.md](../config/README.md).
+
+Signals such as `no-ua`, `missing-typical`, `ja4h-no-cookies` already implement “absence of browser trait → +bot”. The above extend this to TLS (no SNI/ALPN) and, optionally, to “no red flags → +browser”.
 
 ---
 
@@ -269,7 +286,7 @@ else:
     classification = "bot"
 ```
 
-Default threshold: `8`. With weight 4: e.g. browser 19, bot 6 → net 19−24 = −5 → bot; browser 20, bot 2 → net 20−8 = 12 → browser.
+Default threshold: `4`. With weight 4: e.g. browser 19, bot 6 → net 19−24 = −5 → bot; browser 20, bot 2 → net 20−8 = 12 → browser.
 
 ### Confidence Calculation
 

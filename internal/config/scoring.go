@@ -117,6 +117,7 @@ func defaultBrowserScores() map[string]int {
 		"sec-ch-ua-modern":  0,
 		"accept-lang-rich":  0,
 		"high-header-count": 0,
+		"no-bot-red-flags":  0,
 	}
 }
 
@@ -146,6 +147,8 @@ func defaultBotScores() map[string]int {
 		"ua-browser-no-grease":       3,
 		"h2-ja4-inconsistent":        2,
 		"tls-alpn-http-inconsistent": 2,
+		"no-sni":                     1,
+		"no-alpn":                    1,
 	}
 }
 

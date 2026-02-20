@@ -164,6 +164,8 @@
     "tls_from_proxy": true,
     "tls_obsolete": false,
     "has_ssl_greased": true,
+    "no_sni": false,
+    "no_alpn": false,
     "has_http2_fingerprint": true,
     "has_http2_fingerprint_from_proxy": true,
     "h2_settings_parsed": true,

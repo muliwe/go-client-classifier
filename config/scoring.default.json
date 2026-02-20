@@ -54,7 +54,8 @@
     "browser-headers": 0,
     "sec-ch-ua-modern": 0,
     "accept-lang-rich": 0,
-    "high-header-count": 0
+    "high-header-count": 0,
+    "no-bot-red-flags": 0
   },
   "bot_scores": {
     "obsolete-tls": 3,
@@ -80,6 +81,8 @@
     "tls-ua-inconsistent": 3,
     "ua-browser-no-grease": 3,
     "h2-ja4-inconsistent": 2,
-    "tls-alpn-http-inconsistent": 2
+    "tls-alpn-http-inconsistent": 2,
+    "no-sni": 1,
+    "no-alpn": 1
   }
 }

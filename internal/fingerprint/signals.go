@@ -59,6 +59,7 @@ func defaultBrowserScoresMap() map[string]int {
 		"high-ciphers": 2, "session-ticket": 1, "multi-groups": 1, "tls-ext>=10": 1,
 		"ja4h-headers>=10": 1, "ja4h-referer": 1, "ja4h-consistent": 1, "tls-ua-consistent": 1,
 		"accept-language": 0, "browser-headers": 0, "sec-ch-ua-modern": 0, "accept-lang-rich": 0, "high-header-count": 0,
+		"no-bot-red-flags": 0,
 	}
 	return m
 }
@@ -71,6 +72,7 @@ func defaultBotScoresMap() map[string]int {
 		"ja4h-no-lang": 1, "ja4h-low-headers": 1, "ja4h-inconsistent": 2, "ja4h-no-cookies": 2,
 		"header-order-late": 2, "h2-ua-inconsistent": 2, "tls-ua-inconsistent": 3,
 		"ua-browser-no-grease": 3, "h2-ja4-inconsistent": 2, "tls-alpn-http-inconsistent": 2,
+		"no-sni": 1, "no-alpn": 1,
 	}
 	return m
 }
@@ -264,6 +266,11 @@ func ExtractSignals(fp Fingerprint) Signals {
 	s.HasModernTLS = fp.TLS.Version == "TLS 1.2" || fp.TLS.Version == "TLS 1.3"
 	s.HasALPN = fp.TLS.ALPN != ""
 	s.TLSExoticALPN = isExoticALPN(fp.TLS.ALPN)
+	// Absence of SNI/ALPN: only when TLS is direct (not from proxy), to avoid penalizing when proxy omits headers.
+	if fp.TLS.Available && !fp.TLS.FromProxy {
+		s.NoSNI = strings.TrimSpace(fp.TLS.ServerName) == ""
+		s.NoALPN = fp.TLS.ALPN == ""
+	}
 	t := getThresholds()
 	highCipherMin := t.HighCipherCountMin
 	if highCipherMin <= 0 {
@@ -664,6 +671,22 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	}
 	if s.TLSALPNVsHTTPInconsistent {
 		botScore += addBot(&botReasons, "tls-alpn-http-inconsistent")
+	}
+	if s.NoSNI {
+		botScore += addBot(&botReasons, "no-sni")
+	}
+	if s.NoALPN {
+		botScore += addBot(&botReasons, "no-alpn")
+	}
+
+	// No smoking-gun bot signals → optional small browser bonus (tunable, default 0).
+	noSmokingGun := !s.TLSObsolete && !s.TLSExoticALPN && !s.RequestIsProbe &&
+		!s.UserAgentIsBot && s.HasUserAgent &&
+		!(s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary && !s.TLSKnownBrowser) &&
+		!(s.UserAgentIsBot && s.TLSKnownBrowser) &&
+		!(s.TLSFromProxy && proxyHasClientTLS && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased)
+	if noSmokingGun {
+		browserScore += addBrowser(&browserReasons, "no-bot-red-flags")
 	}
 
 	// Build breakdown string

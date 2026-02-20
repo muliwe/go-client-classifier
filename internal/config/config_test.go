@@ -65,6 +65,7 @@ func TestDefaultScoringConfig_fullStructure(t *testing.T) {
 		"high-ciphers": 2, "session-ticket": 1, "multi-groups": 1, "tls-ext>=10": 1,
 		"ja4h-headers>=10": 1, "ja4h-referer": 1, "ja4h-consistent": 1, "tls-ua-consistent": 1,
 		"accept-language": 0, "browser-headers": 0, "sec-ch-ua-modern": 0, "accept-lang-rich": 0, "high-header-count": 0,
+		"no-bot-red-flags": 0,
 	}
 	for key, want := range wantBrowserScores {
 		got, ok := cfg.BrowserScores[key]
@@ -88,6 +89,7 @@ func TestDefaultScoringConfig_fullStructure(t *testing.T) {
 		"ja4h-no-lang": 1, "ja4h-low-headers": 1, "ja4h-inconsistent": 2, "ja4h-no-cookies": 2,
 		"header-order-late": 2, "h2-ua-inconsistent": 2, "tls-ua-inconsistent": 3,
 		"ua-browser-no-grease": 3, "h2-ja4-inconsistent": 2, "tls-alpn-http-inconsistent": 2,
+		"no-sni": 1, "no-alpn": 1,
 	}
 	for key, want := range wantBotScores {
 		got, ok := cfg.BotScores[key]

@@ -72,6 +72,7 @@ func TestClassify_Browser(t *testing.T) {
 		TLS: fingerprint.TLSFingerprint{
 			Version:           "TLS 1.3",
 			ALPN:              "h2",
+			ServerName:        "example.com",
 			CipherSuitesCount: 16,
 			ExtensionsCount:   18,
 			HasSessionTicket:  true,

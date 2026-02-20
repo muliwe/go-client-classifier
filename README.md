@@ -105,6 +105,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 - JA4H fingerprinting (HTTP fingerprint from JA4+ family)
 - Header order and structure; browser-specific headers (sec-fetch-*, accept-language); header count and entropy
 - **Cross-signal consistency**: JA4H vs HTTP; TLS vs User-Agent (known library/browser JA3/JA4); H2 vs JA4 (ALPN); TLS ALPN vs HTTP version (direct TLS)
+- **Absence signals** (direct TLS only): missing SNI or ALPN when TLS is available scores toward bot; optional browser bonus when no smoking-gun bot signals fire (see [config/README.md](config/README.md))
 
 ## Research Workflow
 
