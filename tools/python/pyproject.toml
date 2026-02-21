@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "go-client-slassifier-tools"
+name = "go-client-classifier-tools"
 version = "0.1.0"
-description = "Python tools for go-client-slassifier (antibot tests, etc.)"
+description = "Python tools for go-client-classifier (antibot tests, etc.)"
 readme = "README.md"
 authors = []
 packages = []
