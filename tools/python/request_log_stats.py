@@ -208,9 +208,16 @@ def extract_record(rec: dict[str, Any]) -> dict[str, Any] | None:
     path = (http.get("path") or "").strip() or "(empty)"
     method = (http.get("method") or "GET").strip().upper() or "GET"
     remote_addr = (rec.get("remote_addr") or "").strip() or "(empty)"
-    if remote_addr == "127.0.0.1" or remote_addr.startswith("127.0.0.1:"):
+    # Always strip port for aggregation (IP only): any "addr:port" -> "addr"
+    if remote_addr and re.match(r".*:\d+$", remote_addr):
+        remote_addr = re.sub(r":\d+$", "", remote_addr)
+    # Normalise localhost to (empty): IPv4 and IPv6
+    if not remote_addr or remote_addr == "127.0.0.1" or remote_addr == "::1" or remote_addr == "[::1]":
         remote_addr = "(empty)"
     score_signal_ids = _parse_score_breakdown((sig.get("score_breakdown") or ""))
+
+    # Raw User-Agent for separate stats (truncate to limit cardinality in aggregation)
+    user_agent_raw = (user_agent[:200] + "…") if len(user_agent) > 200 else (user_agent or "(empty)")
 
     return {
         "classification": classification,
@@ -219,6 +226,7 @@ def extract_record(rec: dict[str, Any]) -> dict[str, Any] | None:
         "remote_addr": remote_addr,
         "score_signal_ids": score_signal_ids,
         "user_agent": _normalize_user_agent(user_agent),
+        "user_agent_raw": user_agent_raw,
         "accept": accept[:80] if len(accept) > 80 else accept,  # truncate long
         "accept_lang_category": _accept_lang_category(accept_lang),
         "ja3_hash": _get_ja3_hash(rec),
@@ -424,6 +432,7 @@ def aggregate(
         "method",
         "remote_addr",  # top IPs
         "user_agent",
+        "user_agent_raw",  # raw User-Agent string (truncated)
         "accept",
         "accept_lang_category",
         "ja3_hash",

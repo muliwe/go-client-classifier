@@ -1,0 +1,1912 @@
+{
+  "summary": {
+    "total": 4008,
+    "bot_count": 1442,
+    "browser_count": 2566,
+    "bot_pct": 35.98,
+    "browser_pct": 64.02,
+    "median_score_bot": -23.0,
+    "median_score_browser": 0.0,
+    "p50_score_bot": -23.0,
+    "p50_score_browser": 0.0,
+    "p95_score_bot": 2.95,
+    "p95_score_browser": 14.0,
+    "p50_header_count_bot": 3.0,
+    "p50_header_count_browser": 19.0,
+    "p95_header_count_bot": 12.0,
+    "p95_header_count_browser": 22.0,
+    "ua_is_bot_pct": 59.36,
+    "has_sec_fetch_headers_pct": 8.03,
+    "has_accept_language_pct": 68.44,
+    "sec_ch_ua_modern_order_pct": 0.62,
+    "h2_ratio": 9.71,
+    "tls_from_proxy_pct": 69.99,
+    "unique_ips": 403,
+    "unique_urls": 1318
+  },
+  "top_values": {
+    "path": [
+      {
+        "value": "/",
+        "total": 778,
+        "bot": 518,
+        "browser": 260,
+        "bot_pct": 66.58,
+        "browser_ratio": 33.42
+      },
+      {
+        "value": "/favicon.ico",
+        "total": 152,
+        "bot": 96,
+        "browser": 56,
+        "bot_pct": 63.16,
+        "browser_ratio": 36.84
+      },
+      {
+        "value": "/geoserver/wfs",
+        "total": 70,
+        "bot": 70,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "/cgi-bin/ViewLog.asp",
+        "total": 44,
+        "bot": 44,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "/.env",
+        "total": 43,
+        "bot": 37,
+        "browser": 6,
+        "bot_pct": 86.05,
+        "browser_ratio": 13.95
+      },
+      {
+        "value": "/login",
+        "total": 35,
+        "bot": 17,
+        "browser": 18,
+        "bot_pct": 48.57,
+        "browser_ratio": 51.43
+      },
+      {
+        "value": "/api/v2/static/not.found",
+        "total": 27,
+        "bot": 27,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "/remote/logincheck",
+        "total": 27,
+        "bot": 27,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "/robots.txt",
+        "total": 19,
+        "bot": 19,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "/.git/config",
+        "total": 18,
+        "bot": 14,
+        "browser": 4,
+        "bot_pct": 77.78,
+        "browser_ratio": 22.22
+      },
+      {
+        "value": "/admin/",
+        "total": 13,
+        "bot": 0,
+        "browser": 13,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "/js/twint_ch.js",
+        "total": 12,
+        "bot": 7,
+        "browser": 5,
+        "bot_pct": 58.33,
+        "browser_ratio": 41.67
+      },
+      {
+        "value": "/version",
+        "total": 12,
+        "bot": 12,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "/css/support_parent.css",
+        "total": 12,
+        "bot": 7,
+        "browser": 5,
+        "bot_pct": 58.33,
+        "browser_ratio": 41.67
+      },
+      {
+        "value": "/js/lkk_ch.js",
+        "total": 12,
+        "bot": 7,
+        "browser": 5,
+        "bot_pct": 58.33,
+        "browser_ratio": 41.67
+      }
+    ],
+    "method": [
+      {
+        "value": "GET",
+        "total": 3466,
+        "bot": 1314,
+        "browser": 2152,
+        "bot_pct": 37.91,
+        "browser_ratio": 62.09
+      },
+      {
+        "value": "POST",
+        "total": 515,
+        "bot": 103,
+        "browser": 412,
+        "bot_pct": 20.0,
+        "browser_ratio": 80.0
+      },
+      {
+        "value": "HEAD",
+        "total": 17,
+        "bot": 15,
+        "browser": 2,
+        "bot_pct": 88.24,
+        "browser_ratio": 11.76
+      },
+      {
+        "value": "PROPFIND",
+        "total": 4,
+        "bot": 4,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "OPTIONS",
+        "total": 4,
+        "bot": 4,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "CONNECT",
+        "total": 1,
+        "bot": 1,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "SSTP_DUPLEX_POST",
+        "total": 1,
+        "bot": 1,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "remote_addr": [
+      {
+        "value": "(empty)",
+        "total": 2574,
+        "bot": 96,
+        "browser": 2478,
+        "bot_pct": 3.73,
+        "browser_ratio": 96.27
+      },
+      {
+        "value": "204.76.203.210",
+        "total": 139,
+        "bot": 139,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "204.76.203.8",
+        "total": 70,
+        "bot": 70,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "89.149.85.189",
+        "total": 54,
+        "bot": 7,
+        "browser": 47,
+        "bot_pct": 12.96,
+        "browser_ratio": 87.04
+      },
+      {
+        "value": "93.123.109.214",
+        "total": 50,
+        "bot": 50,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "45.94.31.197",
+        "total": 42,
+        "bot": 42,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "79.124.40.174",
+        "total": 41,
+        "bot": 41,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "195.178.110.64",
+        "total": 34,
+        "bot": 34,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "84.254.106.197",
+        "total": 28,
+        "bot": 16,
+        "browser": 12,
+        "bot_pct": 57.14,
+        "browser_ratio": 42.86
+      },
+      {
+        "value": "34.158.168.101",
+        "total": 21,
+        "bot": 20,
+        "browser": 1,
+        "bot_pct": 95.24,
+        "browser_ratio": 4.76
+      },
+      {
+        "value": "56.228.17.108",
+        "total": 21,
+        "bot": 21,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "117.50.245.253",
+        "total": 20,
+        "bot": 20,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "65.49.1.66",
+        "total": 18,
+        "bot": 18,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "167.172.192.186",
+        "total": 18,
+        "bot": 18,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "45.135.193.11",
+        "total": 18,
+        "bot": 18,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "user_agent": [
+      {
+        "value": "curl",
+        "total": 2250,
+        "bot": 30,
+        "browser": 2220,
+        "bot_pct": 1.33,
+        "browser_ratio": 98.67
+      },
+      {
+        "value": "Chrome",
+        "total": 1266,
+        "bot": 999,
+        "browser": 267,
+        "bot_pct": 78.91,
+        "browser_ratio": 21.09
+      },
+      {
+        "value": "Firefox",
+        "total": 190,
+        "bot": 128,
+        "browser": 62,
+        "bot_pct": 67.37,
+        "browser_ratio": 32.63
+      },
+      {
+        "value": "(empty)",
+        "total": 99,
+        "bot": 99,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "python",
+        "total": 65,
+        "bot": 65,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "other",
+        "total": 62,
+        "bot": 58,
+        "browser": 4,
+        "bot_pct": 93.55,
+        "browser_ratio": 6.45
+      },
+      {
+        "value": "Safari",
+        "total": 35,
+        "bot": 25,
+        "browser": 10,
+        "bot_pct": 71.43,
+        "browser_ratio": 28.57
+      },
+      {
+        "value": "Edge",
+        "total": 26,
+        "bot": 23,
+        "browser": 3,
+        "bot_pct": 88.46,
+        "browser_ratio": 11.54
+      },
+      {
+        "value": "node",
+        "total": 8,
+        "bot": 8,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Opera",
+        "total": 7,
+        "bot": 7,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "user_agent_raw": [
+      {
+        "value": "curl/8.7.1",
+        "total": 2220,
+        "bot": 0,
+        "browser": 2220,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+        "total": 139,
+        "bot": 139,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "(empty)",
+        "total": 99,
+        "bot": 99,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "total": 95,
+        "bot": 8,
+        "browser": 87,
+        "bot_pct": 8.42,
+        "browser_ratio": 91.58
+      },
+      {
+        "value": "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)",
+        "total": 93,
+        "bot": 83,
+        "browser": 10,
+        "bot_pct": 89.25,
+        "browser_ratio": 10.75
+      },
+      {
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "total": 87,
+        "bot": 83,
+        "browser": 4,
+        "bot_pct": 95.4,
+        "browser_ratio": 4.6
+      },
+      {
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
+        "total": 85,
+        "bot": 85,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+        "total": 72,
+        "bot": 0,
+        "browser": 72,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+        "total": 48,
+        "bot": 28,
+        "browser": 20,
+        "bot_pct": 58.33,
+        "browser_ratio": 41.67
+      },
+      {
+        "value": "python-requests/2.20.0",
+        "total": 44,
+        "bot": 44,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0",
+        "total": 39,
+        "bot": 0,
+        "browser": 39,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36",
+        "total": 38,
+        "bot": 38,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Mozilla/5.0",
+        "total": 38,
+        "bot": 38,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Hello from Palo Alto Networks, find out more about our scans in https://docs-cortex.paloaltonetworks.com/r/1/Cortex-Xpanse/Scanning-activity",
+        "total": 31,
+        "bot": 31,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "total": 24,
+        "bot": 24,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "accept": [
+      {
+        "value": "*/*",
+        "total": 2829,
+        "bot": 593,
+        "browser": 2236,
+        "bot_pct": 20.96,
+        "browser_ratio": 79.04
+      },
+      {
+        "value": "(empty)",
+        "total": 665,
+        "bot": 658,
+        "browser": 7,
+        "bot_pct": 98.95,
+        "browser_ratio": 1.05
+      },
+      {
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,imag",
+        "total": 273,
+        "bot": 74,
+        "browser": 199,
+        "bot_pct": 27.11,
+        "browser_ratio": 72.89
+      },
+      {
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "total": 87,
+        "bot": 72,
+        "browser": 15,
+        "bot_pct": 82.76,
+        "browser_ratio": 17.24
+      },
+      {
+        "value": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "total": 52,
+        "bot": 4,
+        "browser": 48,
+        "bot_pct": 7.69,
+        "browser_ratio": 92.31
+      },
+      {
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;",
+        "total": 48,
+        "bot": 0,
+        "browser": 48,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "text/x-component",
+        "total": 16,
+        "bot": 9,
+        "browser": 7,
+        "bot_pct": 56.25,
+        "browser_ratio": 43.75
+      },
+      {
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "total": 10,
+        "bot": 5,
+        "browser": 5,
+        "bot_pct": 50.0,
+        "browser_ratio": 50.0
+      },
+      {
+        "value": "application/json, text/plain, */*",
+        "total": 6,
+        "bot": 6,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "text/plain,text/html",
+        "total": 5,
+        "bot": 5,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;",
+        "total": 4,
+        "bot": 4,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "text/html,application/xhtml+xml,application/json,*/*",
+        "total": 4,
+        "bot": 4,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "text/html, application/xhtml+xml, */*",
+        "total": 3,
+        "bot": 3,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "text/markdown, text/html, */*",
+        "total": 2,
+        "bot": 2,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2",
+        "total": 1,
+        "bot": 1,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "accept_lang_category": [
+      {
+        "value": "short",
+        "total": 2491,
+        "bot": 143,
+        "browser": 2348,
+        "bot_pct": 5.74,
+        "browser_ratio": 94.26
+      },
+      {
+        "value": "empty",
+        "total": 1265,
+        "bot": 1244,
+        "browser": 21,
+        "bot_pct": 98.34,
+        "browser_ratio": 1.66
+      },
+      {
+        "value": "rich",
+        "total": 252,
+        "bot": 55,
+        "browser": 197,
+        "bot_pct": 21.83,
+        "browser_ratio": 78.17
+      }
+    ],
+    "ja3_hash": [
+      {
+        "value": "(empty)",
+        "total": 3303,
+        "bot": 922,
+        "browser": 2381,
+        "distinct_user_agents": 10,
+        "distinct_paths": 1296,
+        "distinct_ips": 252,
+        "bot_pct": 27.91,
+        "browser_ratio": 72.09
+      },
+      {
+        "value": "cba7f34191ef2379c1325641f6c6c4f4",
+        "total": 67,
+        "bot": 67,
+        "browser": 0,
+        "distinct_user_agents": 5,
+        "distinct_paths": 10,
+        "distinct_ips": 32,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "20c9baf81bfe96ff89722899e75d0190",
+        "total": 65,
+        "bot": 65,
+        "browser": 0,
+        "distinct_user_agents": 5,
+        "distinct_paths": 10,
+        "distinct_ips": 27,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "35fa0a83e466acbec1cfbb9016d550ab",
+        "total": 30,
+        "bot": 30,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 4,
+        "distinct_ips": 20,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "8bee49baa010986785a9e74d688ed7e9",
+        "total": 25,
+        "bot": 25,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 24,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "0149f47eabf9a20d0893e2a44e5a6323",
+        "total": 23,
+        "bot": 17,
+        "browser": 6,
+        "distinct_user_agents": 2,
+        "distinct_paths": 1,
+        "distinct_ips": 2,
+        "bot_pct": 73.91,
+        "browser_ratio": 26.09
+      },
+      {
+        "value": "674c9b60629e4885877f5ec76f21723e",
+        "total": 20,
+        "bot": 20,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 7,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "6fcb7aa10768c08e39459bf9b7478ab4",
+        "total": 18,
+        "bot": 18,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 9,
+        "distinct_ips": 2,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "755cbaaa441626ab9e759e8982278df5",
+        "total": 18,
+        "bot": 18,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 13,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "6639916abfac56b9257ca216677085bc",
+        "total": 16,
+        "bot": 15,
+        "browser": 1,
+        "distinct_user_agents": 3,
+        "distinct_paths": 6,
+        "distinct_ips": 3,
+        "bot_pct": 93.75,
+        "browser_ratio": 6.25
+      },
+      {
+        "value": "548f8886dcfeeab8d28d3346a63b70c5",
+        "total": 13,
+        "bot": 13,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 5,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "26086471650ff2aef650d748b8b581b4",
+        "total": 12,
+        "bot": 12,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 1,
+        "distinct_ips": 12,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "7f4b8085c5db57a2e7175a38fbf4a5c1",
+        "total": 11,
+        "bot": 11,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 11,
+        "distinct_ips": 2,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "86d37534033d9c5b60a83ff8b2fbeea3",
+        "total": 10,
+        "bot": 10,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 2,
+        "distinct_ips": 4,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "d6828e30ab66774a91a96ae93be4ae4c",
+        "total": 10,
+        "bot": 10,
+        "browser": 0,
+        "distinct_user_agents": 4,
+        "distinct_paths": 8,
+        "distinct_ips": 3,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "ja4_hash": [
+      {
+        "value": "(empty)",
+        "total": 3447,
+        "bot": 989,
+        "browser": 2458,
+        "distinct_user_agents": 10,
+        "distinct_paths": 1296,
+        "distinct_ips": 252,
+        "bot_pct": 28.69,
+        "browser_ratio": 71.31
+      },
+      {
+        "value": "t12i130500_2d7513195f68_e51b7354d87f",
+        "total": 67,
+        "bot": 67,
+        "browser": 0,
+        "distinct_user_agents": 5,
+        "distinct_paths": 10,
+        "distinct_ips": 32,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t12d130600_2d7513195f68_e51b7354d87f",
+        "total": 65,
+        "bot": 65,
+        "browser": 0,
+        "distinct_user_agents": 5,
+        "distinct_paths": 10,
+        "distinct_ips": 27,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t13d1517h2_8daaf6152771_b6f405a00624",
+        "total": 56,
+        "bot": 0,
+        "browser": 56,
+        "distinct_user_agents": 1,
+        "distinct_paths": 2,
+        "distinct_ips": 2,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "t13i130900_f57a46bbacb6_e7c285222651",
+        "total": 36,
+        "bot": 35,
+        "browser": 1,
+        "distinct_user_agents": 3,
+        "distinct_paths": 12,
+        "distinct_ips": 4,
+        "bot_pct": 97.22,
+        "browser_ratio": 2.78
+      },
+      {
+        "value": "t13i190800_9dc949149365_97f8aa674fd9",
+        "total": 33,
+        "bot": 33,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 4,
+        "distinct_ips": 23,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
+        "total": 30,
+        "bot": 0,
+        "browser": 30,
+        "distinct_user_agents": 2,
+        "distinct_paths": 2,
+        "distinct_ips": 2,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "t13d1011h2_61a7ad8aa9b6_3fcd1a44f3e3",
+        "total": 28,
+        "bot": 12,
+        "browser": 16,
+        "distinct_user_agents": 1,
+        "distinct_paths": 5,
+        "distinct_ips": 5,
+        "bot_pct": 42.86,
+        "browser_ratio": 57.14
+      },
+      {
+        "value": "t13d131000_f57a46bbacb6_e7c285222651",
+        "total": 25,
+        "bot": 25,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 24,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t13i3111h1_e8f1e7e78f70_24695f2957a7",
+        "total": 18,
+        "bot": 18,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 13,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t12i990600_a40d17a72bcb_4446390ac224",
+        "total": 13,
+        "bot": 13,
+        "browser": 0,
+        "distinct_user_agents": 2,
+        "distinct_paths": 5,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t13d3112h2_e8f1e7e78f70_b26ce05bbdd6",
+        "total": 12,
+        "bot": 11,
+        "browser": 1,
+        "distinct_user_agents": 2,
+        "distinct_paths": 1,
+        "distinct_ips": 2,
+        "bot_pct": 91.67,
+        "browser_ratio": 8.33
+      },
+      {
+        "value": "t13i950900_22c26c6111ac_5ac7197df9d2",
+        "total": 11,
+        "bot": 11,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 11,
+        "distinct_ips": 2,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t13i190900_9dc949149365_e7c285222651",
+        "total": 11,
+        "bot": 11,
+        "browser": 0,
+        "distinct_user_agents": 4,
+        "distinct_paths": 8,
+        "distinct_ips": 4,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "t13d301000_3c43a67630b3_e7c285222651",
+        "total": 11,
+        "bot": 11,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 1,
+        "distinct_ips": 11,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "ja4h_hash": [
+      {
+        "value": "ge11nn16enus_f598d1ce2d7d_000000000000_000000000000",
+        "total": 909,
+        "bot": 0,
+        "browser": 909,
+        "distinct_user_agents": 1,
+        "distinct_paths": 896,
+        "distinct_ips": 1,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "ge11nn20enus_1d4dab023190_000000000000_000000000000",
+        "total": 907,
+        "bot": 0,
+        "browser": 907,
+        "distinct_user_agents": 1,
+        "distinct_paths": 896,
+        "distinct_ips": 1,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "po11nn18enus_b57c1c1ae28a_000000000000_000000000000",
+        "total": 147,
+        "bot": 0,
+        "browser": 147,
+        "distinct_user_agents": 1,
+        "distinct_paths": 147,
+        "distinct_ips": 1,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "po11nn22enus_32a22979e517_000000000000_000000000000",
+        "total": 147,
+        "bot": 0,
+        "browser": 147,
+        "distinct_user_agents": 1,
+        "distinct_paths": 147,
+        "distinct_ips": 1,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "ge11nn020000_7f628121cb0e_000000000000_000000000000",
+        "total": 139,
+        "bot": 139,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 139,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "ge11nn000000_000000000000_000000000000_000000000000",
+        "total": 74,
+        "bot": 74,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 9,
+        "distinct_ips": 25,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "ge11nn020000_10ba105b1c7d_000000000000_000000000000",
+        "total": 70,
+        "bot": 70,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 1,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "po11nn18enus_4c8c425fe3ea_000000000000_000000000000",
+        "total": 55,
+        "bot": 0,
+        "browser": 55,
+        "distinct_user_agents": 1,
+        "distinct_paths": 55,
+        "distinct_ips": 1,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "po11nn22enus_170345a4bd9c_000000000000_000000000000",
+        "total": 55,
+        "bot": 0,
+        "browser": 55,
+        "distinct_user_agents": 1,
+        "distinct_paths": 55,
+        "distinct_ips": 1,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "ge11nn030000_d9f46717d38e_000000000000_000000000000",
+        "total": 54,
+        "bot": 54,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 8,
+        "distinct_ips": 20,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "ge11nn08enus_6a3e4605a1e6_000000000000_000000000000",
+        "total": 42,
+        "bot": 42,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 19,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "po11nn060000_1c506ad8d8c7_000000000000_000000000000",
+        "total": 40,
+        "bot": 40,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 1,
+        "distinct_ips": 6,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "ge20cn14ruru_552ac303b383_68abb940d098_7b022c4b1588",
+        "total": 38,
+        "bot": 0,
+        "browser": 38,
+        "distinct_user_agents": 1,
+        "distinct_paths": 1,
+        "distinct_ips": 2,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "ge11nn090000_261f5f168341_000000000000_000000000000",
+        "total": 34,
+        "bot": 34,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 34,
+        "distinct_ips": 1,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "ge11nn030000_001e873a8aff_000000000000_000000000000",
+        "total": 27,
+        "bot": 27,
+        "browser": 0,
+        "distinct_user_agents": 1,
+        "distinct_paths": 7,
+        "distinct_ips": 9,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      }
+    ],
+    "http_version": [
+      {
+        "value": "HTTP/1.1",
+        "total": 3619,
+        "bot": 1337,
+        "browser": 2282,
+        "bot_pct": 36.94,
+        "browser_ratio": 63.06
+      },
+      {
+        "value": "HTTP/2.0",
+        "total": 389,
+        "bot": 105,
+        "browser": 284,
+        "bot_pct": 26.99,
+        "browser_ratio": 73.01
+      }
+    ],
+    "alpn": [
+      {
+        "value": "(empty)",
+        "total": 2442,
+        "bot": 1289,
+        "browser": 1153,
+        "bot_pct": 52.78,
+        "browser_ratio": 47.22
+      },
+      {
+        "value": "http/1.1",
+        "total": 1177,
+        "bot": 48,
+        "browser": 1129,
+        "bot_pct": 4.08,
+        "browser_ratio": 95.92
+      },
+      {
+        "value": "h2",
+        "total": 389,
+        "bot": 105,
+        "browser": 284,
+        "bot_pct": 26.99,
+        "browser_ratio": 73.01
+      }
+    ],
+    "header_count_bucket": [
+      {
+        "value": "10+",
+        "total": 2693,
+        "bot": 164,
+        "browser": 2529,
+        "bot_pct": 6.09,
+        "browser_ratio": 93.91
+      },
+      {
+        "value": "3-5",
+        "total": 521,
+        "bot": 504,
+        "browser": 17,
+        "bot_pct": 96.74,
+        "browser_ratio": 3.26
+      },
+      {
+        "value": "0-2",
+        "total": 488,
+        "bot": 487,
+        "browser": 1,
+        "bot_pct": 99.8,
+        "browser_ratio": 0.2
+      },
+      {
+        "value": "6-9",
+        "total": 306,
+        "bot": 287,
+        "browser": 19,
+        "bot_pct": 93.79,
+        "browser_ratio": 6.21
+      }
+    ],
+    "sec_ch_ua_prefix": [
+      {
+        "value": "(empty)",
+        "total": 3764,
+        "bot": 1412,
+        "browser": 2352,
+        "bot_pct": 37.51,
+        "browser_ratio": 62.49
+      },
+      {
+        "value": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=",
+        "total": 90,
+        "bot": 3,
+        "browser": 87,
+        "bot_pct": 3.33,
+        "browser_ratio": 96.67
+      },
+      {
+        "value": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\",",
+        "total": 77,
+        "bot": 3,
+        "browser": 74,
+        "bot_pct": 3.9,
+        "browser_ratio": 96.1
+      },
+      {
+        "value": "\"Chromium\";v=\"133\", \"Not(A:Brand\";v=\"99\"",
+        "total": 13,
+        "bot": 4,
+        "browser": 9,
+        "bot_pct": 30.77,
+        "browser_ratio": 69.23
+      },
+      {
+        "value": "\"Google Chrome\";v=\"142\", \"Not-A.Brand\";v",
+        "total": 8,
+        "bot": 8,
+        "browser": 0,
+        "bot_pct": 100.0,
+        "browser_ratio": 0.0
+      },
+      {
+        "value": "\"Chromium\";v=\"142\", \"Google Chrome\";v=\"1",
+        "total": 7,
+        "bot": 0,
+        "browser": 7,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "\"Chromium\";v=\"116\", \"Not)A;Brand\";v=\"24\"",
+        "total": 6,
+        "bot": 0,
+        "browser": 6,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "\"Chromium\";v=\"142\", \"Not:A-Brand\";v=\"24\"",
+        "total": 6,
+        "bot": 2,
+        "browser": 4,
+        "bot_pct": 33.33,
+        "browser_ratio": 66.67
+      },
+      {
+        "value": "Google Chrome\";v=\"111\", \"Not(A:Brand\";v=",
+        "total": 6,
+        "bot": 0,
+        "browser": 6,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "Chromium;v=133, Not(A:Brand;v=99, Google",
+        "total": 4,
+        "bot": 3,
+        "browser": 1,
+        "bot_pct": 75.0,
+        "browser_ratio": 25.0
+      },
+      {
+        "value": "\"Not A(Brand\";v=\"8\", \"Chromium\";v=\"132\"",
+        "total": 4,
+        "bot": 0,
+        "browser": 4,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "\"Chromium\";v=\"110\", \"Not A(Brand\";v=\"24\"",
+        "total": 4,
+        "bot": 0,
+        "browser": 4,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "\\\"Chromium\\\";v=\\\"133\\\", \\\"Not(A:Brand\\\";",
+        "total": 4,
+        "bot": 3,
+        "browser": 1,
+        "bot_pct": 75.0,
+        "browser_ratio": 25.0
+      },
+      {
+        "value": "\"Not:A-Brand\";v=\"99\", \"Microsoft Edge\";v",
+        "total": 3,
+        "bot": 0,
+        "browser": 3,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      },
+      {
+        "value": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"99\"",
+        "total": 2,
+        "bot": 0,
+        "browser": 2,
+        "bot_pct": 0.0,
+        "browser_ratio": 100.0
+      }
+    ],
+    "sec_ch_ua_present": [
+      {
+        "value": "False",
+        "total": 3764,
+        "bot": 1412,
+        "browser": 2352,
+        "bot_pct": 37.51,
+        "browser_ratio": 62.49
+      },
+      {
+        "value": "True",
+        "total": 244,
+        "bot": 30,
+        "browser": 214,
+        "bot_pct": 12.3,
+        "browser_ratio": 87.7
+      }
+    ],
+    "has_sec_fetch": [
+      {
+        "value": "False",
+        "total": 3686,
+        "bot": 1397,
+        "browser": 2289,
+        "bot_pct": 37.9,
+        "browser_ratio": 62.1
+      },
+      {
+        "value": "True",
+        "total": 322,
+        "bot": 45,
+        "browser": 277,
+        "bot_pct": 13.98,
+        "browser_ratio": 86.02
+      }
+    ],
+    "is_http2": [
+      {
+        "value": "False",
+        "total": 3619,
+        "bot": 1337,
+        "browser": 2282,
+        "bot_pct": 36.94,
+        "browser_ratio": 63.06
+      },
+      {
+        "value": "True",
+        "total": 389,
+        "bot": 105,
+        "browser": 284,
+        "bot_pct": 26.99,
+        "browser_ratio": 73.01
+      }
+    ]
+  },
+  "scoring_signals": [
+    {
+      "signal_id": "accept-*/*",
+      "total": 102,
+      "bot": 102,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "accept-lang-rich",
+      "total": 10,
+      "bot": 7,
+      "browser": 3,
+      "bot_pct": 70.0,
+      "browser_pct": 30.0
+    },
+    {
+      "signal_id": "accept-lang-simple",
+      "total": 39,
+      "bot": 39,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "accept-language",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "ai-crawler",
+      "total": 2,
+      "bot": 2,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "blind-probe",
+      "total": 464,
+      "bot": 460,
+      "browser": 4,
+      "bot_pct": 99.14,
+      "browser_pct": 0.86
+    },
+    {
+      "signal_id": "bot-ua",
+      "total": 2379,
+      "bot": 157,
+      "browser": 2222,
+      "bot_pct": 6.6,
+      "browser_pct": 93.4
+    },
+    {
+      "signal_id": "browser-headers",
+      "total": 2570,
+      "bot": 54,
+      "browser": 2516,
+      "bot_pct": 2.1,
+      "browser_pct": 97.9
+    },
+    {
+      "signal_id": "browser-ua",
+      "total": 1472,
+      "bot": 1130,
+      "browser": 342,
+      "bot_pct": 76.77,
+      "browser_pct": 23.23
+    },
+    {
+      "signal_id": "cache-control",
+      "total": 32,
+      "bot": 21,
+      "browser": 11,
+      "bot_pct": 65.62,
+      "browser_pct": 34.38
+    },
+    {
+      "signal_id": "cookies",
+      "total": 148,
+      "bot": 2,
+      "browser": 146,
+      "bot_pct": 1.35,
+      "browser_pct": 98.65
+    },
+    {
+      "signal_id": "exotic-alpn",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "few-tls-ext",
+      "total": 156,
+      "bot": 156,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "h2-fp",
+      "total": 103,
+      "bot": 30,
+      "browser": 73,
+      "bot_pct": 29.13,
+      "browser_pct": 70.87
+    },
+    {
+      "signal_id": "h2-init-window",
+      "total": 89,
+      "bot": 22,
+      "browser": 67,
+      "bot_pct": 24.72,
+      "browser_pct": 75.28
+    },
+    {
+      "signal_id": "h2-ja4-inconsistent",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "h2-max-frame",
+      "total": 19,
+      "bot": 12,
+      "browser": 7,
+      "bot_pct": 63.16,
+      "browser_pct": 36.84
+    },
+    {
+      "signal_id": "h2-priority",
+      "total": 103,
+      "bot": 30,
+      "browser": 73,
+      "bot_pct": 29.13,
+      "browser_pct": 70.87
+    },
+    {
+      "signal_id": "h2-pseudo-headers",
+      "total": 103,
+      "bot": 30,
+      "browser": 73,
+      "bot_pct": 29.13,
+      "browser_pct": 70.87
+    },
+    {
+      "signal_id": "h2-ua-inconsistent",
+      "total": 37,
+      "bot": 4,
+      "browser": 33,
+      "bot_pct": 10.81,
+      "browser_pct": 89.19
+    },
+    {
+      "signal_id": "h2-window-update",
+      "total": 103,
+      "bot": 30,
+      "browser": 73,
+      "bot_pct": 29.13,
+      "browser_pct": 70.87
+    },
+    {
+      "signal_id": "header-order",
+      "total": 59,
+      "bot": 52,
+      "browser": 7,
+      "bot_pct": 88.14,
+      "browser_pct": 11.86
+    },
+    {
+      "signal_id": "header-order-late",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "high-ciphers",
+      "total": 473,
+      "bot": 382,
+      "browser": 91,
+      "bot_pct": 80.76,
+      "browser_pct": 19.24
+    },
+    {
+      "signal_id": "high-header-count",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "http1.1",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "http2",
+      "total": 389,
+      "bot": 105,
+      "browser": 284,
+      "bot_pct": 26.99,
+      "browser_pct": 73.01
+    },
+    {
+      "signal_id": "ja4h-consistent",
+      "total": 1499,
+      "bot": 1263,
+      "browser": 236,
+      "bot_pct": 84.26,
+      "browser_pct": 15.74
+    },
+    {
+      "signal_id": "ja4h-headers>=10",
+      "total": 2688,
+      "bot": 160,
+      "browser": 2528,
+      "bot_pct": 5.95,
+      "browser_pct": 94.05
+    },
+    {
+      "signal_id": "ja4h-inconsistent",
+      "total": 140,
+      "bot": 31,
+      "browser": 109,
+      "bot_pct": 22.14,
+      "browser_pct": 77.86
+    },
+    {
+      "signal_id": "ja4h-low-headers",
+      "total": 976,
+      "bot": 958,
+      "browser": 18,
+      "bot_pct": 98.16,
+      "browser_pct": 1.84
+    },
+    {
+      "signal_id": "ja4h-no-cookies",
+      "total": 604,
+      "bot": 602,
+      "browser": 2,
+      "bot_pct": 99.67,
+      "browser_pct": 0.33
+    },
+    {
+      "signal_id": "ja4h-no-lang",
+      "total": 1223,
+      "bot": 1202,
+      "browser": 21,
+      "bot_pct": 98.28,
+      "browser_pct": 1.72
+    },
+    {
+      "signal_id": "ja4h-referer",
+      "total": 88,
+      "bot": 33,
+      "browser": 55,
+      "bot_pct": 37.5,
+      "browser_pct": 62.5
+    },
+    {
+      "signal_id": "low-ciphers",
+      "total": 9,
+      "bot": 9,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "low-headers",
+      "total": 972,
+      "bot": 955,
+      "browser": 17,
+      "bot_pct": 98.25,
+      "browser_pct": 1.75
+    },
+    {
+      "signal_id": "missing-typical",
+      "total": 889,
+      "bot": 882,
+      "browser": 7,
+      "bot_pct": 99.21,
+      "browser_pct": 0.79
+    },
+    {
+      "signal_id": "modern-tls",
+      "total": 951,
+      "bot": 628,
+      "browser": 323,
+      "bot_pct": 66.04,
+      "browser_pct": 33.96
+    },
+    {
+      "signal_id": "multi-groups",
+      "total": 504,
+      "bot": 397,
+      "browser": 107,
+      "bot_pct": 78.77,
+      "browser_pct": 21.23
+    },
+    {
+      "signal_id": "no-accept-lang",
+      "total": 1265,
+      "bot": 1244,
+      "browser": 21,
+      "bot_pct": 98.34,
+      "browser_pct": 1.66
+    },
+    {
+      "signal_id": "no-alpn",
+      "total": 75,
+      "bot": 75,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "no-bot-red-flags",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "no-session",
+      "total": 369,
+      "bot": 362,
+      "browser": 7,
+      "bot_pct": 98.1,
+      "browser_pct": 1.9
+    },
+    {
+      "signal_id": "no-sni",
+      "total": 47,
+      "bot": 47,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "no-ua",
+      "total": 99,
+      "bot": 99,
+      "browser": 0,
+      "bot_pct": 100.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "obsolete-tls",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "sec-ch-ua",
+      "total": 244,
+      "bot": 30,
+      "browser": 214,
+      "bot_pct": 12.3,
+      "browser_pct": 87.7
+    },
+    {
+      "signal_id": "sec-ch-ua-modern",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "sec-fetch",
+      "total": 322,
+      "bot": 45,
+      "browser": 277,
+      "bot_pct": 13.98,
+      "browser_pct": 86.02
+    },
+    {
+      "signal_id": "sec-purpose",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "sec-purpose-invalid",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "sec-purpose-no-sec-fetch",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "session-ticket",
+      "total": 176,
+      "bot": 71,
+      "browser": 105,
+      "bot_pct": 40.34,
+      "browser_pct": 59.66
+    },
+    {
+      "signal_id": "ssl-greased",
+      "total": 70,
+      "bot": 6,
+      "browser": 64,
+      "bot_pct": 8.57,
+      "browser_pct": 91.43
+    },
+    {
+      "signal_id": "tls-alpn-http-inconsistent",
+      "total": 0,
+      "bot": 0,
+      "browser": 0,
+      "bot_pct": 0.0,
+      "browser_pct": 0.0
+    },
+    {
+      "signal_id": "tls-ext>=10",
+      "total": 231,
+      "bot": 125,
+      "browser": 106,
+      "bot_pct": 54.11,
+      "browser_pct": 45.89
+    },
+    {
+      "signal_id": "tls-ua-consistent",
+      "total": 161,
+      "bot": 73,
+      "browser": 88,
+      "bot_pct": 45.34,
+      "browser_pct": 54.66
+    },
+    {
+      "signal_id": "tls-ua-inconsistent",
+      "total": 22,
+      "bot": 16,
+      "browser": 6,
+      "bot_pct": 72.73,
+      "browser_pct": 27.27
+    },
+    {
+      "signal_id": "ua-browser-no-grease",
+      "total": 72,
+      "bot": 59,
+      "browser": 13,
+      "bot_pct": 81.94,
+      "browser_pct": 18.06
+    }
+  ]
+}

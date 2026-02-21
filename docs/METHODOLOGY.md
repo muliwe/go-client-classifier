@@ -687,6 +687,13 @@ EFFORT                   │                    EFFORT
 | Throughput (RPS) | >10K | **~14.5K** (localhost TLS) |
 | Throughput (RPM) | >600K | **~870K** (localhost TLS) |
 
+**Current assessment**
+
+- **Latency and throughput — targets met.** Classification logic is ~7µs per request (unit tests, no I/O); with full TLS handshake and logging, p99 is ~1ms and average ~1–3.4ms depending on concurrency (see [Appendix E: Performance Benchmarks](#appendix-e-performance-benchmarks)). Throughput reaches ~14.5K RPS and ~870K RPM on localhost with TLS (50 concurrent), above the >10K RPS and >600K RPM targets.
+- **Accuracy metrics (TPR, TNR, FPR) — TBD.** True/false positive and negative rates require a **labeled validation set** (ground-truth browser vs bot per request). We do not yet have a curated test set or a controlled experiment with known clients. Production log aggregates (e.g. [Appendix J](#appendix-j-request-log-statistics-and-collection-methodology) sample: ~36% bot / ~64% browser, score medians bot −23 vs browser 0) show clear score separation but do not substitute for labeled evaluation. **Next step:** build a labeled dataset (e.g. known browser sessions + known bot UAs and tools) and report confusion matrix and TPR/TNR/FPR.
+- **AI crawler detection — TBD.** We match known AI crawler User-Agents (Appendix A: GPTBot, ClaudeBot, etc.) and score them as bot when `ua_is_bot` fires; we have no dedicated AI-crawler validation (e.g. traffic from labeled AI fetchers). **Next step:** collect or synthesize AI-crawler traffic and measure detection rate.
+- **Evasion rate — TBD.** Evasion rate vs commercial solutions would require running the same traffic through this classifier and a commercial anti-bot product and comparing miss rates. Not performed. FP-Inconsistent (2024) reports ~44–48% evasion reduction with consistency rules; our JA4H and TLS-vs-UA checks follow a similar idea but are not benchmarked against a commercial baseline. **Next step:** optional A/B or replay study vs a commercial endpoint.
+
 ---
 
 #### Research Questions for Each Phase
