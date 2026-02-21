@@ -22,6 +22,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix G: Cross-validation of transport vs application fingerprints](#appendix-g-cross-validation-of-transport-vs-application-fingerprints)
 - [Appendix H: JA3, JA4 and X-FP-* for bot detection](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection)
 - [Appendix I: Impersonate and header-order detection](#appendix-i-impersonate-and-header-order-detection)
+- [Appendix J: Request log statistics and collection methodology](#appendix-j-request-log-statistics-and-collection-methodology)
 
 ---
 
@@ -463,6 +464,8 @@ TLS and H2 fingerprint are taken from trusted proxy headers (X-FP-TLS-*, X-FP-JA
 ```
 
 When the request is from a **trusted proxy** (X-Internal-Proxy: 1), the log also includes **`fingerprint.proxy_headers`**: a map of raw X-FP-* header values as received (X-FP-TLS-Version, X-FP-TLS-Cipher, X-FP-TLS-ALPN, X-FP-TLS-SNI, X-FP-JA3, X-FP-JA3-HASH, X-FP-SSL-GREASED, X-FP-JA4, X-FP-H2). Only non-empty values are present. This supports ML training and post-hoc analysis (recomputing hashes, comparing raw vs derived fields, feature engineering). The derived fields `fingerprint.tls` (e.g. `ja3_hash`, `ja4_hash`, `ssl_greased`, `from_proxy`) and `signals` (e.g. `tls_obsolete`, `has_ssl_greased`) are always present when applicable.
+
+**Request log statistics**: Aggregated statistics over these logs (top-N by path, method, IP, user agent, JA3/JA4/JA4H, headers, and per-signal prevalence from `score_breakdown`) are produced by the `request_log_stats.py` tool. The collection method, statistical significance filtering, and interpretation are described in [Appendix J: Request log statistics and collection methodology](#appendix-j-request-log-statistics-and-collection-methodology).
 
 ---
 
@@ -1821,7 +1824,7 @@ We add JA3 hashes to `knownLibraryJA3` (and optionally keep a separate impersona
 
 There is no single public "all curl-impersonate JA3" list; we maintain the list from reference payloads, from measuring each curl_cffi/curl-impersonate profile, from ja3.me/Scrapfly for lookup/verification, and from operational logs.
 
-### References (this appendix)
+### References (Appendix I)
 
 - [2] FoxIO JA4+ Network Fingerprinting — https://github.com/FoxIO-LLC/ja4 (JA4H technical_details/JA4H.md). JA4H includes Accept-Language in HTTP client fingerprint.
 - ThreatRelay JA4H Quick Labs — https://www.threatrelay.com/Quick-Labs/JA4/JA4H (HTTP client fingerprinting).
@@ -1833,6 +1836,68 @@ There is no single public "all curl-impersonate JA3" list; we maintain the list 
 - curl_cffi impersonate — https://curl-cffi.readthedocs.io/en/latest/impersonate.html (what is mimicked: TLS, H2, headers).
 - curl_cffi Impersonation FAQ — JA3/akamai not comprehensive; other fields detectable — https://curl-cffi.readthedocs.io/en/latest/impersonate/faq.html.
 - W3C nav-speculation Prefetch (Sec-Purpose) — https://wicg.github.io/nav-speculation/prefetch.html#sec-purpose-header. MDN Sec-Purpose — https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Purpose.
+
+---
+
+## Appendix J: Request log statistics and collection methodology
+
+*Added: 2026-02*
+
+### Purpose
+
+This appendix describes how we collect and aggregate statistics from request logs produced by the classifier. The goal is to support methodology validation, tuning of scoring weights, and operational insight into bot vs browser traffic composition. The implementation is the `request_log_stats.py` tool (see `tools/python/README.md` and the script docstring).
+
+### Data source and filters
+
+- **Input**: JSONL files; each line is one JSON object with `classification`, `score`, `fingerprint`, `signals`, and optionally `remote_addr`. Format matches `tests/testdata/reference_browser.json` and the log structure in [Implementation Details](#implementation-details) above.
+- **Optional filters**:
+  - **Stress-test exclusion**: Records with User-Agent normalised to `go-http-client` can be excluded so that load-test traffic does not dominate aggregates.
+  - **Localhost as empty**: `remote_addr` equal to `127.0.0.1` or `127.0.0.1:port` is normalised to `(empty)` so that local/proxy-forwarded traffic is grouped and excluded from “unique IP” and “top IP” counts when desired.
+- **Canonical interpretation**: When TLS/HTTP data comes from a trusted proxy (X-FP-*), we do not use backend-only fields (e.g. `fingerprint.http.version`) for client protocol; we use `signals.is_http2` and fingerprint data already unified from proxy headers (see [Appendix F](METHODOLOGY.md#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
+
+### Aggregation design
+
+1. **Global summary**  
+   Total requests (after filters), unique IPs, unique URLs (paths), bot/browser counts and percentages, score percentiles (median, P50, P95) and header-count percentiles, prevalence of boolean signals (e.g. `ua_is_bot`, `has_sec_fetch_headers`, `has_accept_language`, `sec_ch_ua_modern_order`), HTTP/2 ratio, and share of requests with TLS from proxy.
+
+2. **Top-N by dimension**  
+   For each of path, method, remote_addr (IP), user_agent (normalised family), accept, accept_lang_category, ja3_hash, ja4_hash, ja4h_hash, http_version, alpn, header_count_bucket, sec_ch_ua_prefix, and boolean signals (sec_ch_ua_present, has_sec_fetch, is_http2), we output the top-N values by total count (or by discriminativity |bot − browser|). Each row gives total, bot count, browser count, and bot%. For JA3/JA4/JA4H we also report distinct user-agents, paths, and IPs per fingerprint value (Signals Intelligence style).
+
+3. **Scoring-signal prevalence**  
+   For every signal ID present in the scoring config (browser and bot, including zero-point signals), we parse the per-request `signals.score_breakdown` string and count how many requests had that signal in their breakdown. We output total, bot, browser, and bot%/browser% per signal.
+
+4. **Statistical significance (optional)**  
+   To avoid over-interpreting rare categories, we optionally apply a per-block significance filter: within each grouping (e.g. method, path, user_agent), we set N = max total among values in that block, excluding the value `(empty)`. We then keep only rows with total ≥ √N. This threshold can be disabled via a CLI flag for full enumeration.
+
+### References (statistics and bot traffic measurement)
+
+- **Cloudflare Signals Intelligence** — [Bots and JA3/JA4](https://developers.cloudflare.com/bots/concepts/ja3-ja4-fingerprint/), [Signals Intelligence](https://developers.cloudflare.com/bots/concepts/signals-intelligence/). Use of JA4 and related metrics (browser ratio, UA/path/IP diversity per fingerprint, HTTP/2 ratio) for bot management; aligns with our top-N and diversity metrics.
+- **Radware** — [HTTP Header Anomaly-based Advanced Behavioural Bot Detection](https://www.radware.com/blog/application-protection/http-header-anomaly-based-advanced-behavioural-bot-detection/) (2023). Header and Accept-Language anomalies; correlation of User-Agent with headers; supports our focus on accept, accept_lang_category, and header-order signals in aggregates.
+- **FP-Inconsistent** (Venugopalan et al., IMC 2024) — [arXiv:2406.07647](https://arxiv.org/abs/2406.07647). Fingerprint inconsistencies in evasive bot traffic; spatial/temporal consistency. Our scoring-signal prevalence (e.g. `ja4h-inconsistent`, `tls-ua-inconsistent`) and per-signal bot% help validate which inconsistency signals fire in production.
+- **Imperva Bad Bot Report** — [2025 Bad Bot Report](https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf). Automated vs human traffic share; bad bot trends; contextualises aggregate bot/browser ratios and path/method mixes.
+- **FoxIO JA4+ / JA4H** — [JA4](https://github.com/FoxIO-LLC/ja4), [JA4H technical details](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md). JA4H as HTTP client fingerprint; we aggregate ja4h_hash and JA4H-derived signals (e.g. ja4h-headers≥10, ja4h-consistent) in both top-N and scoring-signal tables.
+
+### Brief interpretation of a sample run
+
+The following is a short reading of a representative run (after excluding go-http-client stress-test traffic and applying the significance filter):
+
+- **Volume**: ~4k requests; ~1.1k unique IPs; ~1.3k unique paths — consistent with a mixed production-like sample where many requests share paths (e.g. `/`, `/favicon.ico`) and a subset of IPs account for most traffic.
+- **Classification**: ~36% bot, ~64% browser. Score medians: bot ≈ −23, browser ≈ 0; P95 bot ≈ 3, browser ≈ 14 — clear separation; low header count and missing browser signals drive negative bot scores.
+- **Paths**: Top path `/` has high bot% (~67%); `/geoserver/wfs`, `/cgi-bin/ViewLog.asp`, `/.env` are almost entirely bot; `/login` is mixed. These are traces of *breach attempts* against our classification: advanced bots probing or evading detection, not benign human traffic; login shows mixed use by both humans and automation.
+- **Methods**: GET dominates; POST is more browser-heavy (bot% ~20%); HEAD and others (PROPFIND, OPTIONS, CONNECT) are almost all bot — consistent with crawlers and scanners.
+- **User agents**: curl is numerous but mostly classified browser (many benign tools use curl); Chrome/Firefox show higher bot%; `(empty)` and python are almost all bot.
+- **Scoring signals**: High-prevalence browser signals (e.g. `ja4h-headers>=10`, `browser-headers`, `bot-ua` as a label from UA) and bot signals (`no-accept-lang`, `ja4h-no-lang`, `low-headers`, `ja4h-low-headers`, `missing-typical`, `ja4h-inconsistent`) match the rule set; per-signal bot%/browser% helps prioritise which signals to tune or monitor.
+
+This kind of output supports methodology review (e.g. Appendix I signals), scoring calibration, and operational dashboards (top paths/methods/IPs, TLS-from-proxy share, HTTP/2 ratio).
+
+### References (Appendix J)
+
+- Cloudflare Signals Intelligence — https://developers.cloudflare.com/bots/concepts/signals-intelligence/
+- Cloudflare JA3/JA4 — https://developers.cloudflare.com/bots/concepts/ja3-ja4-fingerprint/
+- Radware HTTP Header Anomaly-based Bot Detection — https://www.radware.com/blog/application-protection/http-header-anomaly-based-advanced-behavioural-bot-detection/
+- FP-Inconsistent (arXiv:2406.07647) — https://arxiv.org/abs/2406.07647
+- Imperva 2025 Bad Bot Report — https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf
+- FoxIO JA4+ (JA4, JA4H) — https://github.com/FoxIO-LLC/ja4
 
 ---
 

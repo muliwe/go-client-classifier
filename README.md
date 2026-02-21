@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.8.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 0.9.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -60,7 +60,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 ### Tech Stack
 
 - **Core**: Go (HTTP/2 server, TLS fingerprinting, classification)
-- **Analytics**: Python (log analysis, pattern extraction, visualization)
+- **Analytics**: Python (log analysis, pattern extraction). **Request log statistics** — [tools/python/request_log_stats.py](tools/python/request_log_stats.py) aggregates JSONL logs: top-N by path, method, IP, user agent, JA3/JA4/JA4H, headers; bot/browser breakdown; scoring-signal prevalence; optional significance filter (√N). See [tools/python/README.md](tools/python/README.md) and [Methodology Appendix J](docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology).
 - **Logging**: Structured JSON logs per day (`logs/requests_YYYYMMDD.jsonl`) for research analysis
 
 ## Project Structure
@@ -111,7 +111,7 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 
 1. **Collect**: Run server, generate traffic (curl, browsers, LLM tools)
 2. **Log**: All requests logged as structured JSON to daily files (`logs/requests_YYYYMMDD.jsonl`)
-3. **Analyze**: Python tools extract patterns from logs
+3. **Analyze**: Run [request_log_stats.py](tools/python/request_log_stats.py) on JSONL logs for top-N by path/method/IP/fingerprint and scoring-signal prevalence; see [Methodology Appendix J](docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology)
 4. **Iterate**: Update classification heuristics based on findings
 5. **Test**: Automated integration tests validate behavior
 
@@ -340,7 +340,7 @@ Tests verify:
   "message": "You appear to be using a browser",
   "request_id": "uuid",
   "timestamp": "2026-02-18T12:00:00Z",
-  "version": "0.8.0"
+  "version": "0.9.0"
 }
 ```
 
@@ -508,8 +508,9 @@ Hooks are automatically run before each commit.
 
 - [CHANGELOG.md](CHANGELOG.md) — version history and release notes
 - [config/README.md](config/README.md) — scoring config schema, smoking guns, weak/zero signals, thresholds
-- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references
+- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references; **Appendix J** — request log statistics and collection methodology
 - [docs/nginx.md](docs/nginx.md) — nginx setup for TLS termination, HTTP/2 fingerprint (X-FP-H2), JA3 (X-FP-JA3); Go consumes headers and uses H2/JA3 in cross-validation (Appendix G)
+- [tools/python/README.md](tools/python/README.md) — Python tools: request_log_stats (aggregate JSONL), antibot_test
 
 ## License
 

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.9.0 (2026-02-21)
+
+### Request log statistics (tools/python/request_log_stats.py)
+
+- **Aggregation**: Top-N by path, method, remote_addr (IP), user_agent, accept, accept_lang_category, JA3/JA4/JA4H, http_version, alpn, header_count_bucket, sec_ch_ua_prefix, and boolean signals; per-value bot/browser counts and bot%. For JA3/JA4/JA4H also distinct user-agents, paths, and IPs (Signals Intelligence style).
+- **Global summary**: Total requests (after filters), unique IPs, unique URLs (paths), score/header-count percentiles, prevalence of boolean signals, HTTP/2 ratio, TLS-from-proxy share.
+- **Scoring-signal prevalence**: For every signal ID from the scoring config (browser and bot, including 0-point), parse `signals.score_breakdown` and output total/bot/browser and bot%/browser% per signal.
+- **Filters**: `--exclude-stress-tests` — exclude requests with User-Agent go-http-client. `127.0.0.1` and `127.0.0.1:port` normalised to `(empty)` for remote_addr (grouped with empty, excluded from unique-IP/top-IP when desired).
+- **Statistical significance**: Optional per-block filter: keep only rows with total ≥ √N (N = max total in block, excluding `(empty)`). Disable with `--no-significance-filter`.
+- **Docs**: [docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology](docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology) **Appendix J — Request log statistics and collection methodology** (English): data source and filters, aggregation design, references (Cloudflare Signals Intelligence, Radware, FP-Inconsistent, Imperva, FoxIO JA4+/JA4H), brief interpretation of a sample run. Implementation Details section links to Appendix J for statistics. [tools/python/README.md](tools/python/README.md) and script docstring updated; path/method/IP and significance filter documented.
+
 ## v0.8.0 (2026-02-20)
 
 ### Accept-Language as transport-signal (rich vs simple)

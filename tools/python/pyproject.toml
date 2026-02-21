@@ -5,10 +5,14 @@ description = "Python tools for go-client-classifier (antibot tests, etc.)"
 readme = "README.md"
 authors = []
 packages = []
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
 curl-cffi = "^0.14"
+pandas = "^2.0"
+numpy = "^2.0"
+tqdm = "^4.66"
 
 [tool.poetry.group.dev.dependencies]
 # add dev deps here if needed, e.g. pytest, ruff
