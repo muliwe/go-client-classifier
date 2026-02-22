@@ -268,7 +268,13 @@ PROGRESS_UPDATE_EVERY = 1000
 def _count_lines_in_files(file_paths: list[Path]) -> int:
     """Count total non-empty lines in files (for progress bar total)."""
     total = 0
-    for path in file_paths:
+    for path in tqdm(
+        file_paths,
+        desc="Reading",
+        unit=" files",
+        file=sys.stderr,
+        mininterval=0.5,
+    ):
         try:
             with open(path, "rb") as f:
                 total += sum(1 for line in f if line.strip())
@@ -484,6 +490,23 @@ def aggregate(
             rows = [r for r in rows if r["total"] >= threshold]
         top_values[field] = rows
 
+    # For fingerprint fields: add per-hash lists of unique raw UAs, paths, IPs with request counts (skip empty)
+    for field in fingerprint_fields:
+        if field not in top_values:
+            continue
+        work = df
+        for row in top_values[field]:
+            val = row.get("value")
+            if val is None or str(val).strip() == "" or str(val).strip() == "(empty)":
+                continue
+            g = work[work[field].astype(str) == str(val)]
+            ua_counts = g["user_agent_raw"].value_counts()
+            path_counts = g["path"].value_counts()
+            ip_counts = g["remote_addr"].value_counts()
+            row["top_user_agents"] = [{"value": v, "count": int(c)} for v, c in ua_counts.items()]
+            row["top_paths"] = [{"value": v, "count": int(c)} for v, c in path_counts.items()]
+            row["top_ips"] = [{"value": v, "count": int(c)} for v, c in ip_counts.items()]
+
     # Per-signal stats (from score_breakdown): for each config signal ID, count records where it fired
     scoring_signals: list[dict[str, Any]] = []
     for signal_id in ALL_SCORING_SIGNAL_IDS:
@@ -609,7 +632,7 @@ def main() -> int:
     parser.add_argument(
         "--exclude-stress-tests",
         action="store_true",
-        help="Exclude all requests with User-Agent go-http-client (stress-test traffic) from statistics",
+        help="Exclude go-http-client requests only for paths /, /health, /debug (stress-test traffic)",
     )
     parser.add_argument(
         "--no-significance-filter",
@@ -631,7 +654,7 @@ def main() -> int:
             total=total_lines,
             unit=" lines",
             unit_scale=False,
-            desc="Reading",
+            desc="Processing",
             file=sys.stderr,
             mininterval=0.5,
             maxinterval=2.0,
@@ -640,7 +663,7 @@ def main() -> int:
         pbar = tqdm(
             total=None,
             unit=" lines",
-            desc="Reading",
+            desc="Processing",
             file=sys.stderr,
             mininterval=0.5,
         )
@@ -670,12 +693,21 @@ def main() -> int:
     if skipped_class:
         print(f"Warning: skipped {skipped_class} record(s) with classification not bot/browser.", file=sys.stderr)
 
+    STRESS_PATHS = ("/", "/health", "/debug")
+
     if args.exclude_stress_tests:
         before = len(records)
-        records = [r for r in records if r.get("user_agent") != "go-http-client"]
+        records = [
+            r
+            for r in records
+            if not (r.get("user_agent") == "go-http-client" and r.get("path") in STRESS_PATHS)
+        ]
         excluded = before - len(records)
         if excluded:
-            print(f"Excluded {excluded} record(s) with User-Agent go-http-client (stress tests).", file=sys.stderr)
+            print(
+                f"Excluded {excluded} go-http-client record(s) for {', '.join(STRESS_PATHS)} (stress tests).",
+                file=sys.stderr,
+            )
 
     stats = aggregate(
         records,

@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.9.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 0.9.1 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -340,7 +340,7 @@ Tests verify:
   "message": "You appear to be using a browser",
   "request_id": "uuid",
   "timestamp": "2026-02-18T12:00:00Z",
-  "version": "0.9.0"
+  "version": "0.9.1"
 }
 ```
 

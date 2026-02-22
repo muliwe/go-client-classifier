@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.9.1 (2026-02-22)
+
+### Request log statistics (tools/python/request_log_stats.py)
+
+- **Stress-test exclusion** (`--exclude-stress-tests`): Excludes go-http-client requests only for paths `/`, `/health`, `/debug` (stress tests hit only these). Other go-http-client traffic is retained.
+- **Progress bars**: Two phases — *Reading* (counting lines across files, by file); *Processing* (parsing JSONL and aggregating, by line).
+- **Per-hash breakdown (JA3/JA4/JA4H)**: For each *non-empty* fingerprint value, the report now includes `top_user_agents`, `top_paths`, and `top_ips` — lists of `{ "value": "...", "count": N }` sorted by count (unique raw clients, URLs, and IPs with request counts). Not computed for the `(empty)` fingerprint value. Supports methodology validation and “one hash, many clients” bot-signal analysis (see Appendix J).
+
+### Methodology (docs/METHODOLOGY.md) — Appendix J
+
+- **Data source**: Stress-test exclusion described as go-http-client + path in `/`, `/health`, `/debug`; `--no-significance-filter` and output formats (text/JSON, progress bars, reference `tests/testdata/report.json`) documented.
+- **Aggregation**: `user_agent_raw` and per-hash `top_user_agents` / `top_paths` / `top_ips` (non-empty only) added to the aggregation design.
+- **Fingerprint–client diversity as a bot signal (2024–2025 methodology)**: New subsection — one TLS fingerprint with many different User-Agents/paths/IPs as a bot indicator; references to Cloudflare Signals Intelligence (uas_rank, paths_rank, ips_rank, browser_ratio), FP-Inconsistent (IMC 2024), JA4; application to `report.json` (e.g. `(empty)` JA3 bucket with high UA diversity). Reference added: “When Handshakes Tell the Truth” (2025), arXiv:2602.09606.
+- **Brief interpretation**: Numbers aligned with `tests/testdata/report.json` (4 066 requests, 412 IPs, 1 319 paths, 36.89% bot, medians −24/0, P95 2/14); fingerprint breakdown bullet and reference list updated.
+
 ## v0.9.0 (2026-02-21)
 
 ### Request log statistics (tools/python/request_log_stats.py)

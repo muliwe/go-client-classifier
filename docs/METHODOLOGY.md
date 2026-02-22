@@ -1858,7 +1858,7 @@ This appendix describes how we collect and aggregate statistics from request log
 
 - **Input**: JSONL files; each line is one JSON object with `classification`, `score`, `fingerprint`, `signals`, and optionally `remote_addr`. Format matches `tests/testdata/reference_browser.json` and the log structure in [Implementation Details](#implementation-details) above.
 - **Optional filters**:
-  - **Stress-test exclusion**: Records with User-Agent normalised to `go-http-client` can be excluded so that load-test traffic does not dominate aggregates.
+  - **Stress-test exclusion** (`--exclude-stress-tests`): Records with User-Agent normalised to `go-http-client` *and* path in `/`, `/health`, `/debug` are excluded so that load-test traffic (which hits only these endpoints) does not dominate aggregates. Other go-http-client traffic is retained.
   - **Localhost as empty**: `remote_addr` equal to `127.0.0.1` or `127.0.0.1:port` is normalised to `(empty)` so that local/proxy-forwarded traffic is grouped and excluded from “unique IP” and “top IP” counts when desired.
 - **Canonical interpretation**: When TLS/HTTP data comes from a trusted proxy (X-FP-*), we do not use backend-only fields (e.g. `fingerprint.http.version`) for client protocol; we use `signals.is_http2` and fingerprint data already unified from proxy headers (see [Appendix F](METHODOLOGY.md#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
 
@@ -1868,13 +1868,15 @@ This appendix describes how we collect and aggregate statistics from request log
    Total requests (after filters), unique IPs, unique URLs (paths), bot/browser counts and percentages, score percentiles (median, P50, P95) and header-count percentiles, prevalence of boolean signals (e.g. `ua_is_bot`, `has_sec_fetch_headers`, `has_accept_language`, `sec_ch_ua_modern_order`), HTTP/2 ratio, and share of requests with TLS from proxy.
 
 2. **Top-N by dimension**  
-   For each of path, method, remote_addr (IP), user_agent (normalised family), accept, accept_lang_category, ja3_hash, ja4_hash, ja4h_hash, http_version, alpn, header_count_bucket, sec_ch_ua_prefix, and boolean signals (sec_ch_ua_present, has_sec_fetch, is_http2), we output the top-N values by total count (or by discriminativity |bot − browser|). Each row gives total, bot count, browser count, and bot%. For JA3/JA4/JA4H we also report distinct user-agents, paths, and IPs per fingerprint value (Signals Intelligence style).
+   For each of path, method, remote_addr (IP), user_agent (normalised family), user_agent_raw, accept, accept_lang_category, ja3_hash, ja4_hash, ja4h_hash, http_version, alpn, header_count_bucket, sec_ch_ua_prefix, and boolean signals (sec_ch_ua_present, has_sec_fetch, is_http2), we output the top-N values by total count (or by discriminativity |bot − browser|). Each row gives total, bot count, browser count, and bot%. For JA3/JA4/JA4H we also report distinct user-agents, paths, and IPs per fingerprint value (Signals Intelligence style). For *non-empty* fingerprint values only, we add per-hash lists with request counts: **top_user_agents** (raw User-Agent strings), **top_paths** (URL paths), **top_ips** (remote_addr); each list is `[{ "value": "...", "count": N }, ...]` sorted by count descending. The `(empty)` fingerprint value does not receive these breakdowns.
 
 3. **Scoring-signal prevalence**  
    For every signal ID present in the scoring config (browser and bot, including zero-point signals), we parse the per-request `signals.score_breakdown` string and count how many requests had that signal in their breakdown. We output total, bot, browser, and bot%/browser% per signal.
 
 4. **Statistical significance (optional)**  
-   To avoid over-interpreting rare categories, we optionally apply a per-block significance filter: within each grouping (e.g. method, path, user_agent), we set N = max total among values in that block, excluding the value `(empty)`. We then keep only rows with total ≥ √N. This threshold can be disabled via a CLI flag for full enumeration.
+   To avoid over-interpreting rare categories, we optionally apply a per-block significance filter: within each grouping (e.g. method, path, user_agent), we set N = max total among values in that block, excluding the value `(empty)`. We then keep only rows with total ≥ √N. This threshold can be disabled via `--no-significance-filter` for full enumeration.
+
+**Output**: Text (default) or JSON (`--format json`). Progress bars: *Reading* (counting lines across files), *Processing* (parsing JSONL and aggregating). A reference JSON report is produced under `tests/testdata/report.json` (see [Brief interpretation](#brief-interpretation-of-a-sample-run) below).
 
 ### References (statistics and bot traffic measurement)
 
@@ -1883,17 +1885,29 @@ This appendix describes how we collect and aggregate statistics from request log
 - **FP-Inconsistent** (Venugopalan et al., IMC 2024) — [arXiv:2406.07647](https://arxiv.org/abs/2406.07647). Fingerprint inconsistencies in evasive bot traffic; spatial/temporal consistency. Our scoring-signal prevalence (e.g. `ja4h-inconsistent`, `tls-ua-inconsistent`) and per-signal bot% help validate which inconsistency signals fire in production.
 - **Imperva Bad Bot Report** — [2025 Bad Bot Report](https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf). Automated vs human traffic share; bad bot trends; contextualises aggregate bot/browser ratios and path/method mixes.
 - **FoxIO JA4+ / JA4H** — [JA4](https://github.com/FoxIO-LLC/ja4), [JA4H technical details](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md). JA4H as HTTP client fingerprint; we aggregate ja4h_hash and JA4H-derived signals (e.g. ja4h-headers≥10, ja4h-consistent) in both top-N and scoring-signal tables.
+- **When Handshakes Tell the Truth** (2025) — [Detecting Web Bad Bots via TLS Fingerprints](https://arxiv.org/html/2602.09606v1). TLS fingerprint (JA4) as protocol-level signal; ML-based bot detection; reinforces that one hash with many UAs is a bot indicator.
+
+### Fingerprint–client diversity as a bot signal (2024–2025 methodology)
+
+A well-established pattern in modern bot detection is **one TLS fingerprint (JA3/JA4/JA4H) associated with many different User-Agent strings, paths, or IPs**. TLS operates at the protocol layer; the ClientHello (cipher suites, extensions, order) reflects the actual TLS stack. User-Agent and other HTTP headers are trivial to spoof. So when a single fingerprint appears with a large diversity of claimed clients (e.g. "Chrome", "Firefox", "curl", "python-requests", scanners), it indicates one underlying stack pretending to be many — a strong signal of automation or evasive bots.
+
+- **Cloudflare Signals Intelligence** (2024) explicitly uses per-fingerprint diversity: `uas_rank_1h` (diversity of user agents), `paths_rank_1h` (diversity of request paths), `ips_rank_1h` (diversity of client IPs), and `browser_ratio_1h` (share of browser-like UAs). Lower rank = higher diversity; high UA/path diversity with low browser ratio is indicative of non-browser traffic.
+- **FP-Inconsistent** (Venugopalan et al., IMC 2024) shows that evasive bots exhibit *inconsistent* fingerprint attributes across space (different attributes in one fingerprint) and time; multiple user agents or identities under one fingerprint is a typical evasion pattern, and consistency checks (e.g. TLS vs UA, JA4H vs headers) reduce evasion.
+- **JA4 in bot detection** (2024–2025): JA4’s structured format and sorting reduce cipher/extension randomization used by bots; the same “one hash, many clients” logic applies — a single JA4 with many distinct UAs is a fingerprint-level bot indicator.
+
+**Application to our report**: In `tests/testdata/report.json`, the `(empty)` JA3 bucket (requests without TLS fingerprint from proxy) aggregates a very high diversity of raw User-Agents in `top_user_agents`: curl, CensysInspect, Go-http-client, python-requests, zgrab, Palo Alto Cortex, Let’s Encrypt, HeadlessChrome, bingbot, and many spoofed “Mozilla/…” strings. That is exactly the “one profile, many claimed identities” pattern. For non-empty hashes, the same view holds: `distinct_user_agents`, `distinct_paths`, `distinct_ips` plus the per-hash lists `top_user_agents`, `top_paths`, `top_ips` (with counts) let us spot fingerprints that are shared by many different claimed clients and paths — supporting methodology validation and tuning (e.g. down-ranking or flagging high-diversity, low-browser-ratio fingerprints).
 
 ### Brief interpretation of a sample run
 
-The following is a short reading of a representative run (after excluding go-http-client stress-test traffic and applying the significance filter):
+The following is a short reading of the reference run in `tests/testdata/report.json` (after excluding go-http-client stress traffic on `/`, `/health`, `/debug`; significance filter can be disabled for that file with `--no-significance-filter`):
 
-- **Volume**: ~4k requests; ~1.1k unique IPs; ~1.3k unique paths — consistent with a mixed production-like sample where many requests share paths (e.g. `/`, `/favicon.ico`) and a subset of IPs account for most traffic.
-- **Classification**: ~36% bot, ~64% browser. Score medians: bot ≈ −23, browser ≈ 0; P95 bot ≈ 3, browser ≈ 14 — clear separation; low header count and missing browser signals drive negative bot scores.
-- **Paths**: Top path `/` has high bot% (~67%); `/geoserver/wfs`, `/cgi-bin/ViewLog.asp`, `/.env` are almost entirely bot; `/login` is mixed. These are traces of *breach attempts* against our classification: advanced bots probing or evading detection, not benign human traffic; login shows mixed use by both humans and automation.
-- **Methods**: GET dominates; POST is more browser-heavy (bot% ~20%); HEAD and others (PROPFIND, OPTIONS, CONNECT) are almost all bot — consistent with crawlers and scanners.
+- **Volume**: 4 066 requests; 412 unique IPs; 1 319 unique paths — consistent with a mixed production-like sample where many requests share paths (e.g. `/`, `/favicon.ico`) and a subset of IPs account for most traffic.
+- **Classification**: 36.89% bot, 63.11% browser. Score medians: bot −24, browser 0; P95 bot 2, browser 14 — clear separation; low header count and missing browser signals drive negative bot scores.
+- **Paths**: Top path `/` has high bot% (66.58%); `/geoserver/wfs`, `/cgi-bin/ViewLog.asp`, `/.env` are almost entirely bot; `/login` is mixed. These reflect *breach attempts* against our classification: advanced bots probing or evading detection; login shows mixed use by both humans and automation.
+- **Methods**: GET dominates; POST is more browser-heavy; HEAD and others (PROPFIND, OPTIONS, CONNECT) are almost all bot — consistent with crawlers and scanners.
 - **User agents**: curl is numerous but mostly classified browser (many benign tools use curl); Chrome/Firefox show higher bot%; `(empty)` and python are almost all bot.
-- **Scoring signals**: High-prevalence browser signals (e.g. `ja4h-headers>=10`, `browser-headers`, `bot-ua` as a label from UA) and bot signals (`no-accept-lang`, `ja4h-no-lang`, `low-headers`, `ja4h-low-headers`, `missing-typical`, `ja4h-inconsistent`) match the rule set; per-signal bot%/browser% helps prioritise which signals to tune or monitor.
+- **Fingerprint breakdown (JA3/JA4/JA4H)**: For each non-empty hash, the report includes `top_user_agents`, `top_paths`, and `top_ips` with request counts, so one can see which raw clients, URLs, and IPs contributed to that fingerprint (e.g. for a given JA3 hash, the list of User-Agent strings and their counts).
+- **Scoring signals**: High-prevalence browser signals (e.g. `ja4h-headers>=10`, `browser-headers`) and bot signals (`no-accept-lang`, `ja4h-no-lang`, `low-headers`, `ja4h-low-headers`, `missing-typical`, `ja4h-inconsistent`) match the rule set; per-signal bot%/browser% helps prioritise which signals to tune or monitor.
 
 This kind of output supports methodology review (e.g. Appendix I signals), scoring calibration, and operational dashboards (top paths/methods/IPs, TLS-from-proxy share, HTTP/2 ratio).
 
@@ -1905,6 +1919,7 @@ This kind of output supports methodology review (e.g. Appendix I signals), scori
 - FP-Inconsistent (arXiv:2406.07647) — https://arxiv.org/abs/2406.07647
 - Imperva 2025 Bad Bot Report — https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf
 - FoxIO JA4+ (JA4, JA4H) — https://github.com/FoxIO-LLC/ja4
+- When Handshakes Tell the Truth: Detecting Web Bad Bots via TLS Fingerprints (2025) — https://arxiv.org/html/2602.09606v1
 
 ---
 
