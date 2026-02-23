@@ -112,38 +112,8 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
 
-	// Client Hints behavioral challenge (Appendix K): only for root path and when store is configured
-	if r.URL.Path == "/" && h.challengeStore != nil {
-		nonce, nonceOK := fingerprint.JA4HPartsCD(fp.HTTP.JA4HHash)
-		if nonceOK && !fingerprint.IsJA4HNonceEmpty(nonce) {
-			cookieNonce := getChallengeCookie(r)
-			currentUA := r.Header.Get("User-Agent")
-
-			if cookieNonce != "" {
-				// Second request: cookie present — check store, UA, hints, and that Full-Version-List matches stored UA version
-				if storedUA, found := h.challengeStore.Get(cookieNonce); found {
-					fullList := r.Header.Get("Sec-CH-UA-Full-Version-List")
-					hasHints := fullList != "" && r.Header.Get("Sec-CH-UA-Platform-Version") != ""
-					versionMatch := fullVersionListMatchesUA(storedUA, fullList)
-					passed := currentUA == storedUA && hasHints && versionMatch
-					h.classifier.ApplyChallengeSignal(&result, passed, true)
-				}
-			} else {
-				// No cookie in request
-				if _, found := h.challengeStore.Get(nonce); found {
-					// Nonce already in store: client should have sent cookie — challenge failed
-					h.classifier.ApplyChallengeSignal(&result, false, true)
-				} else {
-					// First request with this nonce: store and send challenge headers
-					h.challengeStore.Set(nonce, currentUA)
-					w.Header().Set("Accept-CH", challengeAcceptCH)
-					w.Header().Set("Critical-CH", challengeCriticalCH)
-					w.Header().Set("Vary", challengeVary)
-					w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=30; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce))
-				}
-			}
-		}
-	}
+	// Client Hints behavioral challenge (Appendix K): for / and /debug when store is configured
+	h.applyChallenge(w, r, "/", fp.HTTP.JA4HHash, &result)
 
 	responseTime := time.Since(startTime).Milliseconds()
 
@@ -199,6 +169,44 @@ func getChallengeCookie(r *http.Request) string {
 	return ""
 }
 
+// applyChallenge runs the Client Hints challenge (Appendix K) for the given path when the store is configured.
+// Path must be "/" or "/debug". Mutates result (ApplyChallengeSignal) and may set Accept-CH, Critical-CH, Vary, Set-Cookie on w.
+func (h *Handler) applyChallenge(w http.ResponseWriter, r *http.Request, path, ja4hHash string, result *fingerprint.ClassificationResult) {
+	if r.URL.Path != path || h.challengeStore == nil {
+		return
+	}
+	nonce, nonceOK := fingerprint.JA4HPartsCD(ja4hHash)
+	if !nonceOK || fingerprint.IsJA4HNonceEmpty(nonce) {
+		return
+	}
+	cookieNonce := getChallengeCookie(r)
+	currentUA := r.Header.Get("User-Agent")
+
+	if cookieNonce != "" {
+		// Second request: cookie present — check store, UA, hints, and that Full-Version-List matches stored UA version
+		if storedUA, found := h.challengeStore.Get(cookieNonce); found {
+			fullList := r.Header.Get("Sec-CH-UA-Full-Version-List")
+			hasHints := fullList != "" && r.Header.Get("Sec-CH-UA-Platform-Version") != ""
+			versionMatch := fullVersionListMatchesUA(storedUA, fullList)
+			passed := currentUA == storedUA && hasHints && versionMatch
+			h.classifier.ApplyChallengeSignal(result, passed, true)
+		}
+	} else {
+		// No cookie in request
+		if _, found := h.challengeStore.Get(nonce); found {
+			// Nonce already in store: client should have sent cookie — challenge failed
+			h.classifier.ApplyChallengeSignal(result, false, true)
+		} else {
+			// First request with this nonce: store and send challenge headers
+			h.challengeStore.Set(nonce, currentUA)
+			w.Header().Set("Accept-CH", challengeAcceptCH)
+			w.Header().Set("Critical-CH", challengeCriticalCH)
+			w.Header().Set("Vary", challengeVary)
+			w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=30; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce))
+		}
+	}
+}
+
 // chromeVersionFromUA extracts the browser version from a User-Agent string (Chrome, Chromium, or Edg).
 // Returns the version substring (e.g. "120.0.0.0") or empty if not found.
 func chromeVersionFromUA(ua string) string {
@@ -249,9 +257,12 @@ type DebugResponse struct {
 
 // HandleDebug returns detailed fingerprint for debugging (optional endpoint).
 // Top-level fields (classification, score, reason) give the outcome without a second request to /.
+// When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (same as /).
 func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
+
+	h.applyChallenge(w, r, "/debug", fp.HTTP.JA4HHash, &result)
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
