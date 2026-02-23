@@ -58,7 +58,7 @@ First **behavioral classifier**: uses HTTP Client Hints (Accept-CH, Critical-CH)
 
 ### Tools: antibot test cookie jar
 
-- **tools/python/antibot_test.py** — Запросы к antibot.invent.sale выполняются с cookie jar: добавлена константа `INVENT_COOKIES` (в т.ч. `__Secure-authjs.callback-url`) и передача `cookies` в `test_antibot()` и `test_antibot_with_profiles()`.
+- **tools/python/antibot_test.py** — Requests to antibot.invent.sale use a cookie jar: added constant `INVENT_COOKIES` (including `__Secure-authjs.callback-url`) and pass `cookies` to `test_antibot()` and `test_antibot_with_profiles()`.
 
 ### Absence signals (no-sni, no-alpn, no-bot-red-flags)
 

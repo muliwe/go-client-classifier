@@ -1,119 +1,120 @@
 # Scoring configuration
 
-Конфиг скоринга загружается при старте сервиса (`SCORING_CONFIG` или `config/scoring.json`). При ошибке чтения используются встроенные дефолты (те же значения, что в `scoring.default.json`).
+The scoring config is loaded at service startup (`SCORING_CONFIG` or `config/scoring.json`). On read error, built-in defaults are used (same values as in `scoring.default.json`).
 
-## Структура JSON
+## JSON structure
 
-| Секция | Описание |
-|--------|----------|
-| `classifier` | Вес бот-баллов и порог: `net = browser_score - bot_score_weight * bot_score`; класс **browser**, если `net > threshold`. |
-| `confidence` | Параметры расчёта уверенности (no_signal, пороги и множители по числу сигналов, min/max). |
-| `thresholds` | Числовые пороги для извлечения сигналов (порядок заголовков, число cipher suites, TLS extensions, JA4H, Accept-Language). |
-| `browser_scores` | Баллы за каждый browser-сигнал (положительные к классификации «браузер»). |
-| `bot_scores` | Баллы за каждый bot-сигнал (положительные к классификации «бот»). |
+| Section | Description |
+|--------|-------------|
+| `classifier` | Bot score weight and threshold: `net = browser_score - bot_score_weight * bot_score`; class **browser** if `net > threshold`. |
+| `confidence` | Confidence calculation parameters (no_signal, thresholds and multipliers by signal count, min/max). |
+| `thresholds` | Numeric thresholds for signal extraction (header order, cipher count, TLS extensions, JA4H, Accept-Language). |
+| `browser_scores` | Points per browser signal (toward "browser" classification). |
+| `bot_scores` | Points per bot signal (toward "bot" classification). |
 
-Файл **scoring.default.json** — эталонный дефолт с текущими значениями для коммита и сравнения.
-
----
-
-## Smoking guns (бот, +3)
-
-Сильные индикаторы автоматизации; один такой сигнал уже сильно тянет в сторону бота (с учётом веса 4: +3 → +12 к отрицательному net).
-
-| Ключ | Когда срабатывает |
-|------|-------------------|
-| `obsolete-tls` | TLS 1.0 / 1.1. Реальные браузеры не используют. |
-| `exotic-alpn` | ALPN вроде `http/0.9`, `spdy`, `h2c`, `hq` — типично сканеры/боты. |
-| `blind-probe` | Запрос не GET или путь не `/`/`/debug` (зонд по неразрешённым путям). |
-| `bot-ua` | User-Agent совпадает с известным ботом (curl, python, go-http-client, puppeteer, и т.д.). |
-| `no-ua` | Нет заголовка User-Agent (легитимные клиенты всегда шлют). |
-| `tls-ua-inconsistent` | UA «браузер», но JA3/JA4 — известная библиотека (curl, Go, Python и т.п.); или UA бот, а TLS — браузерный. |
-| `ua-browser-no-grease` | За nginx: UA браузерный, но GREASE в TLS нет (реальные браузеры шлют GREASE). |
+File **scoring.default.json** is the reference default with current values for commit and comparison.
 
 ---
 
-## Сильные бот-сигналы (+2)
+## Smoking guns (bot, +3)
 
-| Ключ | Когда срабатывает |
-|------|-------------------|
-| `ai-crawler` | User-Agent совпадает с AI/LLM краулером (gptbot, perplexity, и т.д.). |
-| `ja4h-no-cookies` | Browser UA, нет cookies, JA4H C/D нулевые (инкогнито/первый заход; понижено с +3, чтобы не считать инкогнито ботом). |
-| `missing-typical` | Нет типичных заголовков (Accept или Accept-Encoding) и нет Sec-Fetch. |
-| `ja4h-inconsistent` | JA4H не согласован с HTTP-сигналами (cookies, referer, language, версия). |
-| `header-order-late` | Порядок заголовков от прокси: Accept или Accept-Language «поздно» (индекс ≥ 12). |
-| `h2-ua-inconsistent` | UA браузерный, но H2 fingerprint выглядит как библиотека (нет PRIORITY, небраузерное окно и т.д.). |
-| `h2-ja4-inconsistent` | JA4 говорит h2, запрос HTTP/1.1, или наоборот. |
-| `tls-alpn-http-inconsistent` | ALPN (h2/http/1.1) не совпадает с фактической версией HTTP запроса. |
+Strong automation indicators; a single such signal already strongly pulls toward bot (with weight 4: +3 → +12 toward negative net).
 
----
-
-## Слабые бот-сигналы (+1)
-
-| Ключ | Когда срабатывает |
-|------|-------------------|
-| `http1.1` | TLS был доступен, но запрос HTTP/1.1 без H2 (многие боты не поднимают H2). |
-| `accept-*/*` | Accept = `*/*` (типично для библиотек). |
-| `no-accept-lang` | Нет Accept-Language и нет Sec-Fetch. |
-| `low-headers` | Мало заголовков (`header_count < low_header_count_max`); понижено до +1 (инкогнито может слать меньше). |
-| `low-ciphers` | Мало cipher suites (0 < count < 10). |
-| `few-tls-ext` | Мало TLS extensions (0 < count < 8). |
-| `no-session` | Нет session ticket (при прямом TLS, не от прокси). |
-| `ja4h-no-lang` | В JA4H нет кода языка (0000). |
-| `ja4h-low-headers` | В JA4H мало заголовков (< 5). |
-| `no-sni` | TLS доступен (прямое соединение), но клиент не отправил SNI (реальные браузеры при HTTPS шлют SNI). Учитывается только при прямом TLS, не за прокси. |
-| `no-alpn` | TLS доступен (прямое соединение), но клиент не отправил ALPN (современные браузеры шлют h2/http/1.1). Учитывается только при прямом TLS, не за прокси. |
+| Key | When it fires |
+|-----|----------------|
+| `obsolete-tls` | TLS 1.0 / 1.1. Real browsers do not use these. |
+| `exotic-alpn` | ALPN like `http/0.9`, `spdy`, `h2c`, `hq` — typical for scanners/bots. |
+| `blind-probe` | Request is not GET or path is not `/` or `/debug` (probing disallowed paths). |
+| `bot-ua` | User-Agent matches a known bot (curl, python, go-http-client, puppeteer, etc.). |
+| `no-ua` | No User-Agent header (legitimate clients always send it). |
+| `tls-ua-inconsistent` | UA "browser" but JA3/JA4 is a known library (curl, Go, Python, etc.); or UA bot and TLS browser-like. |
+| `ua-browser-no-grease` | Behind nginx: UA browser-like but no GREASE in TLS (real browsers send GREASE). |
+| `challenge-failed` | Client Hints challenge failed (UA mismatch, missing cookie/hints, or version mismatch). See [Appendix K](../docs/METHODOLOGY.md#appendix-k-client-hints-behavioural-challenge). |
 
 ---
 
-## Браузерные баллы
+## Strong bot signals (+2)
 
-- **+2:** `http2` (используется HTTP/2), `high-ciphers` (много cipher suites, типично для браузера).
-- **+1:** все остальные ключи в `browser_scores`, кроме перечисленных ниже с нулём.
-
----
-
-## Слабые / нулевые сигналы (0 баллов)
-
-Эти сигналы **легко подделать** (заголовки, один заголовок и т.д.), поэтому им явно выставлен 0. Они участвуют в логике (например, для консистентности JA4H), но не дают баллов.
-
-| Ключ | Описание |
-|------|----------|
-| `accept-language` | Наличие Accept-Language — тривиально подделать. |
-| `browser-headers` | Комбинация «браузерных» заголовков (Sec-Fetch или Accept-Language) — тривиально. |
-| `sec-ch-ua-modern` | Современный порядок в Sec-CH-UA (Not:A-Brand и т.п.) — легко подделать. |
-| `accept-lang-rich` | «Богатый» Accept-Language (несколько локалей, длинная строка) — легко подделать. |
-| `high-header-count` | Большое число заголовков — тривиально подделать; число всё ещё используется в других проверках. |
-| `no-bot-red-flags` | Ни один «smoking gun» бот-сигнал не сработал (obsolete-tls, exotic-alpn, blind-probe, bot-ua, no-ua, tls-ua-inconsistent, ua-browser-no-grease). По умолчанию 0 баллов (опционально +1 для экспериментов). |
-
-При необходимости можно выставить им ненулевые значения в конфиге (например, для экспериментов).
+| Key | When it fires |
+|-----|----------------|
+| `ai-crawler` | User-Agent matches AI/LLM crawler (gptbot, perplexity, etc.). |
+| `ja4h-no-cookies` | Browser UA, no cookies, JA4H C/D zero (incognito/first visit; lowered from +3 so incognito is not classified as bot). |
+| `missing-typical` | Missing typical headers (Accept or Accept-Encoding) and no Sec-Fetch. |
+| `ja4h-inconsistent` | JA4H inconsistent with HTTP signals (cookies, referer, language, version). |
+| `header-order-late` | Header order from proxy: Accept or Accept-Language "late" (index ≥ 12). |
+| `h2-ua-inconsistent` | UA browser-like but H2 fingerprint looks like a library (no PRIORITY, non-browser window, etc.). |
+| `h2-ja4-inconsistent` | JA4 says h2, request is HTTP/1.1, or vice versa. |
+| `tls-alpn-http-inconsistent` | ALPN (h2/http/1.1) does not match actual HTTP version of the request. |
 
 ---
 
-## Пороги (`thresholds`)
+## Weak bot signals (+1)
 
-| Ключ | По умолчанию | Назначение |
-|------|--------------|------------|
-| `browser_like_header_order_max_idx` | 12 | Accept и Accept-Language оба до этого индекса → «браузерный» порядок. |
-| `header_order_late_min_idx` | 12 | Индекс ≥ этого → заголовок считается «поздним» (сигнал имитатора). |
-| `high_cipher_count_min` | 10 | Cipher suites > этого → high-ciphers (браузер). |
-| `low_cipher_count_max` | 10 | Cipher suites < этого (и > 0) → low-ciphers (бот). |
-| `tls_ext_browser_min` | 10 | TLS extensions ≥ этого → tls-ext>=10 (браузер). |
-| `few_tls_ext_max` | 8 | TLS extensions < этого (и > 0) → few-tls-ext (бот). |
-| `supported_groups_min` | 3 | Групп ≥ этого → multi-groups (браузер). |
-| `low_header_count_max` | 5 | Заголовков < этого → low-headers (бот). |
-| `ja4h_low_header_count_max` | 5 | В JA4H заголовков < этого → ja4h-low-headers. |
-| `ja4h_high_header_count_min` | 10 | В JA4H заголовков ≥ этого → ja4h-headers>=10. |
-| `accept_lang_min_locale_parts` | 3 | Минимум частей в Accept-Language для «богатого» (или длина). |
-| `accept_lang_min_length` | 40 | Минимальная длина Accept-Language для «богатого». |
+| Key | When it fires |
+|-----|----------------|
+| `http1.1` | TLS was available but request is HTTP/1.1 without H2 (many bots do not use H2). |
+| `accept-*/*` | Accept = `*/*` (typical for libraries). |
+| `no-accept-lang` | No Accept-Language and no Sec-Fetch. |
+| `low-headers` | Few headers (`header_count < low_header_count_max`); lowered to +1 (incognito may send fewer). |
+| `low-ciphers` | Few cipher suites (0 < count < 10). |
+| `few-tls-ext` | Few TLS extensions (0 < count < 8). |
+| `no-session` | No session ticket (with direct TLS, not behind proxy). |
+| `ja4h-no-lang` | No language code in JA4H (0000). |
+| `ja4h-low-headers` | Few headers in JA4H (< 5). |
+| `no-sni` | TLS available (direct connection) but client did not send SNI (real browsers send SNI for HTTPS). Only applied with direct TLS, not behind proxy. |
+| `no-alpn` | TLS available (direct connection) but client did not send ALPN (modern browsers send h2/http/1.1). Only applied with direct TLS, not behind proxy. |
 
 ---
 
-## Классификатор
+## Browser score points
 
-- **bot_score_weight** (4): множитель бот-баллов в формуле net. Несколько сильных бот-сигналов быстро перевешивают подделываемые браузерные заголовки.
-- **threshold** (4): граница решения. `net > threshold` → browser; при равенстве решает User-Agent (бот-UA остаётся ботом).
+- **+2:** `http2` (HTTP/2 used), `high-ciphers` (many cipher suites, typical for browser).
+- **+1:** all other keys in `browser_scores`, except those listed below with zero.
 
-Формула: **net = browser_score − bot_score_weight × bot_score**.
+---
+
+## Weak / zero-point signals (0 points)
+
+These signals are **easy to spoof** (headers, single header, etc.), so they are explicitly set to 0. They participate in logic (e.g. JA4H consistency) but do not add points.
+
+| Key | Description |
+|-----|-------------|
+| `accept-language` | Presence of Accept-Language — trivial to spoof. |
+| `browser-headers` | Combination of "browser" headers (Sec-Fetch or Accept-Language) — trivial. |
+| `sec-ch-ua-modern` | Modern order in Sec-CH-UA (Not:A-Brand etc.) — easy to spoof. |
+| `accept-lang-rich` | "Rich" Accept-Language (multiple locales, long string) — easy to spoof. |
+| `high-header-count` | High header count — trivial to spoof; count is still used in other checks. |
+| `no-bot-red-flags` | None of the smoking-gun bot signals fired (obsolete-tls, exotic-alpn, blind-probe, bot-ua, no-ua, tls-ua-inconsistent, ua-browser-no-grease). Default 0 points (optionally +1 for experiments). |
+
+You can set non-zero values in config if needed (e.g. for experiments).
+
+---
+
+## Thresholds (`thresholds`)
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `browser_like_header_order_max_idx` | 12 | Accept and Accept-Language both before this index → "browser-like" order. |
+| `header_order_late_min_idx` | 12 | Index ≥ this → header is considered "late" (impersonator signal). |
+| `high_cipher_count_min` | 10 | Cipher suites > this → high-ciphers (browser). |
+| `low_cipher_count_max` | 10 | Cipher suites < this (and > 0) → low-ciphers (bot). |
+| `tls_ext_browser_min` | 10 | TLS extensions ≥ this → tls-ext>=10 (browser). |
+| `few_tls_ext_max` | 8 | TLS extensions < this (and > 0) → few-tls-ext (bot). |
+| `supported_groups_min` | 3 | Groups ≥ this → multi-groups (browser). |
+| `low_header_count_max` | 5 | Headers < this → low-headers (bot). |
+| `ja4h_low_header_count_max` | 5 | Headers in JA4H < this → ja4h-low-headers. |
+| `ja4h_high_header_count_min` | 10 | Headers in JA4H ≥ this → ja4h-headers>=10. |
+| `accept_lang_min_locale_parts` | 3 | Minimum parts in Accept-Language for "rich" (or length). |
+| `accept_lang_min_length` | 40 | Minimum Accept-Language length for "rich". |
+
+---
+
+## Classifier
+
+- **bot_score_weight** (4): multiplier for bot points in the net formula. A few strong bot signals quickly outweigh spoofed browser headers.
+- **threshold** (4): decision boundary. `net > threshold` → browser; on equality User-Agent decides (bot UA stays bot).
+
+Formula: **net = browser_score − bot_score_weight × bot_score**.
 
 ---
 
