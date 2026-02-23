@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,10 +36,20 @@ func createTestHandler() *server.Handler {
 func createTestHandlerWithLogging(enableConsoleLog bool) *server.Handler {
 	collector := fingerprint.NewCollector()
 	clf := classifier.New(classifier.DefaultConfig())
-	handler := server.NewHandler(collector, clf, nil) // nil file logger
+	handler := server.NewHandler(collector, clf, nil, nil) // nil file logger
 	if !enableConsoleLog {
 		handler.SetQuiet(true)
 	}
+	return handler
+}
+
+// createTestHandlerWithChallenge creates a handler with the Client Hints challenge store enabled (TTL 2m for tests).
+func createTestHandlerWithChallenge() *server.Handler {
+	collector := fingerprint.NewCollector()
+	clf := classifier.New(classifier.DefaultConfig())
+	store := server.NewChallengeStore(2 * time.Minute)
+	handler := server.NewHandler(collector, clf, nil, store)
+	handler.SetQuiet(true)
 	return handler
 }
 
@@ -591,5 +602,207 @@ func TestOverallTimingBenchmark(t *testing.T) {
 	// Overall p99 target from methodology: <5ms
 	if overallAvg > 5*time.Millisecond {
 		t.Errorf("Overall average %v exceeds target 5ms", overallAvg)
+	}
+}
+
+// TestChallenge_FirstRequest_SetsCookieAndHeaders verifies that a first request with cookies (non-empty JA4H C/D)
+// receives Accept-CH, Critical-CH, Vary, and Set-Cookie in the response.
+func TestChallenge_FirstRequest_SetsCookieAndHeaders(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
+	req.Header.Set("Cookie", "session=abc") // so JA4H C/D are non-zero
+
+	w := httptest.NewRecorder()
+	handler.HandleClassify(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if w.Header().Get("Accept-CH") == "" {
+		t.Error("expected Accept-CH header")
+	}
+	if w.Header().Get("Critical-CH") == "" {
+		t.Error("expected Critical-CH header")
+	}
+	if w.Header().Get("Vary") == "" {
+		t.Error("expected Vary header")
+	}
+	setCookie := w.Header().Get("Set-Cookie")
+	if setCookie == "" || len(setCookie) < 20 {
+		t.Errorf("expected Set-Cookie with __ch_nonce value, got %q", setCookie)
+	}
+}
+
+// TestChallenge_SecondRequest_SameUAAndHints_Passed verifies that a second request with the cookie from the first
+// response, same User-Agent, and required Sec-CH-* hints is classified with challenge passed (no bot penalty).
+func TestChallenge_SecondRequest_SameUAAndHints_Passed(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+
+	// Use browser-like headers so base classification is browser; then challenge passed keeps it browser
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	browserHeaders := func(r *http.Request) {
+		r.Header.Set("User-Agent", ua)
+		r.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+		r.Header.Set("Accept-Language", "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6")
+		r.Header.Set("Accept-Encoding", "gzip, deflate, br")
+		r.Header.Set("Sec-Fetch-Dest", "document")
+		r.Header.Set("Sec-Fetch-Mode", "navigate")
+		r.Header.Set("Sec-Fetch-Site", "none")
+		r.Header.Set("Sec-Fetch-User", "?1")
+		r.Header.Set("Sec-CH-UA", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
+		r.Header.Set("Cookie", "session=xyz")
+	}
+	req1 := httptest.NewRequest("GET", "/", nil)
+	browserHeaders(req1)
+
+	w1 := httptest.NewRecorder()
+	handler.HandleClassify(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: expected 200, got %d", w1.Code)
+	}
+	setCookie := w1.Header().Get("Set-Cookie")
+	if setCookie == "" {
+		t.Fatal("first request: expected Set-Cookie")
+	}
+	nonceVal := parseNonceFromSetCookie(setCookie)
+	if nonceVal == "" {
+		t.Fatalf("could not parse nonce from Set-Cookie %q", setCookie)
+	}
+
+	req2 := httptest.NewRequest("GET", "/", nil)
+	browserHeaders(req2)
+	req2.Header.Set("Cookie", "session=xyz; __ch_nonce="+nonceVal)
+	// Same version as in User-Agent (Chrome/120.0.0.0) so challenge passes
+	req2.Header.Set("Sec-CH-UA-Full-Version-List", `"Chromium";v="120.0.0.0", "Google Chrome";v="120.0.0.0"`)
+	req2.Header.Set("Sec-CH-UA-Platform-Version", `"15.0.0"`)
+
+	w2 := httptest.NewRecorder()
+	handler.HandleClassify(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: expected 200, got %d", w2.Code)
+	}
+	var resp Response
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Classification == "bot" {
+		t.Errorf("expected browser (challenge passed), got %s", resp.Classification)
+	}
+}
+
+// parseNonceFromSetCookie extracts the __ch_nonce value from a Set-Cookie header like "__ch_nonce=abc_def; Max-Age=30; ...".
+func parseNonceFromSetCookie(setCookie string) string {
+	const prefix = "__ch_nonce="
+	for _, part := range strings.Split(setCookie, ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, prefix) {
+			return strings.TrimSpace(part[len(prefix):])
+		}
+	}
+	return ""
+}
+
+// TestChallenge_SecondRequest_DifferentUA_Failed verifies that a second request with the same cookie but different
+// User-Agent gets challenge failed (bot signal).
+func TestChallenge_SecondRequest_DifferentUA_Failed(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+
+	req1 := httptest.NewRequest("GET", "/", nil)
+	req1.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
+	req1.Header.Set("Cookie", "s=1")
+
+	w1 := httptest.NewRecorder()
+	handler.HandleClassify(w1, req1)
+	setCookie := w1.Header().Get("Set-Cookie")
+	if setCookie == "" {
+		t.Fatal("expected Set-Cookie on first request")
+	}
+	nonceVal := parseNonceFromSetCookie(setCookie)
+	if nonceVal == "" {
+		t.Fatalf("could not parse nonce from %q", setCookie)
+	}
+
+	req2 := httptest.NewRequest("GET", "/", nil)
+	req2.Header.Set("User-Agent", "OtherUA/1.0") // different UA
+	req2.Header.Set("Cookie", "s=1; __ch_nonce="+nonceVal)
+	req2.Header.Set("Sec-CH-UA-Full-Version-List", `"120.0"`)
+	req2.Header.Set("Sec-CH-UA-Platform-Version", `"15.0.0"`)
+
+	w2 := httptest.NewRecorder()
+	handler.HandleClassify(w2, req2)
+	var resp Response
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Classification != "bot" {
+		t.Errorf("expected bot (challenge failed: UA mismatch), got %s", resp.Classification)
+	}
+}
+
+// TestChallenge_SecondRequest_WrongVersionInHint_Failed verifies that when Sec-CH-UA-Full-Version-List
+// does not match the version from the stored User-Agent (Chrome/120.0.0.0), the challenge fails.
+func TestChallenge_SecondRequest_WrongVersionInHint_Failed(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
+	req1 := httptest.NewRequest("GET", "/", nil)
+	req1.Header.Set("User-Agent", ua)
+	req1.Header.Set("Cookie", "s=1")
+
+	w1 := httptest.NewRecorder()
+	handler.HandleClassify(w1, req1)
+	nonceVal := parseNonceFromSetCookie(w1.Header().Get("Set-Cookie"))
+	if nonceVal == "" {
+		t.Fatal("expected Set-Cookie on first request")
+	}
+
+	req2 := httptest.NewRequest("GET", "/", nil)
+	req2.Header.Set("User-Agent", ua)
+	req2.Header.Set("Cookie", "s=1; __ch_nonce="+nonceVal)
+	// Version in hint (119.0.0.0) does not match UA (Chrome/120.0.0.0)
+	req2.Header.Set("Sec-CH-UA-Full-Version-List", `"Chromium";v="119.0.0.0", "Google Chrome";v="119.0.0.0"`)
+	req2.Header.Set("Sec-CH-UA-Platform-Version", `"15.0.0"`)
+
+	w2 := httptest.NewRecorder()
+	handler.HandleClassify(w2, req2)
+	var resp Response
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Classification != "bot" {
+		t.Errorf("expected bot (challenge failed: version in hint does not match UA), got %s", resp.Classification)
+	}
+}
+
+// TestChallenge_SecondRequestNoCookie_NonceInStore_Failed verifies that when the same JA4H (same nonce) appears
+// again without the __ch_nonce cookie, the server treats it as challenge failed (impersonator not sending cookie).
+func TestChallenge_SecondRequestNoCookie_NonceInStore_Failed(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+
+	req1 := httptest.NewRequest("GET", "/", nil)
+	req1.Header.Set("User-Agent", "Mozilla/5.0")
+	req1.Header.Set("Cookie", "sid=abc")
+
+	w1 := httptest.NewRecorder()
+	handler.HandleClassify(w1, req1)
+	if w1.Header().Get("Set-Cookie") == "" {
+		t.Fatal("first request must set cookie")
+	}
+
+	// Second request: same cookies (same JA4H nonce) but no __ch_nonce cookie
+	req2 := httptest.NewRequest("GET", "/", nil)
+	req2.Header.Set("User-Agent", "Mozilla/5.0")
+	req2.Header.Set("Cookie", "sid=abc")
+
+	w2 := httptest.NewRecorder()
+	handler.HandleClassify(w2, req2)
+	var resp Response
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Classification != "bot" {
+		t.Errorf("expected bot (challenge failed: no cookie sent), got %s", resp.Classification)
 	}
 }

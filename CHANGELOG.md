@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.10.0 (2026-02-23)
+
+### Client Hints behavioral challenge (Appendix K)
+
+First **behavioral classifier**: uses HTTP Client Hints (Accept-CH, Critical-CH) and a server-issued cookie `__ch_nonce` bound to JA4H parts C and D to detect impersonators that do not persist cookies, do not send requested Sec-CH-UA-* headers, send a different or generic version in hints, or reuse one cookie jar across many clients.
+
+- **Flow**: On first request (non-empty JA4H C/D), server stores `nonce → User-Agent` and responds with `Accept-CH`, `Critical-CH`, `Vary`, and `Set-Cookie: __ch_nonce=<nonce>`. On second request with that cookie, server checks (1) User-Agent matches stored value, (2) `Sec-CH-UA-Full-Version-List` and `Sec-CH-UA-Platform-Version` are present, (3) for Chrome/Chromium/Edg UAs the full-version list contains the **same version** as in the stored User-Agent (e.g. UA `Chrome/120.0.0.0` → header must include `v="120.0.0.0"`). Empty nonce (no cookies, C/D zeros) skips the challenge.
+- **Signals**: `ch_challenge_passed` / `ch_challenge_failed`; scoring via `bot_scores["challenge-failed"]` (default 2) and `browser_scores["challenge-passed"]` (default 1). First-request path with nonce already in store but no cookie sent → challenge failed.
+- **Config**: Weights in `bot_scores` and `browser_scores` (challenge-failed, challenge-passed). Default TTL for nonce store in main config: `challenge_ttl_sec` (default 120). Server: `CHALLENGE_ENABLED` (0/false to disable), `CHALLENGE_TTL_SEC` overrides TTL.
+- **Implementation**: `internal/fingerprint/ja4h.go` — `JA4HPartsCD`, `IsJA4HNonceEmpty`; `internal/server/challenge_store.go` — TTL store; handler sets headers and applies `ApplyChallengeSignal`; classifier `ApplyChallengeSignal` updates score and reason. Version check: `chromeVersionFromUA`, `fullVersionListMatchesUA` (Chrome/Chromium/Edg).
+- **Docs**: [docs/METHODOLOGY.md#appendix-k-client-hints-behavioural-challenge](docs/METHODOLOGY.md#appendix-k-client-hints-behavioural-challenge) **Appendix K — Client Hints behavioral challenge** (spec, flow, version match, signals, impersonator patterns, references: RFC 8942, WICG, MDN, Chrome). [config/README.md](config/README.md) Client Hints section: scoring keys, `challenge_ttl_sec`, env vars.
+- **Tests**: Unit tests for JA4HPartsCD, IsJA4HNonceEmpty, challenge store (Set/Get, TTL, concurrent), chromeVersionFromUA, fullVersionListMatchesUA. Integration: first request sets cookie/headers; second with same UA and matching version → passed; second with different UA or wrong version in hint or no cookie (nonce in store) → failed.
+
 ## v0.9.1 (2026-02-22)
 
 ### Request log statistics (tools/python/request_log_stats.py)

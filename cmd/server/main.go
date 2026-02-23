@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/muliwe/go-client-classifier/internal/config"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
@@ -27,6 +29,12 @@ func main() {
 
 	cfg := server.DefaultConfig()
 	cfg.ClassifierCfg = config.ToClassifierConfig(scoringCfg)
+	// Default TTL for challenge nonce store from main config (challenge_ttl_sec)
+	if scoringCfg.ChallengeTTLSec > 0 {
+		cfg.ChallengeTTL = time.Duration(scoringCfg.ChallengeTTLSec) * time.Second
+	} else {
+		cfg.ChallengeTTL = 120 * time.Second
+	}
 
 	// Port overrides from environment
 	if port := os.Getenv("PORT"); port != "" {
@@ -53,6 +61,16 @@ func main() {
 	// PROXY protocol on TLS listener (for nginx stream with proxy_protocol on → real client IP in logs)
 	if v := os.Getenv("PROXY_PROTOCOL"); v == "1" || v == "true" {
 		cfg.ProxyProtocol = true
+	}
+
+	// Client Hints challenge (Appendix K): disable or set TTL via env
+	if v := os.Getenv("CHALLENGE_ENABLED"); v == "0" || v == "false" {
+		cfg.ChallengeEnabled = false
+	}
+	if s := os.Getenv("CHALLENGE_TTL_SEC"); s != "" {
+		if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
+			cfg.ChallengeTTL = time.Duration(sec) * time.Second
+		}
 	}
 
 	srv, err := server.New(cfg)

@@ -119,6 +119,10 @@ type Signals struct {
 	// Request context (path/method — blind probe detection)
 	RequestIsProbe bool `json:"request_is_probe"` // Path != "/" or method != "GET"; bots often probe blindly
 
+	// Client Hints behavioral challenge (Appendix K); set by server after Classify when challenge is applicable
+	CHChallengePassed bool `json:"ch_challenge_passed"` // Second request: UA matched store and required Sec-CH-* hints present
+	CHChallengeFailed bool `json:"ch_challenge_failed"` // Second request: UA mismatch or missing hints; or first request: nonce in store but no cookie sent
+
 	// Heuristic signals
 	UserAgentIsBot       bool `json:"ua_is_bot"`        // UA contains bot indicators
 	UserAgentIsAICrawler bool `json:"ua_is_ai_crawler"` // UA contains AI/LLM crawler indicators

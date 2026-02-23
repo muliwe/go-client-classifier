@@ -114,3 +114,24 @@
 - **threshold** (4): граница решения. `net > threshold` → browser; при равенстве решает User-Agent (бот-UA остаётся ботом).
 
 Формула: **net = browser_score − bot_score_weight × bot_score**.
+
+---
+
+## Client Hints behavioural challenge (Appendix K)
+
+The server can run a behavioural challenge using HTTP Client Hints (Accept-CH, Critical-CH) and a cookie `__ch_nonce` bound to the JA4H fingerprint (parts C and D). See [METHODOLOGY.md Appendix K](../docs/METHODOLOGY.md#appendix-k-client-hints-behavioural-challenge).
+
+**Main config (scoring JSON root):**
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `challenge_ttl_sec` | 120 | Default TTL (seconds) for the nonce→User-Agent store. |
+
+**Server / environment:**
+
+| Env | Description |
+|-----|-------------|
+| `CHALLENGE_ENABLED` | Set to `0` or `false` to disable the challenge. Default: enabled. |
+| `CHALLENGE_TTL_SEC` | Overrides `challenge_ttl_sec` from config (e.g. `120`). |
+
+**Signals (in API/debug output):** `ch_challenge_passed`, `ch_challenge_failed` — set when the challenge was applicable (non-empty JA4H C/D and store configured).

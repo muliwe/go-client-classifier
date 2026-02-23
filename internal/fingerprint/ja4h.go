@@ -217,3 +217,24 @@ func truncatedSHA256(data string) string {
 	hash := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", hash)[:12]
 }
+
+// JA4HPartsCD extracts parts C and D (indices 2 and 3) from a JA4H hash string.
+// Format is a_b_c_d; C and D are the cookie-name and cookie-value hash components (12 hex chars each).
+// Returns nonce = c_d (e.g. "68abb940d098_7b022c4b1588") and ok = true when the hash has at least 4 parts.
+// Used for the Client Hints behavioral challenge (Appendix K): nonce is the cookie value and store key.
+func JA4HPartsCD(ja4hHash string) (nonce string, ok bool) {
+	parts := strings.Split(ja4hHash, "_")
+	if len(parts) < 4 {
+		return "", false
+	}
+	return parts[2] + "_" + parts[3], true
+}
+
+// JA4HNonceEmpty is the nonce value when JA4H parts C and D are both zero (no cookies present).
+const JA4HNonceEmpty = "000000000000_000000000000"
+
+// IsJA4HNonceEmpty returns true when the nonce corresponds to no cookies (parts C and D are all zeros).
+// When true, the server does not store the nonce, does not send Set-Cookie, and does not apply the Client Hints challenge.
+func IsJA4HNonceEmpty(nonce string) bool {
+	return nonce == JA4HNonceEmpty
+}

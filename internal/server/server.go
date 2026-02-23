@@ -33,6 +33,10 @@ type Config struct {
 	LoggerConfig  logger.Config
 	ClassifierCfg classifier.Config
 
+	// Client Hints behavioral challenge (Appendix K)
+	ChallengeEnabled bool          // if false, challenge store is nil and challenge is disabled
+	ChallengeTTL     time.Duration // TTL for nonce→UA store; default 120s
+
 	// TLS configuration
 	TLSEnabled  bool
 	TLSAddr     string // HTTPS listen address (e.g. ":8443"); when set with TLSEnabled, HTTP stays on Addr and HTTPS on TLSAddr
@@ -46,14 +50,16 @@ type Config struct {
 // DefaultConfig returns sensible defaults
 func DefaultConfig() Config {
 	return Config{
-		Addr:          ":8080",
-		ReadTimeout:   5 * time.Second,
-		WriteTimeout:  10 * time.Second,
-		IdleTimeout:   120 * time.Second,
-		EnableDebug:   true,
-		LoggerConfig:  logger.DefaultConfig(),
-		ClassifierCfg: classifier.DefaultConfig(),
-		TLSEnabled:    false,
+		Addr:             ":8080",
+		ReadTimeout:      5 * time.Second,
+		WriteTimeout:     10 * time.Second,
+		IdleTimeout:      120 * time.Second,
+		EnableDebug:      true,
+		LoggerConfig:     logger.DefaultConfig(),
+		ClassifierCfg:    classifier.DefaultConfig(),
+		ChallengeEnabled: true,
+		ChallengeTTL:     120 * time.Second,
+		TLSEnabled:       false,
 	}
 }
 
@@ -93,7 +99,15 @@ func New(cfg Config) (*Server, error) {
 	// Initialize components
 	collector := fingerprint.NewCollector()
 	clf := classifier.New(cfg.ClassifierCfg)
-	handler := NewHandler(collector, clf, l)
+	var challengeStore *ChallengeStore
+	if cfg.ChallengeEnabled {
+		ttl := cfg.ChallengeTTL
+		if ttl <= 0 {
+			ttl = 120 * time.Second
+		}
+		challengeStore = NewChallengeStore(ttl)
+	}
+	handler := NewHandler(collector, clf, l, challengeStore)
 
 	// Setup routes
 	mux := http.NewServeMux()

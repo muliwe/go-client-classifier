@@ -23,6 +23,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix H: JA3, JA4 and X-FP-* for bot detection](#appendix-h-ja3-ja4-and-x-fp-for-bot-detection)
 - [Appendix I: Impersonate and header-order detection](#appendix-i-impersonate-and-header-order-detection)
 - [Appendix J: Request log statistics and collection methodology](#appendix-j-request-log-statistics-and-collection-methodology)
+- [Appendix K: Client Hints behavioural challenge](#appendix-k-client-hints-behavioural-challenge)
 
 ---
 
@@ -1920,6 +1921,60 @@ This kind of output supports methodology review (e.g. Appendix I signals), scori
 - Imperva 2025 Bad Bot Report — https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf
 - FoxIO JA4+ (JA4, JA4H) — https://github.com/FoxIO-LLC/ja4
 - When Handshakes Tell the Truth: Detecting Web Bad Bots via TLS Fingerprints (2025) — https://arxiv.org/html/2602.09606v1
+
+---
+
+## Appendix K: Client Hints behavioural challenge
+
+*Added: 2026-02*
+
+### Purpose
+
+This appendix specifies a **behavioural classifier** that uses HTTP Client Hints (Accept-CH, Critical-CH) and a server-issued cookie (`__ch_nonce`) bound to the JA4H fingerprint (parts C and D). The goal is to detect impersonators that either do not persist cookies, do not send the requested Sec-CH-UA-* headers on subsequent requests, or reuse a single cookie jar across many clients (or one jar for all traffic). Real browsers that honour Accept-CH will store the cookie and send the requested hints on the next request; automation and shared-jar setups frequently fail one or more of these checks.
+
+### Specification references
+
+- **RFC 8942** — *HTTP Client Hints* (February 2021). Defines the `Accept-CH` response header by which a server advertises which client hint headers it accepts; clients may then send those headers in subsequent requests. Experimental; IETF. <https://www.rfc-editor.org/info/rfc8942>.
+- **WICG Client Hints Infrastructure** — Draft Community Group Report. Integrates Client Hints with the web platform; defines how clients process `Accept-CH` and the **Critical-CH** header. Critical-CH instructs the client to retry the request with the indicated hints if they were missing, ensuring reliable content adaptation. <https://wicg.github.io/client-hints-infrastructure/>.
+- **Critical-CH** (MDN) — Each header listed in Critical-CH must also appear in Accept-CH and Vary; the client retries the request with the critical hints. <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Critical-CH>.
+- **User-Agent Client Hints** (Chrome, MDN) — Sec-CH-UA, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version, etc. Low-entropy hints are sent by default; high-entropy hints are sent only after the server requests them via Accept-CH. <https://developer.chrome.com/docs/privacy-security/user-agent-client-hints>; <https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Client_hints>.
+
+### Flow
+
+1. **First request (no `__ch_nonce` cookie, or cookie value unknown to the server)**  
+   The server computes the **nonce** from the request’s JA4H hash: nonce = parts 3 and 4 (C and D), e.g. from `ge11cn25ruru_30e4f3a786b6_68abb940d098_7b022c4b1588` → nonce = `68abb940d098_7b022c4b1588`.  
+   - **Empty nonce**: If parts C and D are all zeros (no cookies present, e.g. `000000000000_000000000000`), the server **does not** store the nonce, **does not** send Set-Cookie, and **does not** apply the challenge; classification proceeds using existing fingerprint and scoring signals only.  
+   - **Nonce already in store, but no cookie in request**: If the computed nonce is already in the server’s store (from a prior response) and the request does not contain the `__ch_nonce` cookie, the client is treated as having failed the challenge (impersonator that does not send back the cookie).  
+   - **Otherwise**: The server stores `nonce → raw User-Agent` with a TTL (e.g. 60–120 s), and responds with:
+     - `Accept-CH: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
+     - `Critical-CH: Sec-CH-UA-Full-Version-List` (and optionally both hints; each must also appear in Vary)
+     - `Vary: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
+     - `Set-Cookie: __ch_nonce=<nonce>; Max-Age=30; Secure; HttpOnly; SameSite=Lax`
+
+2. **Second request (Cookie: `__ch_nonce=<nonce>` and nonce known in store)**  
+   The server retrieves the stored User-Agent for that nonce. It then checks: (1) the request’s User-Agent matches the stored value; (2) the request includes the requested Client Hint headers (e.g. `Sec-CH-UA-Full-Version-List`, `Sec-CH-UA-Platform-Version`); (3) when the stored User-Agent identifies a Chrome-, Chromium-, or Edg-based browser, the `Sec-CH-UA-Full-Version-List` header must contain the **same version** as in that User-Agent (e.g. UA `Chrome/120.0.0.0` → the header must include that version as a `v="120.0.0.0"` value; a different or generic version in the hint fails the check). For non–Chrome/Chromium/Edg User-Agents, the version check is skipped. If all applicable checks hold, the challenge is **passed**; otherwise (wrong UA, missing hints, version mismatch, or nonce not in store / expired) the challenge is **failed** and the result is used as a bot signal in scoring.
+
+### Signals and scoring
+
+- **challenge-passed**: Second request with matching UA, required Sec-CH-* headers present, and (for Chrome/Chromium/Edg UAs) the full-version list containing the same version as in the stored User-Agent; may contribute a small positive (browser) weight.  
+- **challenge-failed**: Second request with mismatched UA, missing hints, or version mismatch in `Sec-CH-UA-Full-Version-List`; or first-request path with nonce already in store but no cookie sent; or second request with unknown/expired nonce. Contributes a bot (positive bot score) weight.
+
+Classification and logging remain unchanged except for the addition of these challenge signals and the corresponding response headers when the challenge is applied.
+
+### Impersonator patterns detected
+
+- **Shared cookie jar**: One cookie jar (same `__ch_nonce` value) used for many different clients. The store maps nonce → one User-Agent; when another request arrives with the same nonce but a different User-Agent, the mismatch is detected and the challenge fails.  
+- **One jar reused for all traffic**: A single jar reused across many requests or identities; again, the same nonce may appear with different User-Agents or without the cookie on a “repeat” visit, both of which are flagged.  
+- **Wrong or generic version in Client Hints**: An impersonator may send a fixed or arbitrary `Sec-CH-UA-Full-Version-List` (e.g. a single common version). The server requires the version in that header to match the one originally declared in the stored User-Agent (e.g. `Chrome/120.0.0.0` → hint must contain `v="120.0.0.0"`). A mismatch fails the challenge. These behaviours are common in scripts and proxies; binding the nonce to the stored User-Agent and to the declared version exposes them.
+
+### References (Appendix K)
+
+- IETF RFC 8942 — HTTP Client Hints (February 2021). <https://www.rfc-editor.org/info/rfc8942>.
+- WICG Client Hints Infrastructure. <https://wicg.github.io/client-hints-infrastructure/>.
+- MDN Critical-CH. <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Critical-CH>.
+- MDN Accept-CH. <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Accept-CH>.
+- Chrome: User-Agent Client Hints. <https://developer.chrome.com/docs/privacy-security/user-agent-client-hints>.
+- MDN: Client hints. <https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Client_hints>.
 
 ---
 

@@ -137,6 +137,70 @@ func TestJA4H_WithReferer(t *testing.T) {
 	}
 }
 
+func TestJA4HPartsCD(t *testing.T) {
+	tests := []struct {
+		name   string
+		ja4h   string
+		want   string
+		wantOk bool
+	}{
+		{
+			name:   "valid four parts",
+			ja4h:   "ge11cn25ruru_30e4f3a786b6_68abb940d098_7b022c4b1588",
+			want:   "68abb940d098_7b022c4b1588",
+			wantOk: true,
+		},
+		{
+			name:   "empty C and D",
+			ja4h:   "ge11nn020000_a00508f53a24_000000000000_000000000000",
+			want:   "000000000000_000000000000",
+			wantOk: true,
+		},
+		{
+			name:   "short hash two parts",
+			ja4h:   "ge11_abc",
+			want:   "",
+			wantOk: false,
+		},
+		{
+			name:   "empty string",
+			ja4h:   "",
+			want:   "",
+			wantOk: false,
+		},
+		{
+			name:   "three parts",
+			ja4h:   "ge11_abc_def",
+			want:   "",
+			wantOk: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := fingerprint.JA4HPartsCD(tt.ja4h)
+			if ok != tt.wantOk || got != tt.want {
+				t.Errorf("JA4HPartsCD(%q) = (%q, %v), want (%q, %v)", tt.ja4h, got, ok, tt.want, tt.wantOk)
+			}
+		})
+	}
+}
+
+func TestIsJA4HNonceEmpty(t *testing.T) {
+	empty := "000000000000_000000000000"
+	if !fingerprint.IsJA4HNonceEmpty(empty) {
+		t.Errorf("IsJA4HNonceEmpty(%q) = false, want true", empty)
+	}
+	if fingerprint.IsJA4HNonceEmpty("68abb940d098_7b022c4b1588") {
+		t.Error("IsJA4HNonceEmpty(non-empty nonce) = true, want false")
+	}
+	if fingerprint.IsJA4HNonceEmpty("") {
+		t.Error("IsJA4HNonceEmpty(\"\") = true, want false")
+	}
+	if fingerprint.IsJA4HNonceEmpty("000000000000_000000000001") {
+		t.Error("IsJA4HNonceEmpty(almost empty) = true, want false")
+	}
+}
+
 func TestJA4H_LanguageCode(t *testing.T) {
 	collector := fingerprint.NewCollector()
 

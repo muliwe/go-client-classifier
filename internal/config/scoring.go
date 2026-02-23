@@ -16,6 +16,8 @@ type ScoringConfig struct {
 	Thresholds    ThresholdsConfig `json:"thresholds"`
 	BrowserScores map[string]int   `json:"browser_scores"`
 	BotScores     map[string]int   `json:"bot_scores"`
+	// ChallengeTTLSec is the default TTL (seconds) for the Client Hints challenge nonce store (Appendix K).
+	ChallengeTTLSec int `json:"challenge_ttl_sec"`
 }
 
 // ClassifierConfig holds classifier weights and threshold.
@@ -58,6 +60,7 @@ func DefaultScoringConfig() ScoringConfig {
 			BotScoreWeight: 4,
 			Threshold:      4,
 		},
+		ChallengeTTLSec: 120,
 		Confidence: ConfidenceConfig{
 			NoSignal:              0.5,
 			HighSignalsThreshold:  5,
@@ -113,6 +116,7 @@ func defaultBrowserScores() map[string]int {
 		"tls-ua-consistent": 1,
 		"accept-lang-rich":  1,
 		"sec-purpose":       2,
+		"challenge-passed":  1, // Client Hints challenge (Appendix K)
 		// zero points (documented in config, tunable later)
 		"accept-language":   0,
 		"browser-headers":   0,
@@ -153,6 +157,7 @@ func defaultBotScores() map[string]int {
 		"accept-lang-simple":         1,
 		"sec-purpose-invalid":        1,
 		"sec-purpose-no-sec-fetch":   2,
+		"challenge-failed":           2, // Client Hints challenge (Appendix K)
 	}
 }
 
@@ -185,14 +190,28 @@ func Load(path string) (ScoringConfig, error) {
 			merged.BotScores[k] = v
 		}
 	}
+	if cfg.ChallengeTTLSec > 0 {
+		merged.ChallengeTTLSec = cfg.ChallengeTTLSec
+	}
 	return merged, nil
 }
 
 // ToClassifierConfig converts scoring config to classifier.Config.
+// Challenge weights are taken from bot_scores["challenge-failed"] and browser_scores["challenge-passed"].
 func ToClassifierConfig(cfg ScoringConfig) classifier.Config {
+	failed := cfg.BotScores["challenge-failed"]
+	if failed < 0 {
+		failed = 0
+	}
+	passed := cfg.BrowserScores["challenge-passed"]
+	if passed < 0 {
+		passed = 0
+	}
 	return classifier.Config{
-		BotScoreWeight: cfg.Classifier.BotScoreWeight,
-		Threshold:      cfg.Classifier.Threshold,
+		BotScoreWeight:              cfg.Classifier.BotScoreWeight,
+		Threshold:                   cfg.Classifier.Threshold,
+		ChallengeFailedBotScore:     failed,
+		ChallengePassedBrowserScore: passed,
 		Confidence: classifier.ConfidenceParams{
 			NoSignal:              cfg.Confidence.NoSignal,
 			HighSignalsThreshold:  cfg.Confidence.HighSignalsThreshold,

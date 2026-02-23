@@ -15,6 +15,14 @@ import (
 	"github.com/muliwe/go-client-classifier/internal/logger"
 )
 
+// Client Hints behavioral challenge (Appendix K): cookie and header constants
+const (
+	challengeCookieName = "__ch_nonce"
+	challengeAcceptCH   = "Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version"
+	challengeCriticalCH = "Sec-CH-UA-Full-Version-List"
+	challengeVary       = "Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version"
+)
+
 // ClientIP returns the client IP for logging. When the request is from a trusted proxy (localhost
 // or X-Internal-Proxy: 1, e.g. nginx http→http or TLS termination→http), it uses X-Real-IP or the
 // first (leftmost) IP in X-Forwarded-For; otherwise r.RemoteAddr.
@@ -41,7 +49,7 @@ func ClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-const version = "0.9.1"
+const version = "0.10.0"
 
 // Response represents the API response
 type Response struct {
@@ -61,19 +69,21 @@ type HealthResponse struct {
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	collector  *fingerprint.Collector
-	classifier *classifier.Classifier
-	logger     *logger.Logger
-	quiet      bool // suppress console logging (useful for tests)
+	collector      *fingerprint.Collector
+	classifier     *classifier.Classifier
+	logger         *logger.Logger
+	challengeStore *ChallengeStore // nil = Client Hints challenge disabled
+	quiet          bool            // suppress console logging (useful for tests)
 }
 
 // NewHandler creates a new handler with dependencies
-func NewHandler(c *fingerprint.Collector, cl *classifier.Classifier, l *logger.Logger) *Handler {
+func NewHandler(c *fingerprint.Collector, cl *classifier.Classifier, l *logger.Logger, challengeStore *ChallengeStore) *Handler {
 	return &Handler{
-		collector:  c,
-		classifier: cl,
-		logger:     l,
-		quiet:      false,
+		collector:      c,
+		classifier:     cl,
+		logger:         l,
+		challengeStore: challengeStore,
+		quiet:          false,
 	}
 }
 
@@ -94,12 +104,47 @@ func formatConfidence(c float64, decimals int) string {
 
 // HandleClassify handles the main classification endpoint.
 // Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
+// When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (Appendix K).
 func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
 	// Collect fingerprint and classify regardless of path
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
+
+	// Client Hints behavioral challenge (Appendix K): only for root path and when store is configured
+	if r.URL.Path == "/" && h.challengeStore != nil {
+		nonce, nonceOK := fingerprint.JA4HPartsCD(fp.HTTP.JA4HHash)
+		if nonceOK && !fingerprint.IsJA4HNonceEmpty(nonce) {
+			cookieNonce := getChallengeCookie(r)
+			currentUA := r.Header.Get("User-Agent")
+
+			if cookieNonce != "" {
+				// Second request: cookie present — check store, UA, hints, and that Full-Version-List matches stored UA version
+				if storedUA, found := h.challengeStore.Get(cookieNonce); found {
+					fullList := r.Header.Get("Sec-CH-UA-Full-Version-List")
+					hasHints := fullList != "" && r.Header.Get("Sec-CH-UA-Platform-Version") != ""
+					versionMatch := fullVersionListMatchesUA(storedUA, fullList)
+					passed := currentUA == storedUA && hasHints && versionMatch
+					h.classifier.ApplyChallengeSignal(&result, passed, true)
+				}
+			} else {
+				// No cookie in request
+				if _, found := h.challengeStore.Get(nonce); found {
+					// Nonce already in store: client should have sent cookie — challenge failed
+					h.classifier.ApplyChallengeSignal(&result, false, true)
+				} else {
+					// First request with this nonce: store and send challenge headers
+					h.challengeStore.Set(nonce, currentUA)
+					w.Header().Set("Accept-CH", challengeAcceptCH)
+					w.Header().Set("Critical-CH", challengeCriticalCH)
+					w.Header().Set("Vary", challengeVary)
+					w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=30; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce))
+				}
+			}
+		}
+	}
+
 	responseTime := time.Since(startTime).Milliseconds()
 
 	addr := ClientIP(r)
@@ -142,6 +187,41 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		log.Printf("Error encoding response: %v", err)
 	}
+}
+
+// getChallengeCookie returns the value of the __ch_nonce cookie if present.
+func getChallengeCookie(r *http.Request) string {
+	for _, c := range r.Cookies() {
+		if c.Name == challengeCookieName {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// chromeVersionFromUA extracts the browser version from a User-Agent string (Chrome, Chromium, or Edg).
+// Returns the version substring (e.g. "120.0.0.0") or empty if not found.
+func chromeVersionFromUA(ua string) string {
+	for _, prefix := range []string{"Chrome/", "Chromium/", "Edg/"} {
+		if i := strings.Index(ua, prefix); i >= 0 {
+			ver := ua[i+len(prefix):]
+			if end := strings.IndexAny(ver, " \t"); end >= 0 {
+				ver = ver[:end]
+			}
+			return ver
+		}
+	}
+	return ""
+}
+
+// fullVersionListMatchesUA checks that Sec-CH-UA-Full-Version-List contains the same version as in the stored User-Agent.
+// Header format: "Chromium";v="120.0.6099.109", "Google Chrome";v="120.0.6099.109". We require v="<versionFromUA>" to appear.
+func fullVersionListMatchesUA(storedUA, fullVersionListHeader string) bool {
+	ver := chromeVersionFromUA(storedUA)
+	if ver == "" {
+		return true // non-Chrome UA: do not require version match
+	}
+	return strings.Contains(fullVersionListHeader, `v="`+ver+`"`)
 }
 
 // HandleHealth handles the health check endpoint

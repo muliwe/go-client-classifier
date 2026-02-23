@@ -36,13 +36,19 @@ type Config struct {
 	Threshold int
 	// Confidence params for calculateConfidence (optional; zero value uses built-in defaults).
 	Confidence ConfidenceParams
+	// Client Hints challenge (Appendix K): bot score added when challenge failed; 0 = no challenge scoring.
+	ChallengeFailedBotScore int
+	// Client Hints challenge: browser score added when challenge passed; 0 = no bonus.
+	ChallengePassedBrowserScore int
 }
 
 // DefaultConfig returns default classifier configuration (fallback when config load fails).
 func DefaultConfig() Config {
 	return Config{
-		BotScoreWeight: 4,
-		Threshold:      4,
+		BotScoreWeight:              4,
+		Threshold:                   4,
+		ChallengeFailedBotScore:     2,
+		ChallengePassedBrowserScore: 1,
 		Confidence: ConfidenceParams{
 			NoSignal:              0.5,
 			HighSignalsThreshold:  5,
@@ -201,6 +207,40 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 		result += r
 	}
 	return result
+}
+
+// ApplyChallengeSignal applies the Client Hints behavioral challenge outcome to the classification result.
+// When applicable is true and passed is false, bot score is increased and classification may flip to bot.
+// When applicable is true and passed is true, a small browser score may be added (see scoring config).
+func (c *Classifier) ApplyChallengeSignal(result *fingerprint.ClassificationResult, passed, applicable bool) {
+	result.Signals.CHChallengePassed = applicable && passed
+	result.Signals.CHChallengeFailed = applicable && !passed
+	if !applicable {
+		return
+	}
+	weight := c.cfg.BotScoreWeight
+	if weight <= 0 {
+		weight = 4
+	}
+	if !passed {
+		add := c.cfg.ChallengeFailedBotScore
+		if add <= 0 {
+			add = 2
+		}
+		result.Signals.BotScore += add
+		result.Score = result.Signals.BrowserScore - weight*result.Signals.BotScore
+		if result.Score <= c.cfg.Threshold && result.Classification == ClassificationBrowser {
+			result.Classification = ClassificationBot
+			result.Reason += "; Client Hints challenge failed (cookie/hints mismatch or not sent)"
+		} else if result.Classification == ClassificationBot {
+			result.Reason += "; Client Hints challenge failed"
+		}
+	} else {
+		if c.cfg.ChallengePassedBrowserScore > 0 {
+			result.Signals.BrowserScore += c.cfg.ChallengePassedBrowserScore
+		}
+		result.Score = result.Signals.BrowserScore - weight*result.Signals.BotScore
+	}
 }
 
 // calculateConfidence computes confidence score based on signal strength
