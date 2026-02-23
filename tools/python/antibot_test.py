@@ -31,7 +31,7 @@ Dependencies:
 import json
 from curl_cffi import requests
 
-# Cookie jar: куки для домена .invent.sale (используются в запросах к antibot)
+# Cookie jar: cookies for domain .invent.sale (used in requests to antibot)
 INVENT_COOKIES = [
     {
         "name": "__Secure-authjs.callback-url",
@@ -47,18 +47,36 @@ INVENT_COOKIES = [
 
 
 def _cookies_jar() -> dict[str, str]:
-    """Собирает dict name->value для передачи в requests."""
+    """Builds a name->value dict for passing to requests."""
     return {c["name"]: c["value"] for c in INVENT_COOKIES}
+
+
+def _session_with_initial_cookies() -> requests.Session:
+    """Session with a shared cookie jar; initial cookies from INVENT_COOKIES; response Set-Cookie is stored in the jar automatically."""
+    session = requests.Session()
+    for c in INVENT_COOKIES:
+        session.cookies.set(
+            c["name"],
+            c["value"],
+            domain=c.get("domain", ""),
+            path=c.get("path", "/"),
+        )
+    return session
 
 
 # Canonical "rich" Accept-Language (≥3 parts, ≥2 distinct q-values) — better browser signal
 ACCEPT_LANGUAGE_RICH = "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6"
 
 
-def test_antibot(url: str = "https://antibot.invent.sale/debug") -> dict:
-    """Send a request impersonating Chrome and return the antibot verdict."""
+def test_antibot(
+    url: str = "https://antibot.invent.sale/debug",
+    session: requests.Session | None = None,
+) -> dict:
+    """Send a request impersonating Chrome and return the antibot verdict. Uses session's cookie jar; response Set-Cookie is stored in it."""
+    if session is None:
+        session = _session_with_initial_cookies()
     headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
-    response = requests.get(url, impersonate="chrome", cookies=_cookies_jar(), headers=headers)
+    response = session.get(url, impersonate="chrome", headers=headers)
     return response.json()
 
 
@@ -97,8 +115,11 @@ def _current_ua_from_result(data: dict) -> str:
     return ((data.get("fingerprint") or {}).get("http") or {}).get("user_agent") or ""
 
 
-def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -> None:
-    """Test multiple browser profiles against the antibot service."""
+def test_antibot_with_profiles(
+    url: str = "https://antibot.invent.sale/debug",
+    session: requests.Session | None = None,
+) -> None:
+    """Test multiple browser profiles against the antibot service. One session = one cookie jar; Set-Cookie from each response is stored and sent on the next request."""
     profiles = [
         "chrome",       # Latest Chrome
         "chrome110",    # Chrome 110
@@ -106,13 +127,14 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
         "safari",       # Safari
         "safari_ios",   # Safari iOS
     ]
-    cookies = _cookies_jar()
+    if session is None:
+        session = _session_with_initial_cookies()
 
     headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
     multi_instance_hint = False
     for profile in profiles:
         try:
-            response = requests.get(url, impersonate=profile, cookies=cookies, headers=headers)
+            response = session.get(url, impersonate=profile, headers=headers)
             data = response.json()
             status = "PASS" if data["classification"] == "browser" else "FAIL"
             ja3 = _ja3_hash_from_result(data)
@@ -137,8 +159,11 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
 
 
 if __name__ == "__main__":
+    # One cookie jar for the whole run: response Set-Cookie (e.g. __ch_nonce) is stored in the session and sent on subsequent requests.
+    session = _session_with_initial_cookies()
+
     print("=== Single test (chrome profile) ===")
-    result = test_antibot()
+    result = test_antibot(session=session)
     print(json.dumps(result, indent=2))
     ja3 = _ja3_hash_from_result(result)
     ja4h = _ja4h_hash_from_result(result)
@@ -147,5 +172,5 @@ if __name__ == "__main__":
           f"score={result.get('score')} browser={sig.get('browser_score')} bot={sig.get('bot_score')}, "
           f"ja3: {ja3}, ja4h: {ja4h}")
 
-    print("\n=== Multi-profile test ===")
-    test_antibot_with_profiles()
+    print("\n=== Multi-profile test (same cookie jar, incl. from first request) ===")
+    test_antibot_with_profiles(session=session)
