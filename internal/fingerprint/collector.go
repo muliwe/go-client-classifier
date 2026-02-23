@@ -52,8 +52,16 @@ func (c *Collector) Collect(r *http.Request) Fingerprint {
 		}
 	}
 
-	// Compute JA4H fingerprint
-	fp.HTTP.JA4HHash = JA4H(r)
+	// JA4H: from trusted proxy header X-FP-JA4H when present, else compute from request
+	if IsTrustedProxy(r) {
+		if h := r.Header.Get(HeaderFPJA4H); h != "" {
+			fp.HTTP.JA4HHash = h
+		} else {
+			fp.HTTP.JA4HHash = JA4H(r)
+		}
+	} else {
+		fp.HTTP.JA4HHash = JA4H(r)
+	}
 
 	return fp
 }

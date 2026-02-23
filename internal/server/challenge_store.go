@@ -44,3 +44,15 @@ func (s *ChallengeStore) Get(nonce string) (userAgent string, ok bool) {
 	}
 	return ent.UserAgent, true
 }
+
+// GetDebug returns stored User-Agent, whether the nonce is in the store, creation time, and whether the entry has expired.
+// Does not delete expired entries (read-only for /debug). Use Get for normal lookup.
+func (s *ChallengeStore) GetDebug(nonce string) (userAgent string, inStore bool, createdAt time.Time, expired bool) {
+	v, loaded := s.mu.Load(nonce)
+	if !loaded {
+		return "", false, time.Time{}, false
+	}
+	ent := v.(*challengeEntry)
+	expired = s.now().Sub(ent.CreatedAt) > s.ttl
+	return ent.UserAgent, true, ent.CreatedAt, expired
+}

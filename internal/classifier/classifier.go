@@ -1,6 +1,8 @@
 package classifier
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
@@ -212,6 +214,7 @@ func (c *Classifier) botReason(s fingerprint.Signals) string {
 // ApplyChallengeSignal applies the Client Hints behavioral challenge outcome to the classification result.
 // When applicable is true and passed is false, bot score is increased and classification may flip to bot.
 // When applicable is true and passed is true, a small browser score may be added (see scoring config).
+// Updates ScoreBreakdown so challenge-passed or challenge-failed appears in the breakdown string.
 func (c *Classifier) ApplyChallengeSignal(result *fingerprint.ClassificationResult, passed, applicable bool) {
 	result.Signals.CHChallengePassed = applicable && passed
 	result.Signals.CHChallengeFailed = applicable && !passed
@@ -228,6 +231,7 @@ func (c *Classifier) ApplyChallengeSignal(result *fingerprint.ClassificationResu
 			add = 2
 		}
 		result.Signals.BotScore += add
+		result.Signals.ScoreBreakdown = injectBotBreakdown(result.Signals.ScoreBreakdown, "challenge-failed", add)
 		result.Score = result.Signals.BrowserScore - weight*result.Signals.BotScore
 		if result.Score <= c.cfg.Threshold && result.Classification == ClassificationBrowser {
 			result.Classification = ClassificationBot
@@ -236,11 +240,32 @@ func (c *Classifier) ApplyChallengeSignal(result *fingerprint.ClassificationResu
 			result.Reason += "; Client Hints challenge failed"
 		}
 	} else {
-		if c.cfg.ChallengePassedBrowserScore > 0 {
-			result.Signals.BrowserScore += c.cfg.ChallengePassedBrowserScore
+		add := c.cfg.ChallengePassedBrowserScore
+		if add > 0 {
+			result.Signals.BrowserScore += add
+			result.Signals.ScoreBreakdown = injectBrowserBreakdown(result.Signals.ScoreBreakdown, "challenge-passed", add)
 		}
 		result.Score = result.Signals.BrowserScore - weight*result.Signals.BotScore
 	}
+}
+
+// injectBrowserBreakdown appends " key(+n)" to the BROWSER section (before "] BOT[").
+func injectBrowserBreakdown(breakdown, key string, n int) string {
+	marker := "] BOT["
+	if idx := strings.Index(breakdown, marker); idx != -1 {
+		return breakdown[:idx] + " " + key + fmt.Sprintf("(+%d)", n) + breakdown[idx:]
+	}
+	return breakdown
+}
+
+// injectBotBreakdown appends "key(+n) " after "BOT[" in the breakdown.
+func injectBotBreakdown(breakdown, key string, n int) string {
+	marker := "BOT["
+	if idx := strings.Index(breakdown, marker); idx != -1 {
+		insertPos := idx + len(marker)
+		return breakdown[:insertPos] + key + fmt.Sprintf("(+%d)", n) + " " + breakdown[insertPos:]
+	}
+	return breakdown
 }
 
 // calculateConfidence computes confidence score based on signal strength

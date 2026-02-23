@@ -48,8 +48,9 @@ func TestFullVersionListMatchesUA(t *testing.T) {
 	}{
 		{"Mozilla/5.0 Chrome/120.0.0.0", `"Chromium";v="120.0.0.0", "Google Chrome";v="120.0.0.0"`, true},
 		{"Chrome/120.0.6099.109", `"Google Chrome";v="120.0.6099.109"`, true},
-		{"Chrome/120.0.0.0", `"Google Chrome";v="120.0.6099.109"`, false},
-		{"curl/8.0", `"Chrome";v="120"`, true}, // non-Chrome UA: no version check
+		{"Chrome/120.0.0.0", `"Google Chrome";v="120.0.6099.109"`, true},                                                                                                                             // UA simplified major; hint has full version (same major)
+		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36", `"Google Chrome";v="145.0.7632.75", "Chromium";v="145.0.7632.75"`, true}, // real Chrome: UA major.0.0.0, hint full build
+		{"curl/8.0", `"Chrome";v="120"`, true},                                                                                                                                                       // non-Chrome UA: no version check
 		{"Chrome/120.0.0.0", "", false},
 	}
 	for _, tt := range tests {

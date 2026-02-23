@@ -806,3 +806,93 @@ func TestChallenge_SecondRequestNoCookie_NonceInStore_Failed(t *testing.T) {
 		t.Errorf("expected bot (challenge failed: no cookie sent), got %s", resp.Classification)
 	}
 }
+
+// DebugResponsePartial is used to assert challenge signals and score_breakdown from /debug.
+type DebugResponsePartial struct {
+	Classification string         `json:"classification"`
+	Score          int            `json:"score"`
+	Reason         string         `json:"reason"`
+	Signals        map[string]any `json:"signals,omitempty"`
+}
+
+// TestChallenge_SameCookiesDifferentClients_StorageFires verifies that one in-memory store is used: first request
+// (client A, cookies C) stores nonce; second request (client B, same cookies C, no __ch_nonce cookie) gets
+// challenge failed → bot, ch_challenge_failed true, and score_breakdown contains "challenge-failed".
+// This is the scenario that must work for multi-profile tests (different UAs, same cookie set).
+func TestChallenge_SameCookiesDifferentClients_StorageFires(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+	const sameCookie = "sid=shared"
+
+	// Request 1: client A (Chrome UA), with cookies → store nonce, Set-Cookie
+	req1 := httptest.NewRequest("GET", "/debug", nil)
+	req1.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req1.Header.Set("Cookie", sameCookie)
+	w1 := httptest.NewRecorder()
+	handler.HandleDebug(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: want 200, got %d", w1.Code)
+	}
+	if w1.Header().Get("Set-Cookie") == "" {
+		t.Fatal("first request: expected Set-Cookie")
+	}
+
+	// Request 2: different client (minimal UA so that +2 bot flips to bot), same cookies, no __ch_nonce → challenge failed
+	req2 := httptest.NewRequest("GET", "/debug", nil)
+	req2.Header.Set("User-Agent", "Safari/1.0")
+	req2.Header.Set("Cookie", sameCookie)
+	w2 := httptest.NewRecorder()
+	handler.HandleDebug(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: want 200, got %d", w2.Code)
+	}
+	var debug2 DebugResponsePartial
+	if err := json.NewDecoder(w2.Body).Decode(&debug2); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	chFailed, _ := debug2.Signals["ch_challenge_failed"].(bool)
+	if !chFailed {
+		t.Errorf("second request: want ch_challenge_failed=true in signals (store must fire), got %v", debug2.Signals["ch_challenge_failed"])
+	}
+	scoreBreakdown, _ := debug2.Signals["score_breakdown"].(string)
+	if scoreBreakdown == "" || !strings.Contains(scoreBreakdown, "challenge-failed") {
+		t.Errorf("second request: want score_breakdown to contain 'challenge-failed', got %q", scoreBreakdown)
+	}
+	if debug2.Classification != "bot" {
+		t.Errorf("second request (same cookies, no __ch_nonce): want classification=bot, got %s (score=%d)", debug2.Classification, debug2.Score)
+	}
+}
+
+// TestChallenge_TwoRequestsSameCD_NoServerCookieOnSecond verifies the multi-profile scenario: two requests
+// with the same JA4H C_D (passed explicitly via trusted-proxy header X-FP-JA4H), second does NOT send __ch_nonce.
+// Like chrome then chrome110 with the same app cookies — same C_D, second request has no __ch_nonce → challenge failed.
+func TestChallenge_TwoRequestsSameCD_NoServerCookieOnSecond(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+	// Same JA4H hash on both requests (same C_D = 68abb940d098_7b022c4b1588), passed in request via proxy header
+	const ja4hHash = "ge11cn25ruru_ef5354142eb5_68abb940d098_7b022c4b1588"
+
+	// Request 1: trusted proxy, X-FP-JA4H set → store nonce (C_D), respond with Set-Cookie
+	req1 := httptest.NewRequest("GET", "/", nil)
+	req1.Header.Set("X-Internal-Proxy", "1")
+	req1.Header.Set(fingerprint.HeaderFPJA4H, ja4hHash)
+	req1.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
+	w1 := httptest.NewRecorder()
+	handler.HandleClassify(w1, req1)
+	if w1.Header().Get("Set-Cookie") == "" {
+		t.Fatal("first request: expected Set-Cookie")
+	}
+
+	// Request 2: same X-FP-JA4H (same C_D), do NOT send __ch_nonce
+	req2 := httptest.NewRequest("GET", "/", nil)
+	req2.Header.Set("X-Internal-Proxy", "1")
+	req2.Header.Set(fingerprint.HeaderFPJA4H, ja4hHash)
+	req2.Header.Set("User-Agent", "Mozilla/5.0 Chrome/110.0")
+	w2 := httptest.NewRecorder()
+	handler.HandleClassify(w2, req2)
+	var resp Response
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Classification != "bot" {
+		t.Errorf("second request (same C_D via X-FP-JA4H, no __ch_nonce): want bot, got %s", resp.Classification)
+	}
+}

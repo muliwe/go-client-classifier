@@ -223,13 +223,22 @@ func chromeVersionFromUA(ua string) string {
 }
 
 // fullVersionListMatchesUA checks that Sec-CH-UA-Full-Version-List contains the same version as in the stored User-Agent.
-// Header format: "Chromium";v="120.0.6099.109", "Google Chrome";v="120.0.6099.109". We require v="<versionFromUA>" to appear.
+// Header format: "Chromium";v="120.0.6099.109", "Google Chrome";v="120.0.6099.109".
+// We accept exact match (v="<versionFromUA>") or, when UA has simplified major (e.g. 145.0.0.0), any full version with same major (e.g. v="145.0.7632.75").
 func fullVersionListMatchesUA(storedUA, fullVersionListHeader string) bool {
 	ver := chromeVersionFromUA(storedUA)
 	if ver == "" {
 		return true // non-Chrome UA: do not require version match
 	}
-	return strings.Contains(fullVersionListHeader, `v="`+ver+`"`)
+	if strings.Contains(fullVersionListHeader, `v="`+ver+`"`) {
+		return true
+	}
+	// Real Chrome often sends UA with major.0.0.0 and hint with full build (e.g. 145.0.7632.75)
+	if strings.HasSuffix(ver, ".0.0.0") {
+		major := ver[:len(ver)-len(".0.0.0")]
+		return strings.Contains(fullVersionListHeader, `v="`+major+`.`)
+	}
+	return false
 }
 
 // HandleHealth handles the health check endpoint
@@ -245,14 +254,27 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 // DebugResponse is the /debug payload: summary first, then full result for details
 type DebugResponse struct {
-	Classification string  `json:"classification"`
-	Score          int     `json:"score"`  // weighted net (browser - 4*bot)
-	Reason         string  `json:"reason"` // text summary
-	Confidence     float64 `json:"confidence"`
-	RequestID      string  `json:"request_id"`
-	Timestamp      string  `json:"timestamp"`
-	Fingerprint    any     `json:"fingerprint,omitempty"`
-	Signals        any     `json:"signals,omitempty"`
+	Classification string          `json:"classification"`
+	Score          int             `json:"score"`  // weighted net (browser - 4*bot)
+	Reason         string          `json:"reason"` // text summary
+	Confidence     float64         `json:"confidence"`
+	RequestID      string          `json:"request_id"`
+	Timestamp      string          `json:"timestamp"`
+	Fingerprint    any             `json:"fingerprint,omitempty"`
+	Signals        any             `json:"signals,omitempty"`
+	ChallengeDebug *ChallengeDebug `json:"challenge_debug,omitempty"` // Client Hints challenge: C_D, store state (for debugging)
+}
+
+// ChallengeDebug exposes challenge store state for /debug: nonce (C_D), whether it is cached, stored UA, created_at.
+type ChallengeDebug struct {
+	JA4HHash   string `json:"ja4h_hash,omitempty"` // full JA4H from request (or X-FP-JA4H)
+	NonceCD    string `json:"nonce_c_d,omitempty"` // C_D (nonce) extracted from JA4H
+	EmptyNonce bool   `json:"empty_nonce"`         // true when C/D are zeros (no cookies) — challenge skipped
+	InStore    bool   `json:"in_store"`            // nonce is in the challenge store (and not expired)
+	StoredUA   string `json:"stored_ua,omitempty"` // User-Agent stored for this nonce (if in_store)
+	StoredAt   string `json:"stored_at,omitempty"` // when the nonce was stored (RFC3339)
+	Expired    bool   `json:"expired"`             // entry exists but TTL exceeded (will be removed on next Get)
+	Enabled    bool   `json:"enabled"`             // challenge store is configured (enabled)
 }
 
 // HandleDebug returns detailed fingerprint for debugging (optional endpoint).
@@ -263,6 +285,8 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	result := h.classifier.Classify(fp)
 
 	h.applyChallenge(w, r, "/debug", fp.HTTP.JA4HHash, &result)
+
+	challengeDebug := h.buildChallengeDebug(fp.HTTP.JA4HHash)
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
@@ -276,8 +300,37 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 		Timestamp:      result.Timestamp.UTC().Format(time.RFC3339Nano),
 		Fingerprint:    result.Fingerprint,
 		Signals:        result.Signals,
+		ChallengeDebug: challengeDebug,
 	}
 	if err := encoder.Encode(payload); err != nil {
 		log.Printf("Error encoding debug response: %v", err)
 	}
+}
+
+// buildChallengeDebug returns challenge store state for the given JA4H hash (for /debug output).
+func (h *Handler) buildChallengeDebug(ja4hHash string) *ChallengeDebug {
+	out := &ChallengeDebug{Enabled: h.challengeStore != nil}
+	if ja4hHash != "" {
+		out.JA4HHash = ja4hHash
+	}
+	if h.challengeStore == nil {
+		return out
+	}
+	nonce, ok := fingerprint.JA4HPartsCD(ja4hHash)
+	if !ok {
+		return out
+	}
+	out.NonceCD = nonce
+	out.EmptyNonce = fingerprint.IsJA4HNonceEmpty(nonce)
+	if out.EmptyNonce {
+		return out
+	}
+	storedUA, inStore, createdAt, expired := h.challengeStore.GetDebug(nonce)
+	out.InStore = inStore && !expired
+	out.StoredUA = storedUA
+	if !createdAt.IsZero() {
+		out.StoredAt = createdAt.UTC().Format(time.RFC3339)
+	}
+	out.Expired = expired
+	return out
 }

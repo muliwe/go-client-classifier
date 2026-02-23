@@ -16,6 +16,7 @@ const (
 	HeaderFPH2                = "X-FP-H2"
 	HeaderFPSSLGreased        = "X-FP-SSL-GREASED"
 	HeaderFPJA4               = "X-FP-JA4"
+	HeaderFPJA4H              = "X-FP-JA4H"
 	HeaderOriginalHeaderOrder = "X-Original-Header-Order"
 )
 
@@ -23,7 +24,7 @@ const (
 // When request is from trusted proxy, Collector fills Fingerprint.ProxyHeaders with these keys.
 var ProxyHeaderNames = []string{
 	HeaderFPTLSVersion, HeaderFPTLSCipher, HeaderFPTLSALPN, HeaderFPTLSSNI,
-	HeaderFPJA3, HeaderFPJA3Hash, HeaderFPSSLGreased, HeaderFPJA4, HeaderFPH2,
+	HeaderFPJA3, HeaderFPJA3Hash, HeaderFPSSLGreased, HeaderFPJA4, HeaderFPJA4H, HeaderFPH2,
 }
 
 // IsTrustedProxy returns true if the request is marked as coming from a trusted
