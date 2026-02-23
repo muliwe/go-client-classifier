@@ -1930,7 +1930,7 @@ This kind of output supports methodology review (e.g. Appendix I signals), scori
 
 ### Purpose
 
-This appendix specifies a **behavioural classifier** that uses HTTP Client Hints (Accept-CH, Critical-CH) and a server-issued cookie (`__ch_nonce`) bound to the JA4H fingerprint (parts C and D). The goal is to detect impersonators that either do not persist cookies, do not send the requested Sec-CH-UA-* headers on subsequent requests, or reuse a single cookie jar across many clients (or one jar for all traffic). Real browsers that honour Accept-CH will store the cookie and send the requested hints on the next request; automation and shared-jar setups frequently fail one or more of these checks.
+This appendix specifies a **behavioural classifier** that uses HTTP Client Hints (Accept-CH, Critical-CH) and a server-issued cookie (`__ch_nonce`) bound to the JA4H fingerprint. In JA4H, **C and D** are the cookie hash (cookie names and name=value). The **nonce** is **C_D** only: one nonce per cookie set, so that when two different clients use the same cookies (same C,D), they share one nonce and the second fails (no cookie or wrong User-Agent). The challenge runs only when C and D are non-zero. The goal is to detect impersonators that either do not persist cookies, do not send the requested Sec-CH-UA-* headers on subsequent requests, or reuse a single cookie jar across many clients (or one jar for all traffic). Real browsers that honour Accept-CH will store the cookie and send the requested hints on the next request; automation and shared-jar setups frequently fail one or more of these checks.
 
 ### Specification references
 
@@ -1942,9 +1942,10 @@ This appendix specifies a **behavioural classifier** that uses HTTP Client Hints
 ### Flow
 
 1. **First request (no `__ch_nonce` cookie, or cookie value unknown to the server)**  
-   The server computes the **nonce** from the request’s JA4H hash: nonce = parts 3 and 4 (C and D), e.g. from `ge11cn25ruru_30e4f3a786b6_68abb940d098_7b022c4b1588` → nonce = `68abb940d098_7b022c4b1588`.  
+   The server computes the **nonce** from the request’s JA4H hash: nonce = **C_D** (parts 3 and 4 — the cookie hash). Example: `ge11cn25ruru_30e4f3a786b6_68abb940d098_7b022c4b1588` → nonce = `68abb940d098_7b022c4b1588`. Two different clients with the same cookies (same C,D) thus share one nonce; the second fails (no cookie or UA mismatch).  
    - **Empty nonce**: If parts C and D are all zeros (no cookies present, e.g. `000000000000_000000000000`), the server **does not** store the nonce, **does not** send Set-Cookie, and **does not** apply the challenge; classification proceeds using existing fingerprint and scoring signals only.  
    - **Nonce already in store, but no cookie in request**: If the computed nonce is already in the server’s store (from a prior response) and the request does not contain the `__ch_nonce` cookie, the client is treated as having failed the challenge (impersonator that does not send back the cookie).  
+   - **Same nonce, different clients:** For any same non-zero JA4H (same nonce), the challenge must fire: the first request gets the cookie; any subsequent request with that nonce either has no cookie (→ fail) or has the cookie but a different User-Agent or wrong hints (→ fail). Only the same client returning with the same UA and correct hints passes.  
    - **Otherwise**: The server stores `nonce → raw User-Agent` with a TTL (e.g. 60–120 s), and responds with:
      - `Accept-CH: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
      - `Critical-CH: Sec-CH-UA-Full-Version-List` (and optionally both hints; each must also appear in Vary)
