@@ -114,6 +114,7 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 
 	// Client Hints behavioral challenge (Appendix K): for / and /debug when store is configured
 	h.applyChallenge(w, r, "/", fp.HTTP.JA4HHash, &result)
+	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
 
 	responseTime := time.Since(startTime).Milliseconds()
 
@@ -193,9 +194,19 @@ func (h *Handler) applyChallenge(w http.ResponseWriter, r *http.Request, path, j
 		}
 	} else {
 		// No cookie in request
-		if _, found := h.challengeStore.Get(nonce); found {
-			// Nonce already in store: client should have sent cookie — challenge failed
-			h.classifier.ApplyChallengeSignal(result, false, true)
+		if storedUA, found := h.challengeStore.Get(nonce); found {
+			// Nonce already in store: if same UA, treat as same client that lost the cookie — do not fail; re-issue cookie
+			if currentUA == storedUA {
+				h.challengeStore.Set(nonce, currentUA) // refresh TTL
+				w.Header().Set("Accept-CH", challengeAcceptCH)
+				w.Header().Set("Critical-CH", challengeCriticalCH)
+				w.Header().Set("Vary", challengeVary)
+				w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=30; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce))
+				// Do not apply challenge signal: same client, cookie was lost (e.g. new tab, refresh)
+			} else {
+				// Different UA with same nonce — different client, challenge failed
+				h.classifier.ApplyChallengeSignal(result, false, true)
+			}
 		} else {
 			// First request with this nonce: store and send challenge headers
 			h.challengeStore.Set(nonce, currentUA)
@@ -285,6 +296,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	result := h.classifier.Classify(fp)
 
 	h.applyChallenge(w, r, "/debug", fp.HTTP.JA4HHash, &result)
+	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
 
 	challengeDebug := h.buildChallengeDebug(fp.HTTP.JA4HHash)
 

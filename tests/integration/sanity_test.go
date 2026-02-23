@@ -777,12 +777,13 @@ func TestChallenge_SecondRequest_WrongVersionInHint_Failed(t *testing.T) {
 }
 
 // TestChallenge_SecondRequestNoCookie_NonceInStore_Failed verifies that when the same JA4H (same nonce) appears
-// again without the __ch_nonce cookie, the server treats it as challenge failed (impersonator not sending cookie).
+// again without the __ch_nonce cookie and with a different User-Agent, the server treats it as challenge failed.
+// Same UA with no cookie is treated as same client (cookie lost) and does not fail.
 func TestChallenge_SecondRequestNoCookie_NonceInStore_Failed(t *testing.T) {
 	handler := createTestHandlerWithChallenge()
 
 	req1 := httptest.NewRequest("GET", "/", nil)
-	req1.Header.Set("User-Agent", "Mozilla/5.0")
+	req1.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
 	req1.Header.Set("Cookie", "sid=abc")
 
 	w1 := httptest.NewRecorder()
@@ -791,9 +792,9 @@ func TestChallenge_SecondRequestNoCookie_NonceInStore_Failed(t *testing.T) {
 		t.Fatal("first request must set cookie")
 	}
 
-	// Second request: same cookies (same JA4H nonce) but no __ch_nonce cookie
+	// Second request: same cookies (same nonce) but no __ch_nonce and different UA → different client → fail
 	req2 := httptest.NewRequest("GET", "/", nil)
-	req2.Header.Set("User-Agent", "Mozilla/5.0")
+	req2.Header.Set("User-Agent", "Mozilla/5.0 Safari/1.0")
 	req2.Header.Set("Cookie", "sid=abc")
 
 	w2 := httptest.NewRecorder()
@@ -803,7 +804,42 @@ func TestChallenge_SecondRequestNoCookie_NonceInStore_Failed(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if resp.Classification != "bot" {
-		t.Errorf("expected bot (challenge failed: no cookie sent), got %s", resp.Classification)
+		t.Errorf("expected bot (challenge failed: same nonce, no cookie, different UA), got %s", resp.Classification)
+	}
+}
+
+// TestChallenge_SecondRequestNoCookie_SameUA_NotFailed verifies that when nonce is in store, no __ch_nonce cookie,
+// but current UA matches stored UA, the server does not apply challenge failed and re-issues Set-Cookie.
+func TestChallenge_SecondRequestNoCookie_SameUA_NotFailed(t *testing.T) {
+	handler := createTestHandlerWithChallenge()
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36"
+	req1 := httptest.NewRequest("GET", "/debug", nil)
+	req1.Header.Set("User-Agent", ua)
+	req1.Header.Set("Cookie", "sid=abc")
+	req1.Header.Set("Accept", "text/html,application/xhtml+xml")
+	req1.Header.Set("Sec-Fetch-Dest", "document")
+	w1 := httptest.NewRecorder()
+	handler.HandleDebug(w1, req1)
+	if w1.Header().Get("Set-Cookie") == "" {
+		t.Fatal("first request: expected Set-Cookie")
+	}
+	// Second request: same UA, same cookies (same nonce), no __ch_nonce — same client, cookie lost
+	req2 := httptest.NewRequest("GET", "/debug", nil)
+	req2.Header.Set("User-Agent", ua)
+	req2.Header.Set("Cookie", "sid=abc")
+	req2.Header.Set("Accept", "text/html,application/xhtml+xml")
+	req2.Header.Set("Sec-Fetch-Dest", "document")
+	w2 := httptest.NewRecorder()
+	handler.HandleDebug(w2, req2)
+	if w2.Header().Get("Set-Cookie") == "" {
+		t.Error("second request: expected Set-Cookie re-issued (same UA, cookie lost)")
+	}
+	var debug DebugResponsePartial
+	if err := json.NewDecoder(w2.Body).Decode(&debug); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if chFailed, _ := debug.Signals["ch_challenge_failed"].(bool); chFailed {
+		t.Error("same UA with no cookie must not get ch_challenge_failed (cookie lost)")
 	}
 }
 

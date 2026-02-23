@@ -77,6 +77,26 @@ def _ja4h_hash_from_result(data: dict) -> str:
     return ((data.get("fingerprint") or {}).get("http") or {}).get("ja4h_hash") or "—"
 
 
+def _challenge_debug_line(data: dict) -> str:
+    """Format challenge_debug for one-line output: nonce_c_d, in_store, stored_ua."""
+    cd = data.get("challenge_debug") or {}
+    if not cd:
+        return ""
+    parts = []
+    if cd.get("nonce_c_d"):
+        parts.append(f"nonce_c_d={cd['nonce_c_d']}")
+    parts.append(f"in_store={cd.get('in_store', False)}")
+    if cd.get("stored_ua"):
+        ua_short = cd["stored_ua"][:60] + "…" if len(cd["stored_ua"]) > 60 else cd["stored_ua"]
+        parts.append(f"stored_ua={ua_short!r}")
+    return " | " + " ".join(parts) if parts else ""
+
+
+def _current_ua_from_result(data: dict) -> str:
+    """Extract current request User-Agent from debug response."""
+    return ((data.get("fingerprint") or {}).get("http") or {}).get("user_agent") or ""
+
+
 def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -> None:
     """Test multiple browser profiles against the antibot service."""
     profiles = [
@@ -89,6 +109,7 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
     cookies = _cookies_jar()
 
     headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
+    multi_instance_hint = False
     for profile in profiles:
         try:
             response = requests.get(url, impersonate=profile, cookies=cookies, headers=headers)
@@ -96,10 +117,23 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
             status = "PASS" if data["classification"] == "browser" else "FAIL"
             ja3 = _ja3_hash_from_result(data)
             ja4h = _ja4h_hash_from_result(data)
+            sig = data.get("signals") or {}
+            score = data.get("score", "—")
+            bot_score = sig.get("bot_score", "—")
+            browser_score = sig.get("browser_score", "—")
+            ch_line = _challenge_debug_line(data)
             print(f"[{status}] {profile:20s} -> {data['classification']} "
-                  f"(confidence: {data['confidence']}) ja4h_hash: {ja4h}")
+                  f"(confidence: {data['confidence']}) score={score} browser={browser_score} bot={bot_score} | ja4h_hash: {ja4h}{ch_line}")
+            # If challenge says in_store with a stored_ua that doesn't match current profile UA, we're likely hitting different backends (each has its own store)
+            cd = data.get("challenge_debug") or {}
+            if cd.get("in_store") and cd.get("stored_ua"):
+                current_ua = _current_ua_from_result(data)
+                if current_ua and cd["stored_ua"] != current_ua and data["classification"] == "browser":
+                    multi_instance_hint = True
         except Exception as e:
             print(f"[ERR]  {profile:20s} -> {e}")
+    if multi_instance_hint:
+        print("\nNote: stored_ua differs from current UA but classification=browser — likely load-balanced: each request hit a different instance (challenge store is per-process). For same C_D to fail, all requests must hit the same instance or use a shared store (e.g. Redis).")
 
 
 if __name__ == "__main__":
@@ -108,8 +142,10 @@ if __name__ == "__main__":
     print(json.dumps(result, indent=2))
     ja3 = _ja3_hash_from_result(result)
     ja4h = _ja4h_hash_from_result(result)
+    sig = result.get("signals") or {}
     print(f"\nSummary: {result['classification']} (confidence: {result['confidence']}), "
-          f"x-fp-ja3-hash: {ja3}, ja4h_hash: {ja4h}")
+          f"score={result.get('score')} browser={sig.get('browser_score')} bot={sig.get('bot_score')}, "
+          f"ja3: {ja3}, ja4h: {ja4h}")
 
     print("\n=== Multi-profile test ===")
     test_antibot_with_profiles()

@@ -157,7 +157,7 @@ func defaultBotScores() map[string]int {
 		"accept-lang-simple":         1,
 		"sec-purpose-invalid":        1,
 		"sec-purpose-no-sec-fetch":   2,
-		"challenge-failed":           2, // Client Hints challenge (Appendix K)
+		"challenge-failed":           3, // Client Hints challenge (Appendix K), smoking gun
 	}
 }
 

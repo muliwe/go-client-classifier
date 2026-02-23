@@ -93,7 +93,7 @@ func TestDefaultScoringConfig_fullStructure(t *testing.T) {
 		"header-order-late": 2, "h2-ua-inconsistent": 2, "tls-ua-inconsistent": 3,
 		"ua-browser-no-grease": 3, "h2-ja4-inconsistent": 2, "tls-alpn-http-inconsistent": 2,
 		"no-sni": 1, "no-alpn": 1, "accept-lang-simple": 1,
-		"sec-purpose-invalid": 1, "sec-purpose-no-sec-fetch": 2, "challenge-failed": 2,
+		"sec-purpose-invalid": 1, "sec-purpose-no-sec-fetch": 2, "challenge-failed": 3,
 	}
 	for key, want := range wantBotScores {
 		got, ok := cfg.BotScores[key]

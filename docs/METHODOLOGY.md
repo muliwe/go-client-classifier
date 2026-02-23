@@ -292,15 +292,16 @@ Default threshold: `4`. With weight 4: e.g. browser 19, bot 6 → net 19−24 = 
 
 ### Confidence Calculation
 
-```
-confidence = base_confidence + signal_strength_adjustment
+Confidence is computed from the **final** signals and net score (after the Client Hints challenge, if applied), so that challenge-failed and other post-classify adjustments lower confidence.
 
-Where:
-- base_confidence = |net_score| / total_signals
-- Boosted by 20% if total_signals >= 5
-- Reduced by 20% if total_signals < 3
-- Clamped to [0.50, 0.99]
 ```
+raw = |net_score| / total_signals   // total_signals = browser_score + bot_score
+If total_signals >= 5:  raw *= 1.2  (capped at 1.0)
+If total_signals < 3:  raw *= 0.8
+confidence = 0.5 + raw * (0.99 - 0.5)   // map into [0.50, 0.99]
+```
+
+Parameters (high/low thresholds and multipliers, min/max) are configurable in scoring config.
 
 ### Example Classifications
 
@@ -1731,7 +1732,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 
 **Computation**: In `extractJA4HSignals`, after splitting JA4H by `_`, we set the signal when `len(parts) >= 4` and `parts[2] == "000000000000"` and `parts[3] == "000000000000"`.
 
-**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add **+3 bot** (`ja4h-no-cookies(+3)`). This is a strong (smoking-gun) signal for automation that mimics browser but sends no cookies. **Skipped for HTTP→HTTP proxy** (TLS from proxy but no ALPN/JA3/cipher): no client TLS is visible and no cookies on first request or over HTTP is common, so we do not penalize.
+**Scoring**: When User-Agent is browser-like, the request has no Cookie header, and this signal is true, we add a bot score (default **+2** in config: `ja4h-no-cookies`). Strong signal for automation that mimics browser but sends no cookies; default is lowered from smoking-gun (+3) to reduce false positives for incognito/first visit. **Skipped for HTTP→HTTP proxy** (TLS from proxy but no ALPN/JA3/cipher): no client TLS is visible and no cookies on first request or over HTTP is common, so we do not penalize.
 
 **References**: [2] FoxIO JA4+ Network Fingerprinting, JA4H technical details (https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4H.md).
 
@@ -1777,7 +1778,7 @@ Clients that impersonate browsers (e.g. curl_cffi, curl-impersonate) can match T
 |--------|-----------|--------|--------|
 | `header-order` | Accept and Accept-Language in first 8 positions of HeaderOrder | +1 browser | JA4H header structure; WebDecoy/ThreatRelay; internal payload comparison |
 | `header-order-late` | Browser UA but Accept or Accept-Language at index ≥ 12 | +2 bot | Same |
-| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +3 bot; skipped for HTTP→HTTP proxy (no client TLS) | [2] FoxIO JA4H; smoking-gun for automation |
+| `ja4h-no-cookies` | JA4H parts C and D are 000000000000, browser UA, no Cookie header | +2 bot (default; tunable); skipped for HTTP→HTTP proxy (no client TLS) | [2] FoxIO JA4H |
 | `sec-ch-ua-modern` | First brand in Sec-CH-UA is Not:A-Brand or Not_A Brand | +1 browser | Chrome 109+ Client Hints; no bot penalty for Chromium-first |
 | `no-accept-lang` | Accept-Language header missing | +1 bot | Radware: missing standard Accept header = anomaly; applies even when Sec-Fetch-* present |
 | `accept-lang-rich` | Accept-Language has ≥3 parts or length &gt; 40 and ≥2 distinct explicit q-values | +1 browser | Canonical: ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6 |
@@ -1958,7 +1959,7 @@ This appendix specifies a **behavioural classifier** that uses HTTP Client Hints
 ### Signals and scoring
 
 - **challenge-passed**: Second request with matching UA, required Sec-CH-* headers present, and (for Chrome/Chromium/Edg UAs) the full-version list containing the same version as in the stored User-Agent; may contribute a small positive (browser) weight.  
-- **challenge-failed**: Second request with mismatched UA, missing hints, or version mismatch in `Sec-CH-UA-Full-Version-List`; or first-request path with nonce already in store but no cookie sent; or second request with unknown/expired nonce. Contributes a bot (positive bot score) weight.
+- **challenge-failed**: Second request with mismatched UA, missing hints, or version mismatch in `Sec-CH-UA-Full-Version-List`; or first-request path with nonce already in store but no cookie sent; or second request with unknown/expired nonce. **+3 bot** (smoking gun); same weight as obsolete-tls, exotic-alpn, blind-probe, bot-ua, no-ua, ua-browser-no-grease.
 
 Classification and logging remain unchanged except for the addition of these challenge signals and the corresponding response headers when the challenge is applied.
 

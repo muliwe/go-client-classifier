@@ -49,7 +49,7 @@ func DefaultConfig() Config {
 	return Config{
 		BotScoreWeight:              4,
 		Threshold:                   4,
-		ChallengeFailedBotScore:     2,
+		ChallengeFailedBotScore:     3,
 		ChallengePassedBrowserScore: 1,
 		Confidence: ConfidenceParams{
 			NoSignal:              0.5,
@@ -316,4 +316,10 @@ func (c *Classifier) calculateConfidence(s fingerprint.Signals, netScore int) fl
 	}
 	confidence = minC + confidence*(maxC-minC)
 	return max(minC, min(maxC, confidence))
+}
+
+// ConfidenceFromSignals recomputes confidence from already-adjusted signals and net score.
+// Use after ApplyChallengeSignal so confidence reflects challenge outcome (e.g. lower when bot_score > 0).
+func (c *Classifier) ConfidenceFromSignals(signals fingerprint.Signals, netScore int) float64 {
+	return c.calculateConfidence(signals, netScore)
 }

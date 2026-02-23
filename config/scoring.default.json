@@ -90,6 +90,6 @@
     "accept-lang-simple": 1,
     "sec-purpose-invalid": 1,
     "sec-purpose-no-sec-fetch": 2,
-    "challenge-failed": 2
+    "challenge-failed": 3
   }
 }
