@@ -62,6 +62,21 @@ def test_antibot(url: str = "https://antibot.invent.sale/debug") -> dict:
     return response.json()
 
 
+def _ja3_hash_from_result(data: dict) -> str:
+    """Extract JA3 hash from antibot response (tls.ja3_hash or x-fp-ja3-hash header)."""
+    fp = data.get("fingerprint") or {}
+    tls = fp.get("tls") or {}
+    if tls.get("ja3_hash"):
+        return tls["ja3_hash"]
+    headers = (fp.get("http") or {}).get("headers") or {}
+    return headers.get("x-fp-ja3-hash") or (fp.get("proxy_headers") or {}).get("X-FP-JA3-HASH") or "—"
+
+
+def _ja4h_hash_from_result(data: dict) -> str:
+    """Extract JA4H hash from antibot response (fingerprint.http.ja4h_hash)."""
+    return ((data.get("fingerprint") or {}).get("http") or {}).get("ja4h_hash") or "—"
+
+
 def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -> None:
     """Test multiple browser profiles against the antibot service."""
     profiles = [
@@ -79,8 +94,10 @@ def test_antibot_with_profiles(url: str = "https://antibot.invent.sale/debug") -
             response = requests.get(url, impersonate=profile, cookies=cookies, headers=headers)
             data = response.json()
             status = "PASS" if data["classification"] == "browser" else "FAIL"
+            ja3 = _ja3_hash_from_result(data)
+            ja4h = _ja4h_hash_from_result(data)
             print(f"[{status}] {profile:20s} -> {data['classification']} "
-                  f"(confidence: {data['confidence']})")
+                  f"(confidence: {data['confidence']}) ja4h_hash: {ja4h}")
         except Exception as e:
             print(f"[ERR]  {profile:20s} -> {e}")
 
@@ -89,6 +106,10 @@ if __name__ == "__main__":
     print("=== Single test (chrome profile) ===")
     result = test_antibot()
     print(json.dumps(result, indent=2))
+    ja3 = _ja3_hash_from_result(result)
+    ja4h = _ja4h_hash_from_result(result)
+    print(f"\nSummary: {result['classification']} (confidence: {result['confidence']}), "
+          f"x-fp-ja3-hash: {ja3}, ja4h_hash: {ja4h}")
 
     print("\n=== Multi-profile test ===")
     test_antibot_with_profiles()
