@@ -29,7 +29,7 @@ All notable changes to this project are documented in this file.
 
 ### Request metrics: request history in /debug
 
-- **request_metrics** in `/debug` includes **ip_request_timestamps** and **nonce_request_timestamps** — last N (up to 30) request times (unix ms) in the window for this IP and nonce; human-readable **ip_request_ago_sec** / **nonce_request_ago_sec** (seconds ago); **ip_derived** / **nonce_derived** with `request_rate_per_min` and inter-arrival stats (median, mean, std, min, max). GetRequestMetrics uses ZREVRANGEBYSCORE; MaxRequestTimestampsInDebug = 30. [METHODOLOGY Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) documents exposed fields and **expected ranges for natural human traffic** (request rate, inter-arrival, variance, burstiness) from cited sources.
+- **request_metrics** in `/debug`: **ip_request_ago_sec** / **nonce_request_ago_sec** (seconds ago, last N up to 30); **ip_derived** / **nonce_derived** with `request_rate_per_min` and inter-arrival stats (median, mean, std, min, max). Raw timestamps are not exposed. GetRequestMetrics uses ZREVRANGEBYSCORE; MaxRequestTimestampsInDebug = 30. [METHODOLOGY Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) documents exposed fields and **expected ranges for natural human traffic** (request rate, inter-arrival, variance, burstiness) from cited sources.
 
 ### METHODOLOGY Appendix L — expected human traffic
 

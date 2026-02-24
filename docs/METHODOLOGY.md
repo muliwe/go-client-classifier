@@ -2022,21 +2022,19 @@ Exact key names, window lengths, and TTLs are implementation-defined and documen
 
 ### Exposed metrics in /debug (request_metrics)
 
-When Redis metrics are configured, the **`/debug`** response includes a **`request_metrics`** object for the current request. It provides raw counts and timestamps plus **derived metrics** used in contemporary bot-detection methodology (request rate density, inter-arrival statistics). All quantities refer to the sliding window defined by `window_sec` and are keyed by the request’s client IP and, when present, the `__ch_nonce` cookie value. The client IP is normalised to host only (no port).
+When Redis metrics are configured, the **`/debug`** response includes a **`request_metrics`** object for the current request. It provides counts, human-readable **ago** deltas (seconds ago per request), and **derived metrics** (request rate density, inter-arrival statistics). Raw timestamps are not exposed. All quantities refer to the sliding window defined by `window_sec` and are keyed by the request’s client IP and, when present, the `__ch_nonce` cookie value. The client IP is normalised to host only (no port).
 
-**Raw and human-readable fields:**
+**Exposed fields (no raw timestamps):**
 
 | Field | Description |
 |-------|-------------|
 | `window_sec` | Sliding-window length in seconds (e.g. 300). |
 | `ip` | Client IP (host only) for which the following counts and series apply. |
 | `ip_request_count` | Number of requests from this IP in the window. |
-| `ip_request_timestamps` | Last N request times (Unix milliseconds, newest first), up to an implementation-defined cap (e.g. 30). |
-| `ip_request_ago_sec` | Same requests as human-readable deltas: seconds ago from the current request (0 = most recent). |
+| `ip_request_ago_sec` | Last N requests as human-readable deltas: seconds ago from the current request (0 = most recent), up to an implementation-defined cap (e.g. 30). |
 | `nonce` | `__ch_nonce` value (C_D from JA4H) if present; otherwise nonce fields are omitted or zero. |
 | `nonce_request_count` | Number of requests with this nonce in the window. |
-| `nonce_request_timestamps` | Last N request times for this nonce (Unix ms, newest first). |
-| `nonce_request_ago_sec` | Same as human-readable seconds ago (0 = most recent). |
+| `nonce_request_ago_sec` | Last N requests for this nonce as seconds ago (0 = most recent). |
 
 **Derived metrics (ip_derived, nonce_derived):**
 
