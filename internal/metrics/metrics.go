@@ -89,25 +89,31 @@ func (c *Collector) recordOne(ctx context.Context, key string, cutoff, nowMs int
 	return err
 }
 
-// RequestMetrics holds current sliding-window counts for the request's IP and (if present) nonce.
+// MaxRequestTimestampsInDebug is the max number of request timestamps returned in /debug request_metrics (history).
+const MaxRequestTimestampsInDebug = 30
+
+// RequestMetrics holds current sliding-window counts and recent request timestamps for the request's IP and (if present) nonce.
 // Used in /debug to show metrics pertaining to this request. See Appendix L.
 type RequestMetrics struct {
-	WindowSec         int    `json:"window_sec"`                    // sliding-window length in seconds
-	IP                string `json:"ip,omitempty"`                  // client IP for which counts are shown
-	IPRequestCount    int64  `json:"ip_request_count,omitempty"`    // requests from this IP in the window
-	Nonce             string `json:"nonce,omitempty"`               // __ch_nonce value if present (C_D only, not full cookie)
-	NonceRequestCount int64  `json:"nonce_request_count,omitempty"` // requests with this nonce in the window (0 if no nonce)
+	WindowSec              int     `json:"window_sec"`                         // sliding-window length in seconds
+	IP                     string  `json:"ip,omitempty"`                       // client IP for which counts are shown
+	IPRequestCount         int64   `json:"ip_request_count,omitempty"`         // requests from this IP in the window
+	IPRequestTimestamps    []int64 `json:"ip_request_timestamps,omitempty"`    // last N request times (unix ms) in window — request history for this IP
+	Nonce                  string  `json:"nonce,omitempty"`                    // __ch_nonce value if present (C_D only, not full cookie)
+	NonceRequestCount      int64   `json:"nonce_request_count,omitempty"`      // requests with this nonce in the window (0 if no nonce)
+	NonceRequestTimestamps []int64 `json:"nonce_request_timestamps,omitempty"` // last N request times (unix ms) in window — request history for this nonce
 }
 
-// GetRequestMetrics returns current request counts in the sliding window for the given IP and nonce.
-// Read-only (ZCOUNT). If client is nil, returns metrics with zero counts. On Redis error, returns (nil, err).
-// Used by /debug to expose metrics for this request.
+// GetRequestMetrics returns current request counts and last N timestamps in the sliding window for the given IP and nonce.
+// Read-only (ZCOUNT + ZREVRANGEBYSCORE). If client is nil, returns metrics with zero counts and nil timestamps. On Redis error, returns (nil, err).
+// Used by /debug to expose metrics and request history for this request.
 func (c *Collector) GetRequestMetrics(ctx context.Context, ip, nonce string) (*RequestMetrics, error) {
 	if c.client == nil {
 		return &RequestMetrics{WindowSec: c.windowSec, IP: ip, Nonce: nonce}, nil
 	}
 	nowMs := time.Now().UnixMilli()
 	minScore := fmt.Sprintf("%d", nowMs-int64(c.windowSec)*1000)
+	zRange := &redis.ZRangeBy{Min: minScore, Max: "+inf", Count: MaxRequestTimestampsInDebug}
 
 	out := &RequestMetrics{WindowSec: c.windowSec, IP: ip, Nonce: nonce}
 
@@ -118,6 +124,12 @@ func (c *Collector) GetRequestMetrics(ctx context.Context, ip, nonce string) (*R
 			return nil, err
 		}
 		out.IPRequestCount = n
+		// Last N timestamps (newest first) in window — request history
+		zs, err := c.client.ZRevRangeByScoreWithScores(ctx, key, zRange).Result()
+		if err != nil {
+			return nil, err
+		}
+		out.IPRequestTimestamps = zScoresToInt64(zs)
 	}
 	if nonce != "" {
 		key := fmt.Sprintf("%s:nonce:%s:req", c.prefix, nonce)
@@ -126,7 +138,23 @@ func (c *Collector) GetRequestMetrics(ctx context.Context, ip, nonce string) (*R
 			return nil, err
 		}
 		out.NonceRequestCount = n
+		zs, err := c.client.ZRevRangeByScoreWithScores(ctx, key, zRange).Result()
+		if err != nil {
+			return nil, err
+		}
+		out.NonceRequestTimestamps = zScoresToInt64(zs)
 	}
 
 	return out, nil
+}
+
+func zScoresToInt64(zs []redis.Z) []int64 {
+	if len(zs) == 0 {
+		return nil
+	}
+	out := make([]int64, len(zs))
+	for i, z := range zs {
+		out[i] = int64(z.Score)
+	}
+	return out
 }

@@ -23,6 +23,18 @@ All notable changes to this project are documented in this file.
 
 - **HandlerOptions**: `NewHandler` now accepts a single `HandlerOptions` struct (Collector, Classifier, Logger, ChallengeStore, RedisPinger, MetricsCollector, ChallengeCookieMaxAgeSec) instead of seven positional arguments. Only Collector and Classifier are required; the rest are optional (nil/zero). Simplifies tests and call sites.
 
+### Client IP without port
+
+- **ClientIP** returns host only (no port). **stripHostPort** normalizes all paths so logs and `request_metrics.ip` show e.g. `89.149.85.189` instead of `89.149.85.189:47865`.
+
+### Request metrics: request history in /debug
+
+- **request_metrics** in `/debug` includes **ip_request_timestamps** and **nonce_request_timestamps** — last N (up to 30) request times (unix ms) in the window for this IP and nonce. GetRequestMetrics uses ZREVRANGEBYSCORE; MaxRequestTimestampsInDebug = 30.
+
+### Unified request logging
+
+- **recordAndLogRequest** — single code path for metrics, JSONL, and console. Both HandleClassify and HandleDebug call it; every request is logged the same way.
+
 ## v0.10.0 (2026-02-23)
 
 ### Client Hints behavioral challenge (Appendix K)

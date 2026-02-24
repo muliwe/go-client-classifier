@@ -291,15 +291,15 @@ func TestServerClientIP(t *testing.T) {
 		headers    map[string]string
 		want       string
 	}{
-		{"direct connection", "192.168.1.100:45678", nil, "192.168.1.100:45678"},
+		{"direct connection", "192.168.1.100:45678", nil, "192.168.1.100"},
 		{"proxy X-Forwarded-For", "127.0.0.1:8080", map[string]string{"X-Forwarded-For": "203.0.113.50"}, "203.0.113.50"},
 		{"proxy X-Forwarded-For first", "127.0.0.1:8080", map[string]string{"X-Forwarded-For": "203.0.113.50, 10.0.0.1"}, "203.0.113.50"},
 		{"proxy X-Real-IP", "127.0.0.1:8080", map[string]string{"X-Real-IP": "198.51.100.1"}, "198.51.100.1"},
 		{"proxy X-Real-IP overrides X-Forwarded-For", "127.0.0.1:8080", map[string]string{"X-Real-IP": "198.51.100.1", "X-Forwarded-For": "203.0.113.50"}, "198.51.100.1"},
-		{"localhost no headers", "127.0.0.1:8080", nil, "127.0.0.1:8080"},
+		{"localhost no headers", "127.0.0.1:8080", nil, "127.0.0.1"},
 		{"::1 with X-Forwarded-For", "[::1]:8080", map[string]string{"X-Forwarded-For": "2001:db8::1"}, "2001:db8::1"},
 		{"X-Internal-Proxy http->http", "10.0.0.5:12345", map[string]string{"X-Internal-Proxy": "1", "X-Forwarded-For": "203.0.113.20"}, "203.0.113.20"},
-		{"non-localhost no proxy header", "192.168.1.1:80", nil, "192.168.1.1:80"},
+		{"non-localhost no proxy header", "192.168.1.1:80", nil, "192.168.1.1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -25,30 +25,46 @@ const (
 	challengeVary       = "Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version"
 )
 
-// ClientIP returns the client IP for logging. When the request is from a trusted proxy (localhost
-// or X-Internal-Proxy: 1, e.g. nginx http→http or TLS termination→http), it uses X-Real-IP or the
-// first (leftmost) IP in X-Forwarded-For; otherwise r.RemoteAddr.
+// ClientIP returns the client IP (host only, no port) for logging and metrics. When the request is
+// from a trusted proxy (localhost or X-Internal-Proxy: 1, e.g. nginx http→http or TLS termination→http),
+// it uses X-Real-IP or the first (leftmost) IP in X-Forwarded-For; otherwise the host part of r.RemoteAddr.
+// The result is always normalized: if the value is "host:port", the port is stripped so logs and request_metrics show the IP only.
 func ClientIP(r *http.Request) string {
+	var addr string
 	trustProxy := r.Header.Get("X-Internal-Proxy") == "1"
 	if !trustProxy {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
-			return r.RemoteAddr
+			addr = r.RemoteAddr
+			return stripHostPort(addr)
 		}
 		if host != "127.0.0.1" && host != "::1" {
-			return r.RemoteAddr
+			return host
 		}
+		addr = r.RemoteAddr
 	}
 	if s := strings.TrimSpace(r.Header.Get("X-Real-IP")); s != "" {
-		return s
+		return stripHostPort(s)
 	}
 	if s := r.Header.Get("X-Forwarded-For"); s != "" {
 		if i := strings.Index(s, ","); i >= 0 {
 			s = s[:i]
 		}
-		return strings.TrimSpace(s)
+		return stripHostPort(strings.TrimSpace(s))
 	}
-	return r.RemoteAddr
+	if addr == "" {
+		addr = r.RemoteAddr
+	}
+	return stripHostPort(addr)
+}
+
+// stripHostPort returns the host part of hostport; if hostport is not "host:port", returns hostport unchanged.
+func stripHostPort(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport
+	}
+	return host
 }
 
 const version = "1.0.0"
@@ -128,29 +144,13 @@ func formatConfidence(c float64, decimals int) string {
 	return fmt.Sprintf("%.*f", decimals, rounded)
 }
 
-// HandleClassify handles the main classification endpoint.
-// Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
-// When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (Appendix K).
-func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-
-	// Collect fingerprint and classify regardless of path
-	fp := h.collector.Collect(r)
-	result := h.classifier.Classify(fp)
-
-	// Client Hints behavioral challenge (Appendix K): for / and /debug when store is configured
-	h.applyChallenge(w, r, "/", fp.HTTP.JA4HHash, &result)
-	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
-
-	responseTime := time.Since(startTime).Milliseconds()
-
-	addr := ClientIP(r)
-	// Behavioral metrics (Appendix L): best-effort, non-blocking; failures do not affect classification.
+// recordAndLogRequest records the request in metrics, writes to JSONL log, and logs to console.
+// Single code path for all request logging (/, /debug, etc.). Appendix J (log), Appendix L (metrics).
+func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.ClassificationResult, addr string, responseTime int64, userAgent string) {
 	if h.metricsCollector != nil {
 		nonce := getChallengeCookie(r)
 		h.metricsCollector.RecordRequest(addr, nonce)
 	}
-	// Always log to JSONL and console
 	if h.logger != nil {
 		if err := h.logger.LogResult(result, addr, responseTime); err != nil {
 			log.Printf("Error logging result: %v", err)
@@ -158,15 +158,25 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	}
 	if !h.quiet {
 		log.Printf("[%s] %s %s - UA: %s - %s (%.2f) - %dms",
-			addr,
-			r.Method,
-			r.URL.Path,
-			fp.HTTP.UserAgent,
-			result.Classification,
-			result.Confidence,
-			responseTime,
-		)
+			addr, r.Method, r.URL.Path, userAgent, result.Classification, result.Confidence, responseTime)
 	}
+}
+
+// HandleClassify handles the main classification endpoint.
+// Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
+// When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (Appendix K).
+func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+
+	fp := h.collector.Collect(r)
+	result := h.classifier.Classify(fp)
+
+	h.applyChallenge(w, r, "/", fp.HTTP.JA4HHash, &result)
+	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
+
+	responseTime := time.Since(startTime).Milliseconds()
+	addr := ClientIP(r)
+	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent)
 
 	// Only exact root path gets 200 JSON; everything else gets 404
 	if r.URL.Path != "/" {
@@ -332,15 +342,20 @@ type ChallengeDebug struct {
 }
 
 // HandleDebug returns detailed fingerprint for debugging (optional endpoint).
-// Top-level fields (classification, score, reason) give the outcome without a second request to /.
-// When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (same as /).
-// When Redis metrics are configured, request_metrics contains sliding-window counts for this request's IP and __ch_nonce (Appendix L).
+// Same collect/classify/challenge/log path as HandleClassify; only the response body differs (full debug JSON).
+// When Redis metrics are configured, request_metrics contains sliding-window counts and request history (Appendix L).
 func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
 
 	h.applyChallenge(w, r, "/debug", fp.HTTP.JA4HHash, &result)
 	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
+
+	responseTime := time.Since(startTime).Milliseconds()
+	addr := ClientIP(r)
+	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent)
 
 	challengeDebug := h.buildChallengeDebug(fp.HTTP.JA4HHash)
 	requestMetrics := h.buildRequestMetrics(r)
