@@ -2020,6 +2020,52 @@ Metrics are updated asynchronously (non-blocking) on each classified request whe
 
 Exact key names, window lengths, and TTLs are implementation-defined and documented in the deployment and configuration guides (e.g. `docs/deploy/README.md`, `config/README.md`). The session/window length for sliding-window request counts is configurable via `REDIS_METRICS_WINDOW_SEC` (default 300 seconds).
 
+### Exposed metrics in /debug (request_metrics)
+
+When Redis metrics are configured, the **`/debug`** response includes a **`request_metrics`** object for the current request. It provides raw counts and timestamps plus **derived metrics** used in contemporary bot-detection methodology (request rate density, inter-arrival statistics). All quantities refer to the sliding window defined by `window_sec` and are keyed by the request’s client IP and, when present, the `__ch_nonce` cookie value. The client IP is normalised to host only (no port).
+
+**Raw and human-readable fields:**
+
+| Field | Description |
+|-------|-------------|
+| `window_sec` | Sliding-window length in seconds (e.g. 300). |
+| `ip` | Client IP (host only) for which the following counts and series apply. |
+| `ip_request_count` | Number of requests from this IP in the window. |
+| `ip_request_timestamps` | Last N request times (Unix milliseconds, newest first), up to an implementation-defined cap (e.g. 30). |
+| `ip_request_ago_sec` | Same requests as human-readable deltas: seconds ago from the current request (0 = most recent). |
+| `nonce` | `__ch_nonce` value (C_D from JA4H) if present; otherwise nonce fields are omitted or zero. |
+| `nonce_request_count` | Number of requests with this nonce in the window. |
+| `nonce_request_timestamps` | Last N request times for this nonce (Unix ms, newest first). |
+| `nonce_request_ago_sec` | Same as human-readable seconds ago (0 = most recent). |
+
+**Derived metrics (ip_derived, nonce_derived):**
+
+For each entity (IP and, when present, nonce), the implementation may expose a **derived** object with the following quantities. These align with behavioural signals used in on-the-fly and session-based bot detection (Cresci et al., 2021; BOTracle, 2024; F5 Labs, Cloudflare heuristics, 2025).
+
+| Field | Description | Use in bot detection |
+|-------|-------------|----------------------|
+| `request_rate_per_min` | Requests per minute in the window: count ÷ (window_sec / 60). | **Request rate density**: high values indicate volumetric or automated pacing (Human Security, 2025; F5 Advanced Persistent Bots Report; Cloudflare high-precision heuristics). |
+| `inter_arrival_median_sec` | Median time (seconds) between consecutive requests in the sampled history. | Central tendency of pacing; compared with mean and std to characterise regularity. |
+| `inter_arrival_mean_sec` | Mean inter-arrival time (seconds). | Together with median, describes average gap between requests. |
+| `inter_arrival_std_sec` | Standard deviation of inter-arrival times (seconds). | **Regularity of timing**: low std suggests regular, machine-like pacing; higher std is typical of human variability (Cresci et al., 2021; on-the-fly classification). |
+| `inter_arrival_min_sec` | Minimum gap (seconds) between two consecutive requests in the window. | With max, indicates burstiness (short bursts of requests). |
+| `inter_arrival_max_sec` | Maximum gap (seconds) between two consecutive requests. | With min, indicates spread and burstiness. |
+
+Inter-arrival statistics are computed from the last N timestamps (newest first): gaps are the differences between consecutive timestamps; median, mean, standard deviation, min, and max are taken over these gaps. When there are fewer than two requests in the sampled history, only `request_rate_per_min` is meaningful; the inter-arrival fields may be omitted or zero. No scoring or classification is applied to these derived metrics in this appendix; they are exposed for inspection and future use in rate-based or inter-arrival-based rules or models.
+
+**Expected ranges for natural human traffic (from cited sources):**
+
+The following indicative ranges are drawn from the literature for **natural human browsing** to support interpretation of `request_metrics`; they are not normative thresholds and depend on site, endpoint, and window.
+
+| Metric | Expected range or characteristic for human traffic | Source / note |
+|--------|-----------------------------------------------------|----------------|
+| **Request rate (request_rate_per_min)** | Typically **low to moderate** per client: on the order of **a few requests per minute** (e.g. 1–10) for active browsing; aggregated site-wide averages in industry reports are often in the single digits per minute. Bots and scrapers tend to exhibit **higher sustained rates** (Human Security, 2025; Imperva Bad Bot Report; F5 Labs 2025). | Human Security (2025); Imperva; F5 Advanced Persistent Bots Report. |
+| **Inter-arrival (median / mean)** | **Variable by task**: reading a page may yield gaps of **tens of seconds**; rapid navigation or form use may yield **a few seconds**. No single universal value; median/mean in the **several seconds to tens of seconds** range is common for human page-to-page or action-to-action pacing. | Cresci et al. (2021); BOTracle (2024) — behaviour-only discrimination. |
+| **Inter-arrival std (inter_arrival_std_sec)** | **Higher variance** than bots: human inter-arrival times tend to be **more variable** (higher standard deviation) due to reading time, pauses, and irregular pacing. **Low std** (highly regular gaps) is often associated with **automation** (Cresci et al., 2021; on-the-fly classification). | Cresci et al., “Efficient on-the-fly Web bot detection”; BOTracle. |
+| **Min/max gap (burstiness)** | Humans show **mixed short and long gaps** (clicks followed by reading pauses). **Very short min** with **high max** is consistent with burst-then-pause; **uniform** min/max (small spread) can indicate machine-like regularity. | Session-based and request-pattern studies (e.g. BOTracle; Cresci et al.; Data-driven human and bot recognition, ScienceDirect 2023). |
+
+Baselines should be calibrated per deployment (e.g. by endpoint and traffic mix). The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
+
 ### Storage (Redis)
 
 - **Backend**: Redis 6+ (single instance or managed/Sentinel as provided).
@@ -2042,6 +2088,8 @@ Exact key names, window lengths, and TTLs are implementation-defined and documen
 - Redis rate limiting: “How to Implement Rate Limiting in Redis,” Redis.io. Sliding window log (ZADD, ZREMRANGEBYSCORE, ZCARD). <https://redis.io/docs/manual/patterns/rate-limiting/>.
 - Human Security, “Bot Detection Guide,” 2025. <https://humansecurity.com/learn/topics/what-is-bot-detection>.
 - Imperva, “Bad Bot Report,” 2025. <https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf>.
+- F5 Labs, “2025 Advanced Persistent Bots Report,” 2025. Request rate and behavioural patterns post-mitigation. <https://www.f5.com/labs/articles/2025-advanced-persistent-bots-report>.
+- Cloudflare, “Improved Bot Management flexibility and visibility with new high-precision heuristics,” 2025. Request rate density, inter-arrival time, median analysis. <https://blog.cloudflare.com/bots-heuristics>.
 
 ---
 

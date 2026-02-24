@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
+	"sort"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -92,16 +94,31 @@ func (c *Collector) recordOne(ctx context.Context, key string, cutoff, nowMs int
 // MaxRequestTimestampsInDebug is the max number of request timestamps returned in /debug request_metrics (history).
 const MaxRequestTimestampsInDebug = 30
 
-// RequestMetrics holds current sliding-window counts and recent request timestamps for the request's IP and (if present) nonce.
+// DerivedStats holds inter-arrival and rate metrics used in bot-detection research (Cresci et al. 2021; BOTracle 2024; F5/Cloudflare heuristics 2025).
+// Low inter-arrival variance can indicate automation; high request rate density is a bot signal.
+type DerivedStats struct {
+	RequestRatePerMin     float64 `json:"request_rate_per_min,omitempty"`     // requests per minute in window (density)
+	InterArrivalMedianSec float64 `json:"inter_arrival_median_sec,omitempty"` // median time between consecutive requests (sec)
+	InterArrivalMeanSec   float64 `json:"inter_arrival_mean_sec,omitempty"`   // mean inter-arrival (sec)
+	InterArrivalStdSec    float64 `json:"inter_arrival_std_sec,omitempty"`    // std dev of inter-arrival; low = regular timing (bot-like)
+	InterArrivalMinSec    float64 `json:"inter_arrival_min_sec,omitempty"`    // min gap (sec)
+	InterArrivalMaxSec    float64 `json:"inter_arrival_max_sec,omitempty"`    // max gap (sec); with min indicates burstiness
+}
+
+// RequestMetrics holds current sliding-window counts, timestamps, and derived stats for the request's IP and (if present) nonce.
 // Used in /debug to show metrics pertaining to this request. See Appendix L.
 type RequestMetrics struct {
-	WindowSec              int     `json:"window_sec"`                         // sliding-window length in seconds
-	IP                     string  `json:"ip,omitempty"`                       // client IP for which counts are shown
-	IPRequestCount         int64   `json:"ip_request_count,omitempty"`         // requests from this IP in the window
-	IPRequestTimestamps    []int64 `json:"ip_request_timestamps,omitempty"`    // last N request times (unix ms) in window — request history for this IP
-	Nonce                  string  `json:"nonce,omitempty"`                    // __ch_nonce value if present (C_D only, not full cookie)
-	NonceRequestCount      int64   `json:"nonce_request_count,omitempty"`      // requests with this nonce in the window (0 if no nonce)
-	NonceRequestTimestamps []int64 `json:"nonce_request_timestamps,omitempty"` // last N request times (unix ms) in window — request history for this nonce
+	WindowSec              int           `json:"window_sec"`                         // sliding-window length in seconds
+	IP                     string        `json:"ip,omitempty"`                       // client IP for which counts are shown
+	IPRequestCount         int64         `json:"ip_request_count,omitempty"`         // requests from this IP in the window
+	IPRequestTimestamps    []int64       `json:"ip_request_timestamps,omitempty"`    // last N request times (unix ms) in window
+	IPRequestAgoSec        []float64     `json:"ip_request_ago_sec,omitempty"`       // human-readable: seconds ago from this request (0 = newest)
+	IPDerived              *DerivedStats `json:"ip_derived,omitempty"`               // request rate density, inter-arrival stats (median, mean, std, min, max)
+	Nonce                  string        `json:"nonce,omitempty"`                    // __ch_nonce value if present (C_D only, not full cookie)
+	NonceRequestCount      int64         `json:"nonce_request_count,omitempty"`      // requests with this nonce in the window (0 if no nonce)
+	NonceRequestTimestamps []int64       `json:"nonce_request_timestamps,omitempty"` // last N request times (unix ms) in window
+	NonceRequestAgoSec     []float64     `json:"nonce_request_ago_sec,omitempty"`    // human-readable: seconds ago from this request (0 = newest)
+	NonceDerived           *DerivedStats `json:"nonce_derived,omitempty"`            // same derived stats for nonce
 }
 
 // GetRequestMetrics returns current request counts and last N timestamps in the sliding window for the given IP and nonce.
@@ -130,6 +147,8 @@ func (c *Collector) GetRequestMetrics(ctx context.Context, ip, nonce string) (*R
 			return nil, err
 		}
 		out.IPRequestTimestamps = zScoresToInt64(zs)
+		out.IPRequestAgoSec = timestampsToAgoSec(nowMs, out.IPRequestTimestamps)
+		out.IPDerived = derivedStats(c.windowSec, out.IPRequestCount, out.IPRequestTimestamps)
 	}
 	if nonce != "" {
 		key := fmt.Sprintf("%s:nonce:%s:req", c.prefix, nonce)
@@ -143,9 +162,67 @@ func (c *Collector) GetRequestMetrics(ctx context.Context, ip, nonce string) (*R
 			return nil, err
 		}
 		out.NonceRequestTimestamps = zScoresToInt64(zs)
+		out.NonceRequestAgoSec = timestampsToAgoSec(nowMs, out.NonceRequestTimestamps)
+		out.NonceDerived = derivedStats(c.windowSec, out.NonceRequestCount, out.NonceRequestTimestamps)
 	}
 
 	return out, nil
+}
+
+// derivedStats computes request rate per minute and inter-arrival stats (median, mean, std, min, max) from timestamps (newest first, unix ms).
+// Used for bot-detection heuristics: request density and inter-arrival regularity (Cresci et al. 2021; Cloudflare/F5 2025).
+func derivedStats(windowSec int, count int64, timestamps []int64) *DerivedStats {
+	if windowSec <= 0 {
+		return nil
+	}
+	d := &DerivedStats{}
+	d.RequestRatePerMin = float64(count) / (float64(windowSec) / 60.0)
+	if len(timestamps) < 2 {
+		return d
+	}
+	gapsSec := make([]float64, 0, len(timestamps)-1)
+	for i := 0; i < len(timestamps)-1; i++ {
+		gapMs := timestamps[i] - timestamps[i+1]
+		if gapMs < 0 {
+			gapMs = -gapMs
+		}
+		gapsSec = append(gapsSec, float64(gapMs)/1000.0)
+	}
+	sort.Float64s(gapsSec)
+	n := len(gapsSec)
+	d.InterArrivalMinSec = gapsSec[0]
+	d.InterArrivalMaxSec = gapsSec[n-1]
+	sum := 0.0
+	for _, g := range gapsSec {
+		sum += g
+	}
+	d.InterArrivalMeanSec = sum / float64(n)
+	var variance float64
+	for _, g := range gapsSec {
+		variance += (g - d.InterArrivalMeanSec) * (g - d.InterArrivalMeanSec)
+	}
+	if n > 1 {
+		variance /= float64(n - 1)
+	}
+	d.InterArrivalStdSec = math.Sqrt(variance)
+	if n%2 == 1 {
+		d.InterArrivalMedianSec = gapsSec[n/2]
+	} else {
+		d.InterArrivalMedianSec = (gapsSec[n/2-1] + gapsSec[n/2]) / 2
+	}
+	return d
+}
+
+// timestampsToAgoSec returns seconds ago from nowMs for each timestamp (newest first). 0 = this request / most recent.
+func timestampsToAgoSec(nowMs int64, timestamps []int64) []float64 {
+	if len(timestamps) == 0 {
+		return nil
+	}
+	out := make([]float64, len(timestamps))
+	for i, ts := range timestamps {
+		out[i] = float64(nowMs-ts) / 1000.0
+	}
+	return out
 }
 
 func zScoresToInt64(zs []redis.Z) []int64 {

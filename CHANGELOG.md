@@ -29,7 +29,11 @@ All notable changes to this project are documented in this file.
 
 ### Request metrics: request history in /debug
 
-- **request_metrics** in `/debug` includes **ip_request_timestamps** and **nonce_request_timestamps** — last N (up to 30) request times (unix ms) in the window for this IP and nonce. GetRequestMetrics uses ZREVRANGEBYSCORE; MaxRequestTimestampsInDebug = 30.
+- **request_metrics** in `/debug` includes **ip_request_timestamps** and **nonce_request_timestamps** — last N (up to 30) request times (unix ms) in the window for this IP and nonce; human-readable **ip_request_ago_sec** / **nonce_request_ago_sec** (seconds ago); **ip_derived** / **nonce_derived** with `request_rate_per_min` and inter-arrival stats (median, mean, std, min, max). GetRequestMetrics uses ZREVRANGEBYSCORE; MaxRequestTimestampsInDebug = 30. [METHODOLOGY Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) documents exposed fields and **expected ranges for natural human traffic** (request rate, inter-arrival, variance, burstiness) from cited sources.
+
+### METHODOLOGY Appendix L — expected human traffic
+
+- **Expected ranges for natural human traffic**: New subsection in [METHODOLOGY.md Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) with a table of indicative values (from cited sources) for interpreting `request_metrics`: request rate (low–moderate, ~1–10 req/min per client), inter-arrival median/mean (several to tens of seconds), higher inter-arrival std for humans vs bots, and min/max gap (burstiness). Sources: Human Security, Imperva, F5 Labs, Cresci et al., BOTracle, ScienceDirect 2023. Baselines noted as deployment-specific; no normative thresholds.
 
 ### Unified request logging
 
