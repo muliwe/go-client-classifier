@@ -1377,7 +1377,9 @@ Benchmark using `task bench:tls` against localhost with full TLS handshake and J
 | 10 | 9,600 | 576K | 1.0 ms | 30 ms | 0 |
 | 50 | 14,500 | **870K** | 3.4 ms | 53 ms | 0 |
 
-**Peak throughput: ~870K RPM** at 50 concurrent connections with HTTPS/TLS (zero errors).
+**Peak throughput: ~870K RPM** at 50 concurrent connections with HTTPS/TLS (zero errors). No Redis in path for this run.
+
+**Same host, Redis ON** (10s, c=50, HTTPS, endpoint with `request_metrics`): 1,620 RPS, 97K RPM, 30.9 ms avg, 169 ms max, 0 errors. Vs same host Redis OFF (classify): 2,640 → 1,620 RPS (−39%), 18.9 → 30.9 ms (+12 ms). Redis + online stats: **~12 ms**, **~40%** throughput drop.
 
 ### What's Included in Benchmark
 
@@ -1390,6 +1392,7 @@ The benchmark measures full request processing:
 - Signal extraction and scoring
 - JSON response serialization
 - File logging (JSONL)
+- With Redis: RecordRequest (async) and, when response includes `request_metrics`, GetRequestMetrics + derived stats.
 
 ### Bottlenecks
 

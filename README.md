@@ -20,9 +20,7 @@ Academic research project for classifying automated HTTP clients (bots, LLMs, cr
 | GET / (classify) | **~2,640** | ~158K | ~18.9 ms |
 | GET /health | ~4,242 | ~255K | ~11.8 ms |
 
-**Summary:** On localhost the server sustains **8–11K RPS** with **sub-6 ms** latency.  
-Over the network behind nginx/TLS it reaches **~2.6K RPS** (classify) / **~4.2K RPS** (health) with **~12–19 ms** latency.  
-Pure classification overhead (classify vs health over the network) is **~7 ms** — the rest is transport.
+**Summary (10s, c=50, same host):** Localhost: **8–11K RPS**, **4–6 ms** avg. Over the network (nginx/TLS): classify **~2.6K RPS**, **~18.9 ms**; health **~4.2K RPS**, **~11.8 ms** — so classification adds **~7 ms** vs health. With **Redis + on-the-fly request metrics** on the same host: **~1,620 RPS**, **30.9 ms** (vs classify without Redis: −39% RPS, **+12 ms** per request). **Takeaways:** classification cost ~7 ms over transport; Redis + stats add ~12 ms and ~40% throughput drop on endpoints that build `request_metrics`.
 
 ## Project Goal
 
