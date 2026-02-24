@@ -2062,6 +2062,21 @@ The following indicative ranges are drawn from the literature for **natural huma
 | **Inter-arrival std (inter_arrival_std_sec)** | **Higher variance** than bots: human inter-arrival times tend to be **more variable** (higher standard deviation) due to reading time, pauses, and irregular pacing. **Low std** (highly regular gaps) is often associated with **automation** (Cresci et al., 2021; on-the-fly classification). | Cresci et al., “Efficient on-the-fly Web bot detection”; BOTracle. |
 | **Min/max gap (burstiness)** | Humans show **mixed short and long gaps** (clicks followed by reading pauses). **Very short min** with **high max** is consistent with burst-then-pause; **uniform** min/max (small spread) can indicate machine-like regularity. | Session-based and request-pattern studies (e.g. BOTracle; Cresci et al.; Data-driven human and bot recognition, ScienceDirect 2023). |
 
+**Occasional observation: reference bot vs browser**
+
+The following comparison uses `request_metrics` from two reference runs (testdata): a **bot** (curl_cffi, classified as bot) and a **browser** (Chrome, classified as browser). Single-sample illustration only; not normative.
+
+| Metric | Bot (curl_cffi), ip_derived | Browser (Chrome), nonce_derived |
+|--------|-----------------------------|---------------------------------|
+| request_rate_per_min | 3.8 | 2.2 |
+| inter_arrival_median_sec | 0.201 | 0.383 |
+| inter_arrival_mean_sec | 3.292 | 0.787 |
+| inter_arrival_std_sec | 9.176 | 1.017 |
+| inter_arrival_min_sec | 0.05 | 0.124 |
+| inter_arrival_max_sec | 38.092 | 3.444 |
+
+**Conclusion:** In this snapshot, the bot shows a **wide spread** of inter-arrival times (min 0.05 s, max 38 s) and **high std** (9.2 s) — bursty automated pacing with occasional long pauses. The browser’s **nonce_derived** shows a **narrower range** (0.12–3.4 s) and **lower std** (1.0 s), consistent with more regular, short successions of requests (e.g. navigation/clicks) without long idle gaps in the window. So in this example, **high max gap and high std** coincide with the bot; **compact min–max and moderate std** coincide with the browser. This aligns with the literature (humans often more variable at longer time scales; here the bot’s variance is driven by a few very long gaps). Optional use: flag or review IPs/nonces with e.g. `inter_arrival_max_sec` or `inter_arrival_std_sec` above a deployment-specific threshold in addition to fingerprint/UA signals.
+
 Baselines should be calibrated per deployment (e.g. by endpoint and traffic mix). The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
 
 ### Storage (Redis)

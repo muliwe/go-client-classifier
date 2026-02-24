@@ -35,6 +35,15 @@ All notable changes to this project are documented in this file.
 
 - **Expected ranges for natural human traffic**: New subsection in [METHODOLOGY.md Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) with a table of indicative values (from cited sources) for interpreting `request_metrics`: request rate (low–moderate, ~1–10 req/min per client), inter-arrival median/mean (several to tens of seconds), higher inter-arrival std for humans vs bots, and min/max gap (burstiness). Sources: Human Security, Imperva, F5 Labs, Cresci et al., BOTracle, ScienceDirect 2023. Baselines noted as deployment-specific; no normative thresholds.
 
+### request_metrics: rounding and tests
+
+- **Rounding**: All float values in `request_metrics` (`ip_request_ago_sec`, `nonce_request_ago_sec`, and all fields in `ip_derived` / `nonce_derived`) are rounded to 3 decimal places for readable JSON.
+- **Test with mocked Redis**: `TestGetRequestMetrics_WithMockRedis` in `internal/metrics` seeds miniredis with known timestamps (IP and nonce), calls `GetRequestMetrics`, and asserts counts, ago_sec length and approximate values, presence and rounding of derived stats. Catches regressions when metrics logic or rounding changes.
+
+### METHODOLOGY Appendix L — reference bot vs browser
+
+- **Occasional observation**: New subsection in [METHODOLOGY.md Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) “Occasional observation: reference bot vs browser” with a comparison table from testdata (`reference_bot_curl_cffi.json` ip_derived vs `reference_browser.json` nonce_derived) and a short conclusion: in that snapshot, bot shows wide inter-arrival spread (high max, high std) vs browser’s narrower range; optional use of thresholds on `inter_arrival_max_sec` / `inter_arrival_std_sec` noted.
+
 ### Unified request logging
 
 - **recordAndLogRequest** — single code path for metrics, JSONL, and console. Both HandleClassify and HandleDebug call it; every request is logged the same way.
