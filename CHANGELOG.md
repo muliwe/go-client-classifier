@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.0.0 (2026-02-23)
+
+### Redis integration and behavioural metrics (Appendix L)
+
+- **Redis optional**: When `REDIS_URL` is set, the server uses Redis for the Client Hints challenge store and for behavioural metrics. Without Redis, challenge store remains in-memory (per process) and no metrics are collected.
+- **Challenge store in Redis**: Nonce→User-Agent mapping is stored in Redis with configurable TTL (`CHALLENGE_TTL_SEC` / `challenge_ttl_sec`). All instances share the same store so the challenge works correctly when load-balanced. Key pattern: `ch:nonce:<nonce>` (prefix configurable via `REDIS_CHALLENGE_PREFIX`).
+- **Behavioural metrics collection**: Per-request timestamps are recorded per client IP and per `__ch_nonce` (when present) in Redis sorted sets (sliding window). Used for future rate/inter-arrival analysis; **no scoring** from these metrics in this release. Key patterns: `metrics:ip:<ip>:req`, `metrics:nonce:<nonce>:req` (prefix and TTLs configurable). See [METHODOLOGY.md Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring).
+- **`/debug` request_metrics**: The debug endpoint now returns a `request_metrics` object for the current request when Redis metrics are configured: `window_sec`, `ip`, `ip_request_count`, `nonce`, `nonce_request_count` (sliding-window counts for this request’s IP and __ch_nonce). Omitted when Redis is unavailable or metrics collector is nil.
+- **Implementation**: `internal/metrics` — `Collector` with `RecordRequest(ip, nonce)`, `GetRequestMetrics(ctx, ip, nonce)`; Redis challenge store in `internal/server/challenge_store_redis.go`; handler wires metrics and exposes `buildRequestMetrics(r)` for debug. Health check reports `redis: ok | unavailable` when Redis is configured.
+- **Docs**: [docs/deploy/README.md](docs/deploy/README.md) — deployment with Redis, env vars, nonce store and metrics; [docs/redis_implementation_plan.md](docs/redis_implementation_plan.md) — implementation plan; [docs/METHODOLOGY.md Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) — behavioural monitoring (metrics collected, storage, references); [config/README.md](config/README.md#redis-challenge-store-and-behavioural-metrics) — Redis section. README Current Status updated with Redis & behavioural line.
+
+### Nonce cookie and behavioural window sync
+
+- **Cookie Max-Age**: The `__ch_nonce` cookie `Max-Age` is no longer hardcoded to 30 s; it now follows `challenge_ttl_sec` / `CHALLENGE_TTL_SEC` (default 120 s), so the cookie lifetime matches the challenge store TTL.
+- **Nonce metrics TTL**: When Redis is used, the TTL for behavioural metrics keys per nonce (`metrics:nonce:<nonce>:req`) is set to `ChallengeTTL` (same as the challenge store) instead of 2×ChallengeTTL, so the nonce analysis window is aligned with the cookie and store.
+- **Handler**: New field `challengeCookieMaxAgeSec` and optional parameter in handler construction; when ≤ 0, 120 is used when setting the cookie. [METHODOLOGY.md Appendix K](docs/METHODOLOGY.md#appendix-k-client-hints-behavioural-challenge) and [config/README.md](config/README.md) updated to describe the sync.
+
+### NewHandler options struct
+
+- **HandlerOptions**: `NewHandler` now accepts a single `HandlerOptions` struct (Collector, Classifier, Logger, ChallengeStore, RedisPinger, MetricsCollector, ChallengeCookieMaxAgeSec) instead of seven positional arguments. Only Collector and Classifier are required; the rest are optional (nil/zero). Simplifies tests and call sites.
+
 ## v0.10.0 (2026-02-23)
 
 ### Client Hints behavioral challenge (Appendix K)

@@ -14,7 +14,7 @@ func TestServerPackage(t *testing.T) {
 	// Verify package is testable
 	collector := fingerprint.NewCollector()
 	cls := classifier.New(classifier.DefaultConfig())
-	h := NewHandler(collector, cls, nil, nil)
+	h := NewHandler(HandlerOptions{Collector: collector, Classifier: cls})
 	if h == nil {
 		t.Error("NewHandler should not return nil")
 	}

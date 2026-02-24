@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 	"github.com/muliwe/go-client-classifier/internal/logger"
+	"github.com/muliwe/go-client-classifier/internal/metrics"
 )
 
 // Client Hints behavioral challenge (Appendix K): cookie and header constants
@@ -49,7 +51,7 @@ func ClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-const version = "0.10.0"
+const version = "1.0.0"
 
 // Response represents the API response
 type Response struct {
@@ -61,29 +63,53 @@ type Response struct {
 	Version        string    `json:"version"`
 }
 
-// HealthResponse represents the health check response
+// HealthResponse represents the health check response.
+// When Redis is configured, RedisStatus is set to "ok" or "unavailable" (startup does not fail if Redis is down).
 type HealthResponse struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
+	Status      string `json:"status"`
+	Version     string `json:"version"`
+	RedisStatus string `json:"redis,omitempty"` // present only when Redis is configured
 }
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	collector      *fingerprint.Collector
-	classifier     *classifier.Classifier
-	logger         *logger.Logger
-	challengeStore *ChallengeStore // nil = Client Hints challenge disabled
-	quiet          bool            // suppress console logging (useful for tests)
+	collector                *fingerprint.Collector
+	classifier               *classifier.Classifier
+	logger                   *logger.Logger
+	challengeStore           ChallengeStore     // nil = Client Hints challenge disabled (in-memory or Redis when REDIS_URL set)
+	redisClient              RedisPinger        // optional; for /health Redis PING when configured
+	metricsCollector         *metrics.Collector // optional; when Redis configured, records behavioral metrics (Appendix L)
+	challengeCookieMaxAgeSec int                // Max-Age for __ch_nonce cookie; synced with challenge TTL and nonce metrics window (Appendix L)
+	quiet                    bool               // suppress console logging (useful for tests)
 }
 
-// NewHandler creates a new handler with dependencies
-func NewHandler(c *fingerprint.Collector, cl *classifier.Classifier, l *logger.Logger, challengeStore *ChallengeStore) *Handler {
+// RedisPinger is used for optional Redis connectivity check in /health. Implemented by the server when Redis is configured.
+type RedisPinger interface {
+	Ping(ctx context.Context) error
+}
+
+// HandlerOptions configures Handler dependencies. Only Collector and Classifier are required; the rest are optional (nil/zero).
+type HandlerOptions struct {
+	Collector                *fingerprint.Collector
+	Classifier               *classifier.Classifier
+	Logger                   *logger.Logger
+	ChallengeStore           ChallengeStore
+	RedisPinger              RedisPinger
+	MetricsCollector         *metrics.Collector
+	ChallengeCookieMaxAgeSec int // Max-Age (seconds) for __ch_nonce cookie; should match ChallengeTTL. If <= 0, 120 is used when setting the cookie.
+}
+
+// NewHandler creates a new handler from options. Collector and Classifier must be set; other fields may be nil/zero.
+func NewHandler(opts HandlerOptions) *Handler {
 	return &Handler{
-		collector:      c,
-		classifier:     cl,
-		logger:         l,
-		challengeStore: challengeStore,
-		quiet:          false,
+		collector:                opts.Collector,
+		classifier:               opts.Classifier,
+		logger:                   opts.Logger,
+		challengeStore:           opts.ChallengeStore,
+		redisClient:              opts.RedisPinger,
+		metricsCollector:         opts.MetricsCollector,
+		challengeCookieMaxAgeSec: opts.ChallengeCookieMaxAgeSec,
+		quiet:                    false,
 	}
 }
 
@@ -119,6 +145,11 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	responseTime := time.Since(startTime).Milliseconds()
 
 	addr := ClientIP(r)
+	// Behavioral metrics (Appendix L): best-effort, non-blocking; failures do not affect classification.
+	if h.metricsCollector != nil {
+		nonce := getChallengeCookie(r)
+		h.metricsCollector.RecordRequest(addr, nonce)
+	}
 	// Always log to JSONL and console
 	if h.logger != nil {
 		if err := h.logger.LogResult(result, addr, responseTime); err != nil {
@@ -194,6 +225,10 @@ func (h *Handler) applyChallenge(w http.ResponseWriter, r *http.Request, path, j
 		}
 	} else {
 		// No cookie in request
+		maxAge := h.challengeCookieMaxAgeSec
+		if maxAge <= 0 {
+			maxAge = 120
+		}
 		if storedUA, found := h.challengeStore.Get(nonce); found {
 			// Nonce already in store: if same UA, treat as same client that lost the cookie — do not fail; re-issue cookie
 			if currentUA == storedUA {
@@ -201,7 +236,7 @@ func (h *Handler) applyChallenge(w http.ResponseWriter, r *http.Request, path, j
 				w.Header().Set("Accept-CH", challengeAcceptCH)
 				w.Header().Set("Critical-CH", challengeCriticalCH)
 				w.Header().Set("Vary", challengeVary)
-				w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=30; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce))
+				w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=%d; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce, maxAge))
 				// Do not apply challenge signal: same client, cookie was lost (e.g. new tab, refresh)
 			} else {
 				// Different UA with same nonce — different client, challenge failed
@@ -213,7 +248,7 @@ func (h *Handler) applyChallenge(w http.ResponseWriter, r *http.Request, path, j
 			w.Header().Set("Accept-CH", challengeAcceptCH)
 			w.Header().Set("Critical-CH", challengeCriticalCH)
 			w.Header().Set("Vary", challengeVary)
-			w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=30; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce))
+			w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Max-Age=%d; Secure; HttpOnly; SameSite=Lax", challengeCookieName, nonce, maxAge))
 		}
 	}
 }
@@ -252,28 +287,36 @@ func fullVersionListMatchesUA(storedUA, fullVersionListHeader string) bool {
 	return false
 }
 
-// HandleHealth handles the health check endpoint
+// HandleHealth handles the health check endpoint. When Redis is configured, reports Redis connectivity (PING).
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	resp := HealthResponse{Status: "ok", Version: version}
+	if h.redisClient != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := h.redisClient.Ping(ctx); err != nil {
+			resp.RedisStatus = "unavailable"
+		} else {
+			resp.RedisStatus = "ok"
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(HealthResponse{
-		Status:  "ok",
-		Version: version,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("Error encoding health response: %v", err)
 	}
 }
 
 // DebugResponse is the /debug payload: summary first, then full result for details
 type DebugResponse struct {
-	Classification string          `json:"classification"`
-	Score          int             `json:"score"`  // weighted net (browser - 4*bot)
-	Reason         string          `json:"reason"` // text summary
-	Confidence     float64         `json:"confidence"`
-	RequestID      string          `json:"request_id"`
-	Timestamp      string          `json:"timestamp"`
-	Fingerprint    any             `json:"fingerprint,omitempty"`
-	Signals        any             `json:"signals,omitempty"`
-	ChallengeDebug *ChallengeDebug `json:"challenge_debug,omitempty"` // Client Hints challenge: C_D, store state (for debugging)
+	Classification string                  `json:"classification"`
+	Score          int                     `json:"score"`  // weighted net (browser - 4*bot)
+	Reason         string                  `json:"reason"` // text summary
+	Confidence     float64                 `json:"confidence"`
+	RequestID      string                  `json:"request_id"`
+	Timestamp      string                  `json:"timestamp"`
+	Fingerprint    any                     `json:"fingerprint,omitempty"`
+	Signals        any                     `json:"signals,omitempty"`
+	ChallengeDebug *ChallengeDebug         `json:"challenge_debug,omitempty"` // Client Hints challenge: C_D, store state (for debugging)
+	RequestMetrics *metrics.RequestMetrics `json:"request_metrics,omitempty"` // behavioral metrics for this request (IP + __ch_nonce); Appendix L
 }
 
 // ChallengeDebug exposes challenge store state for /debug: nonce (C_D), whether it is cached, stored UA, created_at.
@@ -291,6 +334,7 @@ type ChallengeDebug struct {
 // HandleDebug returns detailed fingerprint for debugging (optional endpoint).
 // Top-level fields (classification, score, reason) give the outcome without a second request to /.
 // When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (same as /).
+// When Redis metrics are configured, request_metrics contains sliding-window counts for this request's IP and __ch_nonce (Appendix L).
 func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
@@ -299,6 +343,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
 
 	challengeDebug := h.buildChallengeDebug(fp.HTTP.JA4HHash)
+	requestMetrics := h.buildRequestMetrics(r)
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
@@ -313,6 +358,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 		Fingerprint:    result.Fingerprint,
 		Signals:        result.Signals,
 		ChallengeDebug: challengeDebug,
+		RequestMetrics: requestMetrics,
 	}
 	if err := encoder.Encode(payload); err != nil {
 		log.Printf("Error encoding debug response: %v", err)
@@ -345,4 +391,22 @@ func (h *Handler) buildChallengeDebug(ja4hHash string) *ChallengeDebug {
 	}
 	out.Expired = expired
 	return out
+}
+
+// buildRequestMetrics returns sliding-window request counts for this request's IP and __ch_nonce (Appendix L).
+// Returns nil if metrics collector is not configured or Redis is unavailable.
+func (h *Handler) buildRequestMetrics(r *http.Request) *metrics.RequestMetrics {
+	if h.metricsCollector == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	ip := ClientIP(r)
+	nonce := getChallengeCookie(r)
+	m, err := h.metricsCollector.GetRequestMetrics(ctx, ip, nonce)
+	if err != nil {
+		log.Printf("debug: request_metrics: %v", err)
+		return nil
+	}
+	return m
 }

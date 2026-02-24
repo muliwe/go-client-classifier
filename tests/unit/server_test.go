@@ -19,7 +19,7 @@ import (
 func createTestHandler() *server.Handler {
 	collector := fingerprint.NewCollector()
 	cls := classifier.New(classifier.DefaultConfig())
-	return server.NewHandler(collector, cls, nil, nil)
+	return server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: cls})
 }
 
 func TestServerNewHandler(t *testing.T) {
@@ -121,7 +121,7 @@ func TestServerHandleClassify_NotFoundStillLogs(t *testing.T) {
 
 	collector := fingerprint.NewCollector()
 	cls := classifier.New(classifier.DefaultConfig())
-	h := server.NewHandler(collector, cls, l, nil)
+	h := server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: cls, Logger: l})
 	h.SetQuiet(true)
 
 	req := httptest.NewRequest("GET", "/123", nil)
@@ -170,7 +170,7 @@ func TestServerHandleClassify_LogsRealIPWhenProxied(t *testing.T) {
 
 	collector := fingerprint.NewCollector()
 	cls := classifier.New(classifier.DefaultConfig())
-	h := server.NewHandler(collector, cls, l, nil)
+	h := server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: cls, Logger: l})
 	h.SetQuiet(true)
 
 	req := httptest.NewRequest("GET", "/", nil)

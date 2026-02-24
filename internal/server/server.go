@@ -17,11 +17,36 @@ import (
 
 	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/psanford/tlsfingerprint/fingerprintlistener"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 	"github.com/muliwe/go-client-classifier/internal/logger"
+	"github.com/muliwe/go-client-classifier/internal/metrics"
 )
+
+// RedisConfig holds Redis connection and key-prefix options. When REDIS_URL is set,
+// the nonce challenge store is backed by Redis instead of in-memory; behavioral
+// metrics are collected per IP and per __ch_nonce (see METHODOLOGY.md Appendix L).
+// References: Redis rate-limiting patterns (Redis.io); BOTracle (Kadel et al., arXiv:2412.02266).
+type RedisConfig struct {
+	Client *redis.Client
+
+	// ChallengePrefix is the key prefix for nonce→User-Agent entries (e.g. "ch" → "ch:nonce:<nonce>").
+	ChallengePrefix string
+	// MetricsPrefix is the key prefix for behavioral metrics sorted sets (e.g. "metrics").
+	MetricsPrefix string
+	// MetricsTTLSec is the TTL in seconds for metrics keys (e.g. 86400 for 24h for IP).
+	MetricsTTLSec int
+	// MetricsWindowSec is the sliding-window length in seconds for request counts (e.g. 60 or 300).
+	// Aligns with inter-arrival and rate-based features (Cresci et al., Knowledge-Based Systems, 2021).
+	MetricsWindowSec int
+}
+
+// redisPingerAdapter adapts *redis.Client to RedisPinger for /health. Startup does not fail if Redis is down.
+type redisPingerAdapter struct{ client *redis.Client }
+
+func (a redisPingerAdapter) Ping(ctx context.Context) error { return a.client.Ping(ctx).Err() }
 
 // Config holds server configuration
 type Config struct {
@@ -36,6 +61,9 @@ type Config struct {
 	// Client Hints behavioral challenge (Appendix K)
 	ChallengeEnabled bool          // if false, challenge store is nil and challenge is disabled
 	ChallengeTTL     time.Duration // TTL for nonce→UA store; default 120s
+
+	// Redis is set when REDIS_URL is configured; enables Redis-backed challenge store and metrics collection.
+	Redis *RedisConfig
 
 	// TLS configuration
 	TLSEnabled  bool
@@ -99,15 +127,64 @@ func New(cfg Config) (*Server, error) {
 	// Initialize components
 	collector := fingerprint.NewCollector()
 	clf := classifier.New(cfg.ClassifierCfg)
-	var challengeStore *ChallengeStore
+	var challengeStore ChallengeStore
 	if cfg.ChallengeEnabled {
 		ttl := cfg.ChallengeTTL
 		if ttl <= 0 {
 			ttl = 120 * time.Second
 		}
-		challengeStore = NewChallengeStore(ttl)
+		// When REDIS_URL is set, the nonce challenge store is backed by Redis instead of in-memory.
+		if cfg.Redis != nil && cfg.Redis.Client != nil {
+			prefix := cfg.Redis.ChallengePrefix
+			if prefix == "" {
+				prefix = "ch"
+			}
+			challengeStore = NewRedisChallengeStore(cfg.Redis.Client, prefix, ttl)
+		} else {
+			challengeStore = NewChallengeStore(ttl)
+		}
 	}
-	handler := NewHandler(collector, clf, l, challengeStore)
+	var redisPinger RedisPinger
+	var metricsCollector *metrics.Collector
+	if cfg.Redis != nil && cfg.Redis.Client != nil {
+		redisPinger = redisPingerAdapter{client: cfg.Redis.Client}
+		prefix := cfg.Redis.MetricsPrefix
+		if prefix == "" {
+			prefix = "metrics"
+		}
+		windowSec := cfg.Redis.MetricsWindowSec
+		if windowSec <= 0 {
+			windowSec = 300
+		}
+		ipTTL := 24 * time.Hour
+		if cfg.Redis.MetricsTTLSec > 0 {
+			ipTTL = time.Duration(cfg.Redis.MetricsTTLSec) * time.Second
+		}
+		// Nonce metrics TTL synced with challenge store and cookie: same as ChallengeTTL so behavioral window for nonce matches cookie lifetime.
+		nonceTTL := cfg.ChallengeTTL
+		if nonceTTL <= 0 {
+			nonceTTL = 120 * time.Second
+		}
+		metricsCollector = metrics.NewCollector(cfg.Redis.Client, metrics.CollectorConfig{
+			Prefix:    prefix,
+			WindowSec: windowSec,
+			IPTTL:     ipTTL,
+			NonceTTL:  nonceTTL,
+		})
+	}
+	cookieMaxAgeSec := 120
+	if cfg.ChallengeTTL > 0 {
+		cookieMaxAgeSec = int(cfg.ChallengeTTL.Seconds())
+	}
+	handler := NewHandler(HandlerOptions{
+		Collector:                collector,
+		Classifier:               clf,
+		Logger:                   l,
+		ChallengeStore:           challengeStore,
+		RedisPinger:              redisPinger,
+		MetricsCollector:         metricsCollector,
+		ChallengeCookieMaxAgeSec: cookieMaxAgeSec,
+	})
 
 	// Setup routes
 	mux := http.NewServeMux()

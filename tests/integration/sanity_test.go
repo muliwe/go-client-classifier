@@ -36,7 +36,7 @@ func createTestHandler() *server.Handler {
 func createTestHandlerWithLogging(enableConsoleLog bool) *server.Handler {
 	collector := fingerprint.NewCollector()
 	clf := classifier.New(classifier.DefaultConfig())
-	handler := server.NewHandler(collector, clf, nil, nil) // nil file logger
+	handler := server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: clf})
 	if !enableConsoleLog {
 		handler.SetQuiet(true)
 	}
@@ -48,7 +48,7 @@ func createTestHandlerWithChallenge() *server.Handler {
 	collector := fingerprint.NewCollector()
 	clf := classifier.New(classifier.DefaultConfig())
 	store := server.NewChallengeStore(2 * time.Minute)
-	handler := server.NewHandler(collector, clf, nil, store)
+	handler := server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: clf, ChallengeStore: store, ChallengeCookieMaxAgeSec: 120})
 	handler.SetQuiet(true)
 	return handler
 }
@@ -692,7 +692,7 @@ func TestChallenge_SecondRequest_SameUAAndHints_Passed(t *testing.T) {
 	}
 }
 
-// parseNonceFromSetCookie extracts the __ch_nonce value from a Set-Cookie header like "__ch_nonce=abc_def; Max-Age=30; ...".
+// parseNonceFromSetCookie extracts the __ch_nonce value from a Set-Cookie header (e.g. "__ch_nonce=abc_def; Max-Age=120; ...").
 func parseNonceFromSetCookie(setCookie string) string {
 	const prefix = "__ch_nonce="
 	for _, part := range strings.Split(setCookie, ";") {

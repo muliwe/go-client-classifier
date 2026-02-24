@@ -31,7 +31,7 @@ func TestChallengeStore_Overwrite(t *testing.T) {
 
 func TestChallengeStore_TTLExpiry(t *testing.T) {
 	now := time.Now()
-	store := &ChallengeStore{ttl: 100 * time.Millisecond, now: func() time.Time { return now }}
+	store := &memoryChallengeStore{ttl: 100 * time.Millisecond, now: func() time.Time { return now }}
 	store.Set("n", "UA")
 	ua, ok := store.Get("n")
 	if !ok || ua != "UA" {

@@ -24,6 +24,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix I: Impersonate and header-order detection](#appendix-i-impersonate-and-header-order-detection)
 - [Appendix J: Request log statistics and collection methodology](#appendix-j-request-log-statistics-and-collection-methodology)
 - [Appendix K: Client Hints behavioural challenge](#appendix-k-client-hints-behavioural-challenge)
+- [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring)
 
 ---
 
@@ -477,7 +478,7 @@ When the request is from a **trusted proxy** (X-Internal-Proxy: 1), the log also
 
 1. **HTTP/2 frame-level capture**: Not implemented in Go. HTTP/2 fingerprint is **consumed from proxy** (e.g. nginx X-FP-H2) in v0.5.0 and used in classification; SETTINGS/WINDOW_UPDATE/PRIORITY capture is done at nginx via modules. Native Go H2 frame parsing is not planned (see Phase 2, [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
 
-2. **No behavioral analysis**: Single-request classification only. No session/temporal patterns.
+2. **Behavioral analysis**: Single-request classification remains the primary decision. **Behavioral metrics are collected** (Redis, per IP and per `__ch_nonce`; sliding-window counts and timestamps) for future use — see [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring). **Scoring** based on these metrics is not yet implemented; `/debug` exposes `request_metrics` for the current request.
 
 3. **Evasion vulnerability**: Sophisticated bots can spoof headers (except Sec-Fetch-*).
 
@@ -605,14 +606,15 @@ Methodologies for cross-checking "complex" fingerprints (TLS JA3/JA4, HTTP/2, JA
 
 **Goal**: Session-level analysis for sophisticated bot detection
 
-| Task | Priority | Reference |
-|------|----------|-----------|
-| [ ] Request timing pattern analysis | High | Cloudflare signals |
-| [ ] Path access pattern clustering | Medium | - |
-| [ ] Session fingerprint consistency tracking | Medium | FP-Inconsistent [7] |
-| [ ] Mouse/keyboard event analysis (if JS available) | Low | FP-Inspector [8] |
+| Task | Priority | Reference | Status |
+|------|----------|-----------|--------|
+| [x] Request count/timestamp collection (Redis, per IP and per __ch_nonce); /debug request_metrics | High | Appendix L, Redis rate-limiting patterns | Done (v1.0.0); scoring not yet |
+| [ ] Request timing pattern analysis (inter-arrival, rate-based scoring) | High | Cloudflare signals, Cresci et al. | Planned |
+| [ ] Path access pattern clustering | Medium | - | Planned |
+| [ ] Session fingerprint consistency tracking | Medium | FP-Inconsistent [7] | Planned |
+| [ ] Mouse/keyboard event analysis (if JS available) | Low | FP-Inspector [8] | Planned |
 
-**Why**: Single-request classification is vulnerable to evasion. Behavioral patterns over sessions are harder to spoof.
+**Why**: Single-request classification is vulnerable to evasion. Behavioral patterns over sessions are harder to spoof. Redis-backed metrics (Appendix L) provide the storage for future rate and temporal analysis.
 
 ---
 
@@ -1697,7 +1699,7 @@ The practices in this appendix align with the following publications and documen
 
 ### Future work (TODOs)
 
-- **Temporal inconsistency**: Track the same client (e.g. by IP or session) across requests; flag when JA3/JA4 or H2 fingerprint changes in an implausible way (Phase 3 in roadmap).
+- **Temporal inconsistency**: Track the same client (e.g. by IP or session) across requests; flag when JA3/JA4 or H2 fingerprint changes in an implausible way (Phase 3 in roadmap). Redis metrics (Appendix L) can support session-keyed analysis when scoring from behavioral data is added.
 - **JA4 at edge**: Evaluate production use of a JA4-capable nginx module or Fingerproxy and extend JA4-based rules when X-FP-JA4 is widely available.
 - **GREASE format**: Document the exact format of X-FP-SSL-GREASED per nginx module (phuslu and others) for optional stricter parsing or anomaly detection (e.g. TLS 1.3 with empty GREASE as soft bot signal).
 - **Validation dataset**: Collect labeled traffic (browser vs bot) with X-FP-* present and measure precision/recall for the above rules; compare with commercial solutions (e.g. FP-Inconsistent-style evaluation).
@@ -1951,7 +1953,7 @@ This appendix specifies a **behavioural classifier** that uses HTTP Client Hints
      - `Accept-CH: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
      - `Critical-CH: Sec-CH-UA-Full-Version-List` (and optionally both hints; each must also appear in Vary)
      - `Vary: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
-     - `Set-Cookie: __ch_nonce=<nonce>; Max-Age=30; Secure; HttpOnly; SameSite=Lax`
+     - `Set-Cookie: __ch_nonce=<nonce>; Max-Age=<challenge_ttl_sec>; Secure; HttpOnly; SameSite=Lax` — cookie lifetime is **synchronized** with the challenge store TTL and with the behavioural metrics window for this nonce (Appendix L), so the client sends the nonce for the same period the server retains it.
 
 2. **Second request (Cookie: `__ch_nonce=<nonce>` and nonce known in store)**  
    The server retrieves the stored User-Agent for that nonce. It then checks: (1) the request’s User-Agent matches the stored value; (2) the request includes the requested Client Hint headers (e.g. `Sec-CH-UA-Full-Version-List`, `Sec-CH-UA-Platform-Version`); (3) when the stored User-Agent identifies a Chrome-, Chromium-, or Edg-based browser, the `Sec-CH-UA-Full-Version-List` header must contain the same version as in that User-Agent: exact match (e.g. `v="120.0.0.0"`) or, when the UA has a simplified major (e.g. `Chrome/145.0.0.0`), any full version with the same major (e.g. `v="145.0.7632.75"`); a different or generic version fails the check. For non–Chrome/Chromium/Edg User-Agents, the version check is skipped. If all applicable checks hold, the challenge is **passed**; otherwise (wrong UA, missing hints, version mismatch, or nonce not in store / expired) the challenge is **failed** and the result is used as a bot signal in scoring.
@@ -1977,6 +1979,69 @@ Classification and logging remain unchanged except for the addition of these cha
 - MDN Accept-CH. <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Accept-CH>.
 - Chrome: User-Agent Client Hints. <https://developer.chrome.com/docs/privacy-security/user-agent-client-hints>.
 - MDN: Client hints. <https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Client_hints>.
+
+---
+
+## Appendix L: Behavioural monitoring
+
+*Added: 2026-02*
+
+### Purpose
+
+This appendix describes the **behavioural monitoring** subsystem that collects request-level metrics by client identifier (IP address and, when present, the `__ch_nonce` cookie value) for use in future bot-detection research. The subsystem does **not** perform scoring or classification in the current specification; it only persists metrics in a shared store (Redis). The design aligns with established literature on behavioural and session-based bot detection (request rate, inter-arrival times, and session characteristics) and with Redis-based patterns for sliding-window aggregation.
+
+### Rationale and related work
+
+Bot detection increasingly combines transport and application fingerprints with **behavioural signals**. Bots tend to exhibit distinct request patterns: high request rates, regular inter-arrival times, and navigation that deviates from typical human session structure. Passive collection of such metrics allows later use in rule-based or learning-based classifiers without requiring JavaScript or active challenges.
+
+- **Request rate and volume**: Automated clients often generate high request volumes and navigate many pages in short periods; human users typically show moderate pacing (Human Security, 2025; Imperva Bad Bot Report). Rate limiting and volumetric baselines are standard in production systems (e.g. AWS WAF rate-based rules, Redis rate-limiting patterns).
+- **Inter-arrival and session structure**: On-the-fly bot detection research uses inter-arrival times and request sequences as discriminative features for real-time classification (Cresci et al., Knowledge-Based Systems, 2021). Session duration and traversal patterns are central in graph-based and hybrid approaches (BOTracle: Kadel et al., arXiv:2412.02266, 2024; BotGraph-style traversal graphs).
+- **Fingerprint consistency over time**: Evasive bots may alter fingerprints inconsistently across requests; temporal consistency of IP, nonce, and fingerprint is a useful signal (FP-Inconsistent, arXiv:2406.07647, 2024).
+- **Storage**: Redis is widely used for rate limiting and sliding-window counters (e.g. ZADD, ZREMRANGEBYSCORE, ZCARD) and provides a natural backend for shared state across multiple server instances (Redis.io rate-limiting patterns; antirez fundamental rate-limiting).
+
+By collecting metrics keyed by **IP** and by **`__ch_nonce`** (when present), we support both IP-based rate and session analysis and nonce-based consistency checks (e.g. one nonce used by many distinct IPs or many User-Agents), without committing to a specific scoring model in this appendix.
+
+### Metrics collected
+
+Metrics are updated asynchronously (non-blocking) on each classified request when Redis is configured. No metrics are collected when Redis is not in use.
+
+**Essence of the collected metrics.** The subsystem records, for each *entity* (a client IP or a `__ch_nonce` cookie value), a **time series of request timestamps** within a configurable sliding window. Each stored value is the time of one classified request; no payload, path, or header content is stored. From this series one can derive: (1) **request rate** (e.g. requests per minute) as the count of timestamps in the window; (2) **inter-arrival statistics** (gaps between consecutive requests), which discriminate regular or bursty patterns typical of automation (Cresci et al., 2021); (3) **session-like scope** when keyed by nonce, tying multiple requests to the same client hint binding. Thus the metrics are purely **behavioural and volumetric**: they describe *when* and *how often* requests occur per identifier, not *what* was requested. This design supports future use in rate-based rules, inter-arrival features, and consistency checks (e.g. one nonce used from many IPs) without storing sensitive or application-level data.
+
+| Dimension | Description |
+|-----------|-------------|
+| **Per client IP** | Client IP is taken from the same logic as logging (X-Real-IP, first element of X-Forwarded-For when trusted proxy, else RemoteAddr). |
+| **Per `__ch_nonce`** | When the request includes a `__ch_nonce` cookie, the same metrics are also keyed by that cookie value. |
+
+**Stored quantities (conceptual):**
+
+- **Request count in a sliding window**: For each entity (IP or nonce), a sorted set of request timestamps (score = Unix time in milliseconds) is maintained. Old entries are removed outside the window (e.g. 60 s or 300 s); the cardinality after trim gives the request count in that window. This supports rate-based and volumetric features used in the literature.
+- **Last-N timestamps**: The same or a separate structure retains the last K request times per entity to allow computation of inter-arrival statistics (e.g. min/mean/std of gaps between requests) for future use in classifiers that exploit timing regularity (Cresci et al., 2021).
+- **TTL**: Keys are given an expiration (e.g. 24 h for IP, 2× challenge TTL for nonce) to bound memory and focus on recent behaviour.
+
+Exact key names, window lengths, and TTLs are implementation-defined and documented in the deployment and configuration guides (e.g. `docs/deploy/README.md`, `config/README.md`). The session/window length for sliding-window request counts is configurable via `REDIS_METRICS_WINDOW_SEC` (default 300 seconds).
+
+### Storage (Redis)
+
+- **Backend**: Redis 6+ (single instance or managed/Sentinel as provided).
+- **Key schema (example)**: `metrics:ip:<ip>:req`, `metrics:nonce:<nonce>:req` — sorted sets with score = timestamp, member = request id or timestamp string. Optional keys for “last K” or secondary windows may be added by implementation.
+- **Operations**: For each request, pipeline or Lua: ZREMRANGEBYSCORE (trim old), ZADD (current time), EXPIRE. Failures are logged; request classification is unaffected.
+- **Challenge (nonce) store**: The same Redis instance may be used for the Client Hints challenge store (nonce → User-Agent with TTL). Key pattern e.g. `ch:nonce:<nonce>`. See deployment README and Appendix K.
+
+### Scope and limitations
+
+- **No scoring**: This appendix defines only collection and storage. Integration of these metrics into the classifier (e.g. score weights or thresholds) is out of scope here.
+- **Best-effort**: Metric updates are best-effort; backpressure or Redis unavailability must not change classification or response.
+- **Privacy and retention**: Operators should configure TTLs and key scope in line with data retention and privacy policy.
+
+### References (Appendix L)
+
+- BOTracle: J. Kadel, R. A. See, R. Sinha, M. Fischer, “BOTracle: A framework for Discriminating Bots and Humans,” arXiv:2412.02266, 2024. <https://arxiv.org/abs/2412.02266>.
+- S. Cresci et al., “Efficient on-the-fly Web bot detection,” Knowledge-Based Systems, 2021. <https://www.sciencedirect.com/science/article/pii/S0950705121003373>.
+- FP-Inconsistent: “Measurement and Analysis of Fingerprint Inconsistencies in Evasive Bot Traffic,” arXiv:2406.07647, 2024. <https://arxiv.org/abs/2406.07647>.
+- Data-driven human and bot recognition from web activity logs (hybrid learning), ScienceDirect, 2023. <https://www.sciencedirect.com/science/article/pii/S2352864823000330>.
+- Redis rate limiting: “How to Implement Rate Limiting in Redis,” Redis.io. Sliding window log (ZADD, ZREMRANGEBYSCORE, ZCARD). <https://redis.io/docs/manual/patterns/rate-limiting/>.
+- Human Security, “Bot Detection Guide,” 2025. <https://humansecurity.com/learn/topics/what-is-bot-detection>.
+- Imperva, “Bad Bot Report,” 2025. <https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf>.
 
 ---
 

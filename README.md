@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 0.10.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 1.0.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -42,6 +42,8 @@ Create a single HTTP endpoint that classifies clients as `browser` or `bot` base
 
 **Phase 3** — Inconsistency detection: spatial (JA4H vs HTTP, TLS/HTTP version mismatch) in place. *Planned*: temporal inconsistency (same client, changing FPs), header–UA validation. See [Methodology → Phase 3](docs/METHODOLOGY.md#phase-3-fingerprint-inconsistency-detection).
 
+**Redis & behavioural (Appendix L)** — Optional Redis (`REDIS_URL`): (1) **Challenge store** — nonce→User-Agent stored in Redis so multiple instances share state; (2) **Behavioural metrics** — request counts and timestamps per IP and per `__ch_nonce` (sliding window); collection only, no scoring yet. **`/debug`** returns **`request_metrics`** for the current request (IP and nonce counts in window). See [docs/deploy/README.md](docs/deploy/README.md), [Methodology Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring), [config/README.md](config/README.md#redis-challenge-store-and-behavioural-metrics).
+
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Architecture
@@ -74,7 +76,8 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 │   ├── fingerprint/     # TLS/HTTP signal collection
 │   ├── classifier/      # Rule-based classification
 │   ├── logger/          # Structured JSON logging
-│   └── server/          # HTTP handlers
+│   ├── metrics/         # Behavioral metrics (Redis: per IP, per __ch_nonce; Appendix L)
+│   └── server/          # HTTP handlers (challenge store, Redis wiring)
 ├── config/              # Scoring config (scoring.json, scoring.default.json, README)
 ├── tests/
 │   ├── integration/     # Automated client tests
@@ -430,6 +433,10 @@ Environment=TLS_PORT=8443
 Environment=TLS_CERT=/opt/go-client-classifier/certs/server.crt
 Environment=TLS_KEY=/opt/go-client-classifier/certs/server.key
 
+# Optional: Redis — challenge store + behavioural metrics (Appendix L). If unset, challenge store is in-memory and metrics are not collected.
+# Environment=REDIS_URL=redis://127.0.0.1:6379/0
+# Environment=CHALLENGE_TTL_SEC=120
+
 # Optional: enable PROXY protocol on TLS port (when nginx stream uses proxy_protocol on → real client IP in logs)
 # Environment=PROXY_PROTOCOL=1
 
@@ -441,6 +448,22 @@ LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
+```
+
+**Redis (optional)** — If you use `REDIS_URL`, ensure Redis is running. Check and install:
+
+```bash
+# Check: expect PONG
+redis-cli ping
+
+# Install if missing (Debian/Ubuntu)
+command -v redis-server >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y redis-server
+# Or RHEL/Rocky/Fedora
+command -v redis-server >/dev/null 2>&1 || sudo dnf install -y redis && sudo systemctl enable --now redis
+
+# After install: ensure it runs and responds (service name: redis on RHEL/Ubuntu 24+, redis-server on older Debian/Ubuntu)
+sudo systemctl enable --now redis 2>/dev/null || sudo systemctl enable --now redis-server
+redis-cli ping
 ```
 
 Replace `User=deploy` and `Group=deploy` with the user and group that should run the service. Ensure that user can read the binary, `certs/`, and write to `logs/` (e.g. `chown -R deploy:deploy /opt/go-client-classifier`).

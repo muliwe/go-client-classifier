@@ -126,7 +126,7 @@ The server can run a behavioural challenge using HTTP Client Hints (Accept-CH, C
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `challenge_ttl_sec` | 120 | Default TTL (seconds) for the nonce→User-Agent store. |
+| `challenge_ttl_sec` | 120 | Default TTL (seconds) for the nonce→User-Agent store. Also sets the `__ch_nonce` cookie **Max-Age** and (when Redis is used) the TTL for nonce behavioural metrics keys, so cookie lifetime and nonce analysis window are synchronized. |
 
 **Server / environment:**
 
@@ -136,3 +136,22 @@ The server can run a behavioural challenge using HTTP Client Hints (Accept-CH, C
 | `CHALLENGE_TTL_SEC` | Overrides `challenge_ttl_sec` from config (e.g. `120`). |
 
 **Signals (in API/debug output):** `ch_challenge_passed`, `ch_challenge_failed` — set when the challenge was applicable (non-empty JA4H C/D and store configured).
+
+---
+
+## Redis (challenge store and behavioural metrics)
+
+When **`REDIS_URL`** is set (e.g. `redis://localhost:6379/0`), the server uses Redis for both the challenge (nonce) store and behavioural metrics collection. **The in-memory nonce store is not used** in this case; the single source of truth is Redis. This design supports load-balanced deployments where all instances share the same nonce state. References: [METHODOLOGY.md Appendix L](../docs/METHODOLOGY.md#appendix-l-behavioural-monitoring); Redis rate-limiting patterns (Redis.io); BOTracle (Kadel et al., arXiv:2412.02266).
+
+1. **Challenge (nonce) store** — The nonce → User-Agent mapping is stored in Redis. Key pattern: `{REDIS_CHALLENGE_PREFIX}:nonce:<nonce>` (default prefix `ch`). TTL follows `CHALLENGE_TTL_SEC` / `challenge_ttl_sec`.
+2. **Behavioural metrics** — Per client IP and per `__ch_nonce` (when present), request timestamps are recorded in Redis sorted sets for future use in rate-based and inter-arrival features (Cresci et al., Knowledge-Based Systems, 2021). No scoring is performed in the current release. See [METHODOLOGY.md Appendix L](../docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) and [docs/deploy/README.md](../docs/deploy/README.md).
+
+**Environment:**
+
+| Env | Description |
+|-----|-------------|
+| `REDIS_URL` | Redis connection URL. If unset, challenge store is in-memory and behavioural metrics are not collected. |
+| `REDIS_CHALLENGE_PREFIX` | Key prefix for nonce keys (default `ch`). Example: `ch:nonce:<nonce>`. |
+| `REDIS_METRICS_PREFIX` | Key prefix for behavioural metrics keys (default `metrics`). Example: `metrics:ip:<ip>:req`. |
+| `REDIS_METRICS_TTL_SEC` | TTL in seconds for metrics keys (e.g. 86400 for 24h for IP keys). Default 86400. |
+| `REDIS_METRICS_WINDOW_SEC` | Sliding-window length in seconds for request-count aggregation (e.g. 60 or 300). Default 300. Aligns with session/window used for rate and inter-arrival features. |

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/muliwe/go-client-classifier/internal/config"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 	"github.com/muliwe/go-client-classifier/internal/server"
@@ -73,6 +75,21 @@ func main() {
 		}
 	}
 
+	// Redis: when REDIS_URL is set, challenge store and metrics use Redis (see METHODOLOGY.md Appendix L).
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		opts, err := redis.ParseURL(redisURL)
+		if err != nil {
+			log.Fatalf("Invalid REDIS_URL: %v", err)
+		}
+		cfg.Redis = &server.RedisConfig{
+			Client:           redis.NewClient(opts),
+			ChallengePrefix:  envOrDefault("REDIS_CHALLENGE_PREFIX", "ch"),
+			MetricsPrefix:    envOrDefault("REDIS_METRICS_PREFIX", "metrics"),
+			MetricsTTLSec:    envIntOrDefault("REDIS_METRICS_TTL_SEC", 86400),
+			MetricsWindowSec: envIntOrDefault("REDIS_METRICS_WINDOW_SEC", 300),
+		}
+	}
+
 	srv, err := server.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
@@ -81,4 +98,20 @@ func main() {
 	if err := srv.Start(); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+func envOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+func envIntOrDefault(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return defaultVal
 }
