@@ -2089,21 +2089,21 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 
 **Occasional observation: cohort distributions (small sample, ip_derived only)**
 
-Output of `request_log_stats_by_class.py` on a small log: **18** in cohort ALL (11 bot, 7 browser). Of those 18, not all have request_metrics (e.g. single requests); **13** do (**7** BOT + **6** BROWSER). All metrics are **ip_derived** (IP-only; nonce not used). The script reports min, max, mean, median, p05, p50, p95 over per-request values; the table below gives **p05 — p50 — p95** to show both tails and centre.
+Output of `request_log_stats_by_class.py` on a small log: **27** in cohort ALL (20 bot, 7 browser). Of those 27, not all have request_metrics (e.g. single requests); **21** do (**15** BOT + **6** BROWSER). All metrics are **ip_derived** (IP-only; nonce not used). The script reports min, max, mean, median, p05, p50, p95 over per-request values; the table below gives **p05 — p50 — p95** to show both tails and centre.
 
-| Metric | ALL, n=13 | BOT, n=7 | BROWSER, n=6 |
-|--------|------------|----------|--------------|
-| ip_request_count | 1.0 — 3.0 — 12.8 | 2.6 — 8.0 — 13.4 | 1.0 — 1.0 — 3.0 |
-| request_rate_per_min | 0.2 — 0.6 — 2.56 | 0.52 — 1.6 — 2.68 | 0.2 — 0.2 — 0.6 |
-| inter_arrival_median_sec | 0.371 — 0.5 — 5.571 | 0.371 — 0.427 — 0.632 | 4.638 — 5.571 — 5.571 |
-| inter_arrival_mean_sec | 0.535 — 0.671 — 5.571 | 0.534 — 0.568 — 0.691 | 4.638 — 5.571 — 5.571 |
-| inter_arrival_std_sec | 0.228 — 0.668 — 7.692 | 0.228 — 0.616 — 0.772 | 7.692 — 7.692 — 7.692 |
-| inter_arrival_min_sec | 0.088 — 0.153 — 2.71 | 0.088 — 0.153 — 0.448 | 0.132 — 0.132 — 4.094 |
-| inter_arrival_max_sec | 0.897 — 2.55 — 11.01 | 0.897 — 2.55 — 2.55 | 5.182 — 11.01 — 11.01 |
+| Metric | ALL, n=21 | BOT, n=15 | BROWSER, n=6 |
+|--------|------------|-----------|--------------|
+| ip_request_count | 1.0 — 5.0 — 14.0 | 1.7 — 8.0 — 14.3 | 1.0 — 1.0 — 3.0 |
+| request_rate_per_min | 0.2 — 1.0 — 2.8 | 0.34 — 1.6 — 2.86 | 0.2 — 0.2 — 0.6 |
+| inter_arrival_median_sec | 0.373 — 0.427 — 5.571 | 0.372 — 0.373 — 0.571 | 4.638 — 5.571 — 5.571 |
+| inter_arrival_mean_sec | 0.435 — 0.575 — 5.571 | 0.433 — 0.568 — 0.69 | 4.638 — 5.571 — 5.571 |
+| inter_arrival_std_sec | 0.228 — 0.628 — 7.692 | 0.228 — 0.616 — 0.758 | 7.692 — 7.692 — 7.692 |
+| inter_arrival_min_sec | 0.088 — 0.153 — 1.088 | 0.088 — 0.153 — 0.48 | 0.132 — 0.132 — 4.094 |
+| inter_arrival_max_sec | 0.834 — 2.55 — 11.01 | 0.772 — 2.55 — 2.55 | 5.182 — 11.01 — 11.01 |
 
 (Cell format: **p05 — p50 — p95**.)
 
-**Analysis:** In this sample, **BOT** traffic exhibits **narrow inter-arrival intervals** (p05–p95 for mean: 0.53–0.69 s, for max: 2.55 s) and a **higher request rate** (p50: 1.6/min, p95: 2.68/min), reflecting short and regular request spacing. **BROWSER** traffic shows **longer inter-arrival gaps** (median/mean p50: 5.57 s, max p50: 11.01 s) and a **lower request rate** (p50: 0.2/min, p95: 0.6/min); with six browser records with metrics, the spread is still narrow for this cohort (e.g. inter_arrival_std_sec constant at 7.69 s). The **ALL** cohort mixes both: p50 aligns with bot-like rates and short gaps, while p95 is pulled up by browser-like long intervals (5.57 s, 11.01 s). At the IP level, this run illustrates that **bots tend to have denser, more regular request patterns**, whereas **browsers tend to have fewer requests and longer inter-arrival gaps**. Cohort distributions will vary by dataset; calibration over a broader log is recommended.
+**Analysis:** In this sample, **BOT** traffic exhibits **narrow inter-arrival intervals** (p05–p95 for mean: 0.43–0.69 s, for max: 2.55 s) and a **higher request rate** (p50: 1.6/min, p95: 2.86/min), reflecting short and regular request spacing. **BROWSER** traffic shows **longer inter-arrival gaps** (median/mean p50: 5.57 s, max p50: 11.01 s) and a **lower request rate** (p50: 0.2/min, p95: 0.6/min); with six browser records with metrics, the spread stays narrow for this cohort (e.g. inter_arrival_std_sec constant at 7.69 s). The **ALL** cohort mixes both: p50 aligns with bot-like rates and short gaps, while p95 is pulled up by browser-like long intervals (5.57 s, 11.01 s). At the IP level, this run illustrates that **bots tend to have denser, more regular request patterns**, whereas **browsers tend to have fewer requests and longer inter-arrival gaps**. Cohort distributions will vary by dataset; calibration over a broader log is recommended.
 
 **Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort numbers (BOT: ~1.6/min, 0.5–0.7 s gaps; BROWSER: ~0.2–0.4/min, ~5.6–11 s gaps) are **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
 

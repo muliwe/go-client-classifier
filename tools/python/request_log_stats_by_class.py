@@ -110,16 +110,46 @@ def _percentile(sorted_values: list[float], p: float) -> float | None:
     return sorted_values[lo] * (1 - (k - lo)) + sorted_values[hi] * (k - lo)
 
 
-def compute_ip_metrics_stats(records: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Build ip_metrics_stats from records that have request_metrics with ip_request_count or ip_derived."""
+def _has_any_ip_metric(rm: dict[str, Any]) -> bool:
+    """True if request_metrics has at least one numeric metric (ip_request_count or any value in ip_derived)."""
+    if "ip_request_count" in rm and isinstance(rm.get("ip_request_count"), (int, float)):
+        return True
+    ipd = rm.get("ip_derived")
+    if isinstance(ipd, dict):
+        for v in ipd.values():
+            if isinstance(v, (int, float)):
+                return True
+    return False
+
+
+def compute_ip_metrics_stats(
+    records: list[dict[str, Any]],
+    *,
+    debug_reject: bool = False,
+) -> dict[str, Any] | None:
+    """Build ip_metrics_stats from records that have request_metrics with at least one ip metric."""
     values_by_key: dict[str, list[float]] = {}
     n_with_metrics = 0
-    for r in records:
+    for i, r in enumerate(records):
         rm = r.get("request_metrics")
         if not rm or not isinstance(rm, dict):
+            if debug_reject and r.get("request_metrics") is not None:
+                print(
+                    f"[debug] record {i}: request_metrics is not a dict: {type(rm).__name__!r}",
+                    file=sys.stderr,
+                )
             continue
-        has_ip = "ip_request_count" in rm or (isinstance(rm.get("ip_derived"), dict) and rm["ip_derived"])
-        if not has_ip:
+        if not _has_any_ip_metric(rm):
+            if debug_reject:
+                ip_count = rm.get("ip_request_count")
+                ipd = rm.get("ip_derived")
+                print(
+                    f"[debug] record {i}: rejected (no numeric ip metric). "
+                    f"ip_request_count={ip_count!r} (type={type(ip_count).__name__}), "
+                    f"ip_derived={ipd!r} (type={type(ipd).__name__}); "
+                    f"ip_derived values types={[type(v).__name__ for v in (ipd or {}).values()]!r}",
+                    file=sys.stderr,
+                )
             continue
         n_with_metrics += 1
         if "ip_request_count" in rm and isinstance(rm["ip_request_count"], (int, float)):
@@ -198,6 +228,11 @@ def main() -> int:
         action="store_true",
         help="Disable progress bar on stderr",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print to stderr request_metrics that are rejected (no numeric ip metric)",
+    )
     args = parser.parse_args()
 
     file_paths = iter_files_by_globs(args.globs)
@@ -229,9 +264,14 @@ def main() -> int:
     records_bot = [r for r in records_all if r.get("classification") == "bot"]
     records_browser = [r for r in records_all if r.get("classification") == "browser"]
 
-    stats_all = {"total": len(records_all), "ip_metrics_stats": compute_ip_metrics_stats(records_all)}
-    stats_bot = {"total": len(records_bot), "ip_metrics_stats": compute_ip_metrics_stats(records_bot)}
-    stats_browser = {"total": len(records_browser), "ip_metrics_stats": compute_ip_metrics_stats(records_browser)}
+    debug_reject = args.debug
+    stats_all = {"total": len(records_all), "ip_metrics_stats": compute_ip_metrics_stats(records_all, debug_reject=debug_reject)}
+    if debug_reject:
+        print("[debug] --- ALL cohort done ---", file=sys.stderr)
+    stats_bot = {"total": len(records_bot), "ip_metrics_stats": compute_ip_metrics_stats(records_bot, debug_reject=debug_reject)}
+    if debug_reject:
+        print("[debug] --- BOT cohort done ---", file=sys.stderr)
+    stats_browser = {"total": len(records_browser), "ip_metrics_stats": compute_ip_metrics_stats(records_browser, debug_reject=debug_reject)}
 
     if args.format == "text":
         lines = []
