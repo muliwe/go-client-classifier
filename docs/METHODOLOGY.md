@@ -2082,6 +2082,7 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 | inter_arrival_median_sec | 0.201 | 0.383 |
 | inter_arrival_mean_sec | 3.292 | 0.787 |
 | inter_arrival_std_sec | 9.176 | 1.017 |
+| inter_arrival_std_per_mean | 0.851 | 1.381 |
 | inter_arrival_min_sec | 0.05 | 0.124 |
 | inter_arrival_max_sec | 38.092 | 3.444 |
 

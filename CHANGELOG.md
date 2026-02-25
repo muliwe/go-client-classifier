@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Request log stats by class and METHODOLOGY cohort observation
 
-- **request_log_stats_by_class.py**: New Python tool that outputs request-log statistics **by cohort** (all / bot / browser). Reads JSON or JSONL; optionally excludes stress tests from the "all" cohort. For each cohort reports distribution of request_metrics (ip_request_count, ip_derived: min/mean/median/p05/p50/p95/max). Reuses aggregation and formatting from request_log_stats.py. Options: same as request_log_stats plus `--no-progress`. Text output: three sections (ALL, BOT, BROWSER); JSON: `{"all": {...}, "bot": {...}, "browser": {...}}`.
+- **request_log_stats_by_class.py**: New Python tool that outputs request-log statistics **by cohort** (all / bot / browser). Reads JSON or JSONL; optionally excludes stress tests from the "all" cohort. For each cohort reports distribution of request_metrics (ip_request_count, ip_derived: min/mean/median/p05/p50/p95/max/std/std_rel). Reuses aggregation and formatting from request_log_stats.py. Options: same as request_log_stats plus `--no-progress`. Text output: three sections (ALL, BOT, BROWSER); JSON: `{"all": {...}, "bot": {...}, "browser": {...}}`.
 - **tools/python/README.md**: Documented request_log_stats_by_class.py (usage, examples, options).
 - **METHODOLOGY Appendix L**: New subsection "Occasional observation: cohort distributions (small sample, ip_derived only)" with example output of request_log_stats_by_class.py (p05—p50—p95 table for ALL/BOT/BROWSER), analysis of bot vs browser patterns in the sample, and comparison with 2025–2026 literature (Imperva, F5, BOTracle, Cresci et al., Cloudflare).
 

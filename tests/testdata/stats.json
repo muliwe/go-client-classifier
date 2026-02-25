@@ -1,0 +1,236 @@
+{
+  "all": {
+    "total": 27,
+    "ip_metrics_stats": {
+      "records_with_ip_metrics": 21,
+      "ip_request_count": {
+        "min": 1.0,
+        "max": 15.0,
+        "mean": 6.19,
+        "median": 5.0,
+        "p05": 1.0,
+        "p50": 5.0,
+        "p95": 14.0
+      },
+      "request_rate_per_min": {
+        "min": 0.2,
+        "max": 3.0,
+        "mean": 1.238,
+        "median": 1.0,
+        "p05": 0.2,
+        "p50": 1.0,
+        "p95": 2.8
+      },
+      "inter_arrival_median_sec": {
+        "min": 0.37,
+        "max": 5.571,
+        "mean": 1.233,
+        "median": 0.427,
+        "p05": 0.373,
+        "p50": 0.427,
+        "p95": 5.571
+      },
+      "inter_arrival_mean_sec": {
+        "min": 0.427,
+        "max": 5.571,
+        "mean": 1.342,
+        "median": 0.575,
+        "p05": 0.435,
+        "p50": 0.575,
+        "p95": 5.571
+      },
+      "inter_arrival_std_sec": {
+        "min": 0.228,
+        "max": 7.692,
+        "mean": 1.397,
+        "median": 0.628,
+        "p05": 0.228,
+        "p50": 0.628,
+        "p95": 7.692
+      },
+      "inter_arrival_min_sec": {
+        "min": 0.088,
+        "max": 4.534,
+        "mean": 0.459,
+        "median": 0.153,
+        "p05": 0.088,
+        "p50": 0.153,
+        "p95": 1.088
+      },
+      "inter_arrival_max_sec": {
+        "min": 0.48,
+        "max": 11.01,
+        "mean": 2.934,
+        "median": 2.55,
+        "p05": 0.834,
+        "p50": 2.55,
+        "p95": 11.01
+      },
+      "inter_arrival_std_per_mean": {
+        "min": 0.364,
+        "max": 1.381,
+        "mean": 0.934,
+        "median": 1.149,
+        "p05": 0.392,
+        "p50": 1.149,
+        "p95": 1.381
+      }
+    }
+  },
+  "bot": {
+    "total": 20,
+    "ip_metrics_stats": {
+      "records_with_ip_metrics": 15,
+      "ip_request_count": {
+        "min": 1.0,
+        "max": 15.0,
+        "mean": 8.0,
+        "median": 8.0,
+        "p05": 1.7,
+        "p50": 8.0,
+        "p95": 14.3
+      },
+      "request_rate_per_min": {
+        "min": 0.2,
+        "max": 3.0,
+        "mean": 1.6,
+        "median": 1.6,
+        "p05": 0.34,
+        "p50": 1.6,
+        "p95": 2.86
+      },
+      "inter_arrival_median_sec": {
+        "min": 0.37,
+        "max": 0.689,
+        "mean": 0.435,
+        "median": 0.373,
+        "p05": 0.372,
+        "p50": 0.373,
+        "p95": 0.571
+      },
+      "inter_arrival_mean_sec": {
+        "min": 0.427,
+        "max": 0.692,
+        "mean": 0.565,
+        "median": 0.568,
+        "p05": 0.433,
+        "p50": 0.568,
+        "p95": 0.69
+      },
+      "inter_arrival_min_sec": {
+        "min": 0.088,
+        "max": 0.48,
+        "mean": 0.23,
+        "median": 0.153,
+        "p05": 0.088,
+        "p50": 0.153,
+        "p95": 0.48
+      },
+      "inter_arrival_max_sec": {
+        "min": 0.48,
+        "max": 2.55,
+        "mean": 1.751,
+        "median": 2.55,
+        "p05": 0.772,
+        "p50": 2.55,
+        "p95": 2.55
+      },
+      "inter_arrival_std_sec": {
+        "min": 0.228,
+        "max": 0.785,
+        "mean": 0.498,
+        "median": 0.616,
+        "p05": 0.228,
+        "p50": 0.616,
+        "p95": 0.758
+      },
+      "inter_arrival_std_per_mean": {
+        "min": 0.364,
+        "max": 1.232,
+        "mean": 0.87,
+        "median": 1.135,
+        "p05": 0.388,
+        "p50": 1.135,
+        "p95": 1.207
+      }
+    }
+  },
+  "browser": {
+    "total": 7,
+    "ip_metrics_stats": {
+      "records_with_ip_metrics": 6,
+      "ip_request_count": {
+        "min": 1.0,
+        "max": 3.0,
+        "mean": 1.667,
+        "median": 1.0,
+        "p05": 1.0,
+        "p50": 1.0,
+        "p95": 3.0
+      },
+      "request_rate_per_min": {
+        "min": 0.2,
+        "max": 0.6,
+        "mean": 0.333,
+        "median": 0.2,
+        "p05": 0.2,
+        "p50": 0.2,
+        "p95": 0.6
+      },
+      "inter_arrival_median_sec": {
+        "min": 4.534,
+        "max": 5.571,
+        "mean": 5.225,
+        "median": 5.571,
+        "p05": 4.638,
+        "p50": 5.571,
+        "p95": 5.571
+      },
+      "inter_arrival_mean_sec": {
+        "min": 4.534,
+        "max": 5.571,
+        "mean": 5.225,
+        "median": 5.571,
+        "p05": 4.638,
+        "p50": 5.571,
+        "p95": 5.571
+      },
+      "inter_arrival_std_sec": {
+        "min": 7.692,
+        "max": 7.692,
+        "mean": 7.692,
+        "median": 7.692,
+        "p05": 7.692,
+        "p50": 7.692,
+        "p95": 7.692
+      },
+      "inter_arrival_min_sec": {
+        "min": 0.132,
+        "max": 4.534,
+        "mean": 1.599,
+        "median": 0.132,
+        "p05": 0.132,
+        "p50": 0.132,
+        "p95": 4.094
+      },
+      "inter_arrival_max_sec": {
+        "min": 4.534,
+        "max": 11.01,
+        "mean": 8.851,
+        "median": 11.01,
+        "p05": 5.182,
+        "p50": 11.01,
+        "p95": 11.01
+      },
+      "inter_arrival_std_per_mean": {
+        "min": 1.381,
+        "max": 1.381,
+        "mean": 1.381,
+        "median": 1.381,
+        "p05": 1.381,
+        "p50": 1.381,
+        "p95": 1.381
+      }
+    }
+  }
+}
