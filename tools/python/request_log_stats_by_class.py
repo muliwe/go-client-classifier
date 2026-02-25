@@ -17,13 +17,29 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Iterator
 
 from tqdm import tqdm
 
-from request_log_stats import aggregate, extract_record
+
+def extract_record(rec: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract classification, path, user_agent and request_metrics from one log record. Standalone extractor."""
+    classification = (rec.get("classification") or "").strip().lower()
+    if classification not in ("bot", "browser"):
+        return None
+    http = (rec.get("fingerprint") or {}).get("http") or {}
+    path = (http.get("path") or "").strip() or "/"
+    user_agent = (http.get("user_agent") or "").strip()
+    request_metrics = rec.get("request_metrics")
+    return {
+        "classification": classification,
+        "path": path,
+        "user_agent": user_agent,
+        "request_metrics": request_metrics,
+    }
 
 
 def iter_files_by_globs(globs: list[str]) -> list[Path]:
@@ -64,9 +80,8 @@ def load_all_records(
     file_paths: list[Path],
     progress: bool = True,
 ) -> list[dict[str, Any]]:
-    """Load and extract valid records from all files. Returns list of extracted records (same format as request_log_stats)."""
+    """Load and extract valid records from all files. Uses local extract_record."""
     records: list[dict[str, Any]] = []
-    skipped_invalid = 0
     skipped_class = 0
     iterator = file_paths
     if progress:
@@ -81,6 +96,57 @@ def load_all_records(
     if skipped_class:
         print(f"Warning: skipped {skipped_class} record(s) with classification not bot/browser.", file=sys.stderr)
     return records
+
+
+def _percentile(sorted_values: list[float], p: float) -> float | None:
+    """Return percentile p (0..100) of sorted_values, or None if empty."""
+    if not sorted_values:
+        return None
+    k = (len(sorted_values) - 1) * p / 100.0
+    lo = int(math.floor(k))
+    hi = int(math.ceil(k))
+    if lo == hi:
+        return sorted_values[lo]
+    return sorted_values[lo] * (1 - (k - lo)) + sorted_values[hi] * (k - lo)
+
+
+def compute_ip_metrics_stats(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Build ip_metrics_stats from records that have request_metrics with ip_request_count or ip_derived."""
+    values_by_key: dict[str, list[float]] = {}
+    n_with_metrics = 0
+    for r in records:
+        rm = r.get("request_metrics")
+        if not rm or not isinstance(rm, dict):
+            continue
+        has_ip = "ip_request_count" in rm or (isinstance(rm.get("ip_derived"), dict) and rm["ip_derived"])
+        if not has_ip:
+            continue
+        n_with_metrics += 1
+        if "ip_request_count" in rm and isinstance(rm["ip_request_count"], (int, float)):
+            values_by_key.setdefault("ip_request_count", []).append(float(rm["ip_request_count"]))
+        ipd = rm.get("ip_derived")
+        if isinstance(ipd, dict):
+            for k, v in ipd.items():
+                if isinstance(v, (int, float)):
+                    values_by_key.setdefault(k, []).append(float(v))
+    if n_with_metrics == 0:
+        return None
+    out: dict[str, Any] = {"records_with_ip_metrics": n_with_metrics}
+    for key, vals in values_by_key.items():
+        if not vals:
+            continue
+        sorted_vals = sorted(vals)
+        n = len(sorted_vals)
+        out[key] = {
+            "min": round(min(vals), 3),
+            "max": round(max(vals), 3),
+            "mean": round(sum(vals) / n, 3),
+            "median": round(_percentile(sorted_vals, 50) or 0, 3),
+            "p05": round(_percentile(sorted_vals, 5) or 0, 3),
+            "p50": round(_percentile(sorted_vals, 50) or 0, 3),
+            "p95": round(_percentile(sorted_vals, 95) or 0, 3),
+        }
+    return out
 
 
 STRESS_PATHS = ("/", "/health", "/debug")
@@ -146,7 +212,10 @@ def main() -> int:
         records_all = [
             r
             for r in records
-            if not (r.get("user_agent") == "go-http-client" and r.get("path") in STRESS_PATHS)
+            if not (
+                "go-http-client" in (r.get("user_agent") or "").lower()
+                and r.get("path") in STRESS_PATHS
+            )
         ]
         excluded = before - len(records_all)
         if excluded:
@@ -160,9 +229,9 @@ def main() -> int:
     records_bot = [r for r in records_all if r.get("classification") == "bot"]
     records_browser = [r for r in records_all if r.get("classification") == "browser"]
 
-    stats_all = aggregate(records_all, sort_by="count", filter_significance=True)
-    stats_bot = aggregate(records_bot, sort_by="count", filter_significance=True)
-    stats_browser = aggregate(records_browser, sort_by="count", filter_significance=True)
+    stats_all = {"total": len(records_all), "ip_metrics_stats": compute_ip_metrics_stats(records_all)}
+    stats_bot = {"total": len(records_bot), "ip_metrics_stats": compute_ip_metrics_stats(records_bot)}
+    stats_browser = {"total": len(records_browser), "ip_metrics_stats": compute_ip_metrics_stats(records_browser)}
 
     if args.format == "text":
         lines = []
@@ -172,15 +241,15 @@ def main() -> int:
             ("BROWSER", stats_browser),
         ]:
             lines.append(f"=== {label} ===")
-            lines.append(f"  total: {stats['summary']['total']}")
+            lines.append(f"  total: {stats['total']}")
             lines.append(_format_ip_metrics_text(stats.get("ip_metrics_stats")))
             lines.append("")
         text = "\n".join(lines).rstrip()
     else:
         out = {
-            "all": {"total": stats_all["summary"]["total"], "ip_metrics_stats": stats_all.get("ip_metrics_stats")},
-            "bot": {"total": stats_bot["summary"]["total"], "ip_metrics_stats": stats_bot.get("ip_metrics_stats")},
-            "browser": {"total": stats_browser["summary"]["total"], "ip_metrics_stats": stats_browser.get("ip_metrics_stats")},
+            "all": {"total": stats_all["total"], "ip_metrics_stats": stats_all.get("ip_metrics_stats")},
+            "bot": {"total": stats_bot["total"], "ip_metrics_stats": stats_bot.get("ip_metrics_stats")},
+            "browser": {"total": stats_browser["total"], "ip_metrics_stats": stats_browser.get("ip_metrics_stats")},
         }
         text = json.dumps(out, indent=2, ensure_ascii=False)
 
