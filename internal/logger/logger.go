@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/metrics"
 )
 
-// LogEntry represents a single log entry
+// LogEntry represents a single log entry. Must mirror /debug: classification, score, reason, confidence, request_id, timestamp, fingerprint, signals, challenge_state, request_metrics (Appendix J + L). Console log is separate and must not contain this payload.
 type LogEntry struct {
 	Timestamp      time.Time               `json:"timestamp"`
 	RequestID      string                  `json:"request_id"`
@@ -24,6 +25,8 @@ type LogEntry struct {
 	Score          int                     `json:"score"`
 	Reason         string                  `json:"reason"`
 	ResponseTimeMs int64                   `json:"response_time_ms"`
+	ChallengeState interface{}             `json:"challenge_state,omitempty"` // same shape as /debug challenge_state (Client Hints store state)
+	RequestMetrics *metrics.RequestMetrics `json:"request_metrics,omitempty"`
 }
 
 // Logger handles structured JSON logging
@@ -146,8 +149,8 @@ func (l *Logger) Log(entry LogEntry) error {
 	return l.encoder.Encode(entry)
 }
 
-// LogResult logs a ClassificationResult with additional metadata
-func (l *Logger) LogResult(result fingerprint.ClassificationResult, remoteAddr string, responseTimeMs int64) error {
+// LogResult logs a ClassificationResult with metadata. challenge_state and request_metrics (when set) match /debug payload for full parity; only JSONL gets this, not console.
+func (l *Logger) LogResult(result fingerprint.ClassificationResult, remoteAddr string, responseTimeMs int64, challengeState interface{}, requestMetrics *metrics.RequestMetrics) error {
 	entry := LogEntry{
 		Timestamp:      result.Timestamp,
 		RequestID:      result.RequestID,
@@ -159,6 +162,8 @@ func (l *Logger) LogResult(result fingerprint.ClassificationResult, remoteAddr s
 		Score:          result.Score,
 		Reason:         result.Reason,
 		ResponseTimeMs: responseTimeMs,
+		ChallengeState: challengeState,
+		RequestMetrics: requestMetrics,
 	}
 	return l.Log(entry)
 }

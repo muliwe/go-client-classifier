@@ -75,3 +75,4 @@ internal/fingerprint/data/ja4db.json
 docs/nginx_prod.md
 tools/python/poetry.lock
 logs/logs/
+logs/logs.zip

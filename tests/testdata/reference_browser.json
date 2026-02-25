@@ -203,7 +203,7 @@
     "bot_score": 0,
     "score_breakdown": "BROWSER[http2(+2) h2-fp(+1) h2-init-window(+1) h2-priority(+1) h2-window-update(+1) h2-pseudo-headers(+1) sec-fetch(+1) browser-ua(+1) sec-ch-ua(+1) cache-control(+1) accept-lang-rich(+1) cookies(+1) modern-tls(+1) ssl-greased(+1) ja4h-headers\u003e=10(+1) ja4h-consistent(+1) challenge-passed(+1)] BOT[]"
   },
-  "challenge_debug": {
+  "challenge_state": {
     "ja4h_hash": "ge11cn29ruru_519069e5ca79_240160034d89_bf55df7f5c1e",
     "nonce_c_d": "240160034d89_bf55df7f5c1e",
     "empty_nonce": false,

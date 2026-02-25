@@ -67,7 +67,7 @@ func stripHostPort(hostport string) string {
 	return host
 }
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 // Response represents the API response
 type Response struct {
@@ -144,15 +144,18 @@ func formatConfidence(c float64, decimals int) string {
 	return fmt.Sprintf("%.*f", decimals, rounded)
 }
 
-// recordAndLogRequest records the request in metrics, writes to JSONL log, and logs to console.
-// Single code path for all request logging (/, /debug, etc.). Appendix J (log), Appendix L (metrics).
-func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.ClassificationResult, addr string, responseTime int64, userAgent string) {
+// recordAndLogRequest records the request in metrics, writes full payload to JSONL (parity with /debug), and logs one line to console.
+// Fetches request_metrics and builds challenge_state exactly once; returns both for /debug to reuse. Appendix J (log), Appendix L (metrics).
+func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.ClassificationResult, addr string, responseTime int64, userAgent string, ja4hHash string) (*metrics.RequestMetrics, *ChallengeState) {
+	var requestMetrics *metrics.RequestMetrics
 	if h.metricsCollector != nil {
 		nonce := getChallengeCookie(r)
 		h.metricsCollector.RecordRequest(addr, nonce)
+		requestMetrics = h.buildRequestMetrics(r)
 	}
+	challengeState := h.buildChallengeState(ja4hHash)
 	if h.logger != nil {
-		if err := h.logger.LogResult(result, addr, responseTime); err != nil {
+		if err := h.logger.LogResult(result, addr, responseTime, challengeState, requestMetrics); err != nil {
 			log.Printf("Error logging result: %v", err)
 		}
 	}
@@ -160,6 +163,7 @@ func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.Classi
 		log.Printf("[%s] %s %s - UA: %s - %s (%.2f) - %dms",
 			addr, r.Method, r.URL.Path, userAgent, result.Classification, result.Confidence, responseTime)
 	}
+	return requestMetrics, challengeState
 }
 
 // HandleClassify handles the main classification endpoint.
@@ -176,7 +180,7 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 
 	responseTime := time.Since(startTime).Milliseconds()
 	addr := ClientIP(r)
-	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent)
+	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash)
 
 	// Only exact root path gets 200 JSON; everything else gets 404
 	if r.URL.Path != "/" {
@@ -325,12 +329,12 @@ type DebugResponse struct {
 	Timestamp      string                  `json:"timestamp"`
 	Fingerprint    any                     `json:"fingerprint,omitempty"`
 	Signals        any                     `json:"signals,omitempty"`
-	ChallengeDebug *ChallengeDebug         `json:"challenge_debug,omitempty"` // Client Hints challenge: C_D, store state (for debugging)
+	ChallengeState *ChallengeState         `json:"challenge_state,omitempty"` // Client Hints challenge: nonce (C_D), store state
 	RequestMetrics *metrics.RequestMetrics `json:"request_metrics,omitempty"` // behavioral metrics for this request (IP + __ch_nonce); Appendix L
 }
 
-// ChallengeDebug exposes challenge store state for /debug: nonce (C_D), whether it is cached, stored UA, created_at.
-type ChallengeDebug struct {
+// ChallengeState is the Client Hints challenge store state for this request: nonce (C_D), in_store, stored UA, created_at.
+type ChallengeState struct {
 	JA4HHash   string `json:"ja4h_hash,omitempty"` // full JA4H from request (or X-FP-JA4H)
 	NonceCD    string `json:"nonce_c_d,omitempty"` // C_D (nonce) extracted from JA4H
 	EmptyNonce bool   `json:"empty_nonce"`         // true when C/D are zeros (no cookies) — challenge skipped
@@ -355,10 +359,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 
 	responseTime := time.Since(startTime).Milliseconds()
 	addr := ClientIP(r)
-	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent)
-
-	challengeDebug := h.buildChallengeDebug(fp.HTTP.JA4HHash)
-	requestMetrics := h.buildRequestMetrics(r)
+	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash)
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
@@ -372,7 +373,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 		Timestamp:      result.Timestamp.UTC().Format(time.RFC3339Nano),
 		Fingerprint:    result.Fingerprint,
 		Signals:        result.Signals,
-		ChallengeDebug: challengeDebug,
+		ChallengeState: challengeState,
 		RequestMetrics: requestMetrics,
 	}
 	if err := encoder.Encode(payload); err != nil {
@@ -380,9 +381,9 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// buildChallengeDebug returns challenge store state for the given JA4H hash (for /debug output).
-func (h *Handler) buildChallengeDebug(ja4hHash string) *ChallengeDebug {
-	out := &ChallengeDebug{Enabled: h.challengeStore != nil}
+// buildChallengeState returns challenge store state for the given JA4H hash (for /debug and JSONL).
+func (h *Handler) buildChallengeState(ja4hHash string) *ChallengeState {
+	out := &ChallengeState{Enabled: h.challengeStore != nil}
 	if ja4hHash != "" {
 		out.JA4HHash = ja4hHash
 	}

@@ -95,9 +95,9 @@ def _ja4h_hash_from_result(data: dict) -> str:
     return ((data.get("fingerprint") or {}).get("http") or {}).get("ja4h_hash") or "—"
 
 
-def _challenge_debug_line(data: dict) -> str:
-    """Format challenge_debug for one-line output: nonce_c_d, in_store, stored_ua."""
-    cd = data.get("challenge_debug") or {}
+def _challenge_state_line(data: dict) -> str:
+    """Format challenge_state for one-line output: nonce_c_d, in_store, stored_ua."""
+    cd = data.get("challenge_state") or {}
     if not cd:
         return ""
     parts = []
@@ -143,11 +143,11 @@ def test_antibot_with_profiles(
             score = data.get("score", "—")
             bot_score = sig.get("bot_score", "—")
             browser_score = sig.get("browser_score", "—")
-            ch_line = _challenge_debug_line(data)
+            ch_line = _challenge_state_line(data)
             print(f"[{status}] {profile:20s} -> {data['classification']} "
                   f"(confidence: {data['confidence']}) score={score} browser={browser_score} bot={bot_score} | ja4h_hash: {ja4h}{ch_line}")
             # If challenge says in_store with a stored_ua that doesn't match current profile UA, we're likely hitting different backends (each has its own store)
-            cd = data.get("challenge_debug") or {}
+            cd = data.get("challenge_state") or {}
             if cd.get("in_store") and cd.get("stored_ua"):
                 current_ua = _current_ua_from_result(data)
                 if current_ua and cd["stored_ua"] != current_ua and data["classification"] == "browser":

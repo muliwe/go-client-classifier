@@ -2,7 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
-## v1.0.0 (2026-02-23)
+## v1.0.1 (2026-02-25)
+
+### JSONL log: full parity with /debug
+
+- **request_metrics and challenge_state in JSONL**: Each request log line (JSONL) now includes the same **request_metrics** (when Redis is configured) and **challenge_state** (Client Hints store state) as the `/debug` response.
+- **Single fetch**: `recordAndLogRequest` builds **request_metrics** (GetRequestMetrics) and **challenge_state** (buildChallengeState) once per request and passes them to the logger and to the `/debug` response; no duplicate Redis or store lookups.
+
+### challenge_debug → challenge_state
+
+- **Rename**: `challenge_debug` / `ChallengeDebug` renamed to **challenge_state** / **ChallengeState** in `/debug` and JSONL. JSON key: `challenge_state`. Builder: `buildChallengeState`.
+- **Testdata and tools**: `reference_browser.json`, `reference_bot_curl_cffi.json`, and `tools/python/antibot_test.py` updated to use `challenge_state`.
+
+## v1.0.0 (2026-02-24)
 
 ### Redis integration and behavioural metrics (Appendix L)
 
