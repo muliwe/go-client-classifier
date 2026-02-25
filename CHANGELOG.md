@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## v1.0.1 (2026-02-25)
 
+### Request log stats by class and METHODOLOGY cohort observation
+
+- **request_log_stats_by_class.py**: New Python tool that outputs request-log statistics **by cohort** (all / bot / browser). Reads JSON or JSONL; optionally excludes stress tests from the "all" cohort. For each cohort reports distribution of request_metrics (ip_request_count, ip_derived: min/mean/median/p05/p50/p95/max). Reuses aggregation and formatting from request_log_stats.py. Options: same as request_log_stats plus `--no-progress`. Text output: three sections (ALL, BOT, BROWSER); JSON: `{"all": {...}, "bot": {...}, "browser": {...}}`.
+- **tools/python/README.md**: Documented request_log_stats_by_class.py (usage, examples, options).
+- **METHODOLOGY Appendix L**: New subsection "Occasional observation: cohort distributions (small sample, ip_derived only)" with example output of request_log_stats_by_class.py (p05—p50—p95 table for ALL/BOT/BROWSER), analysis of bot vs browser patterns in the sample, and comparison with 2025–2026 literature (Imperva, F5, BOTracle, Cresci et al., Cloudflare).
+
 ### JSONL log: full parity with /debug
 
 - **request_metrics and challenge_state in JSONL**: Each request log line (JSONL) now includes the same **request_metrics** (when Redis is configured) and **challenge_state** (Client Hints store state) as the `/debug` response.

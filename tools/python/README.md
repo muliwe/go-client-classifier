@@ -57,6 +57,17 @@ python antibot_test.py
 
   Options: `-n` / `--top` — number of top values per field (default 15); `-o` — output file; `--format text|json`; `--sort count|discriminative`; `--exclude-stress-tests` — exclude go-http-client; `--no-significance-filter` — disable significance filter (√N). Record format: one JSON per line (`tests/testdata/reference_browser.json`).
 
+- **request_log_stats_by_class.py** — same statistics as above but **by group**: **all** (optionally excluding stress tests), **bot**, **browser**. Input: one or more globs for **JSON** (single array of objects) or **JSONL** (one object per line). Output: file or stdout, text or JSON. Reuses aggregation and formatting from `request_log_stats.py`.
+
+  ```bash
+  poetry run python request_log_stats_by_class.py -n 15 "logs/**/requests_*.jsonl"
+  poetry run python request_log_stats_by_class.py -o report.txt "logs/**/*.json" "logs/**/*.jsonl"
+  poetry run python request_log_stats_by_class.py --format json -o stats.json "logs/requests.jsonl"
+  poetry run python request_log_stats_by_class.py --exclude-stress-tests "logs/**/requests_*.jsonl"
+  ```
+
+  Options: same as `request_log_stats.py` plus `--no-progress`. Text output: three sections (ALL, BOT, BROWSER). JSON output: `{"all": {...}, "bot": {...}, "browser": {...}}`.
+
 ## Dependencies
 
 Managed via Poetry, see `pyproject.toml`. Main ones: `curl-cffi`, `pandas`, `numpy`.

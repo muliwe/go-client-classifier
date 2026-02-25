@@ -2039,6 +2039,13 @@ When Redis metrics are configured, the **`/debug`** response includes a **`reque
 | `nonce_request_count` | Number of requests with this nonce in the window. |
 | `nonce_request_ago_sec` | Last N requests for this nonce as seconds ago (0 = most recent). |
 
+### Storage (Redis)
+
+- **Backend**: Redis 6+ (single instance or managed/Sentinel as provided).
+- **Key schema (example)**: `metrics:ip:<ip>:req`, `metrics:nonce:<nonce>:req` — sorted sets with score = timestamp, member = request id or timestamp string. Optional keys for “last K” or secondary windows may be added by implementation.
+- **Operations**: For each request, pipeline or Lua: ZREMRANGEBYSCORE (trim old), ZADD (current time), EXPIRE. Failures are logged; request classification is unaffected.
+- **Challenge (nonce) store**: The same Redis instance may be used for the Client Hints challenge store (nonce → User-Agent with TTL). Key pattern e.g. `ch:nonce:<nonce>`. See deployment README and Appendix K.
+
 **Derived metrics (ip_derived, nonce_derived):**
 
 For each entity (IP and, when present, nonce), the implementation may expose a **derived** object with the following quantities. These align with behavioural signals used in on-the-fly and session-based bot detection (Cresci et al., 2021; BOTracle, 2024; F5 Labs, Cloudflare heuristics, 2025).
@@ -2080,14 +2087,26 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 
 **Conclusion:** In this snapshot, the bot shows a **wide spread** of inter-arrival times (min 0.05 s, max 38 s) and **high std** (9.2 s) — bursty automated pacing with occasional long pauses. The browser’s **nonce_derived** shows a **narrower range** (0.12–3.4 s) and **lower std** (1.0 s), consistent with more regular, short successions of requests (e.g. navigation/clicks) without long idle gaps in the window. So in this example, **high max gap and high std** coincide with the bot; **compact min–max and moderate std** coincide with the browser. This aligns with the literature (humans often more variable at longer time scales; here the bot’s variance is driven by a few very long gaps). Optional use: flag or review IPs/nonces with e.g. `inter_arrival_max_sec` or `inter_arrival_std_sec` above a deployment-specific threshold in addition to fingerprint/UA signals.
 
-Baselines should be calibrated per deployment (e.g. by endpoint and traffic mix). The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
+**Occasional observation: cohort distributions (small sample, ip_derived only)**
 
-### Storage (Redis)
+Output of `request_log_stats_by_class.py` on a small log (14 requests after excluding stress paths: 9 bot, 5 browser; 11/7/4 records with request_metrics in ALL/BOT/BROWSER). All metrics are **ip_derived** (IP-only; nonce not used). The script reports min, mean, median, p05, p50, p95 (and max) over per-request values; the table below gives **p05 — p50 — p95** to show both tails and centre.
 
-- **Backend**: Redis 6+ (single instance or managed/Sentinel as provided).
-- **Key schema (example)**: `metrics:ip:<ip>:req`, `metrics:nonce:<nonce>:req` — sorted sets with score = timestamp, member = request id or timestamp string. Optional keys for “last K” or secondary windows may be added by implementation.
-- **Operations**: For each request, pipeline or Lua: ZREMRANGEBYSCORE (trim old), ZADD (current time), EXPIRE. Failures are logged; request classification is unaffected.
-- **Challenge (nonce) store**: The same Redis instance may be used for the Client Hints challenge store (nonce → User-Agent with TTL). Key pattern e.g. `ch:nonce:<nonce>`. See deployment README and Appendix K.
+| Metric | ALL, n=11 | BOT, n=7 | BROWSER, n=4 |
+|--------|------------|----------|--------------|
+| request_rate_per_min | 0.2 — 0.8 — 2.6 | 0.52 — 1.6 — 2.68 | 0.2 — 0.4 — 0.6 |
+| inter_arrival_median_sec | 0.371 — 0.5 — 5.571 | 0.371 — 0.427 — 0.632 | 5.571 — 5.571 — 5.571 |
+| inter_arrival_mean_sec | 0.535 — 0.654 — 5.571 | 0.534 — 0.568 — 0.691 | 5.571 — 5.571 — 5.571 |
+| inter_arrival_std_sec | 0.228 — 0.668 — 7.692 | 0.228 — 0.616 — 0.772 | 7.692 — 7.692 — 7.692 |
+| inter_arrival_min_sec | 0.088 — 0.153 — 0.437 | 0.088 — 0.153 — 0.448 | 0.132 — 0.132 — 0.132 |
+| inter_arrival_max_sec | 0.897 — 2.55 — 11.01 | 0.897 — 2.55 — 2.55 | 11.01 — 11.01 — 11.01 |
+
+(Cell format: **p05 — p50 — p95**.)
+
+**Analysis:** In this sample, **BOT** traffic exhibits a **narrow inter-arrival interval** (p05–p95 for mean: 0.53–0.69 s, maximum: 2.55 s) and a **higher request rate** (p50: 1.6/min, p95: 2.68/min), reflecting short and regular request intervals. In contrast, **BROWSER** traffic is characterized by a **single dominant inter-arrival interval** (all percentiles: 5.57 s for median and mean, 7.69 s for standard deviation, and 11.01 s for maximum) and a **lower request rate** (p50: 0.4/min); however, as there are only four browser requests with computed metrics, dispersion is not apparent. The **ALL** cohort reflects a combination of these distributions: the p50 aligns with bot-like rates and gaps, while the p95 is extended by browser-like long intervals (5.57 s and 11.01 s). Thus, at the IP level, this sample demonstrates that **bots exhibit denser and more regular request patterns**, whereas **browsers generate fewer requests with longer inter-arrival gaps**. Cohort-level distributions may differ from single-sample snapshots; calibration over a broader dataset is recommended.
+
+**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort numbers (BOT: ~1.6/min, 0.5–0.7 s gaps; BROWSER: ~0.4/min, ~5.6 s gaps) are **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
+
+The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
 
 ### Scope and limitations
 
