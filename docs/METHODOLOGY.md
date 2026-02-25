@@ -2089,7 +2089,7 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 
 **Occasional observation: cohort distributions (small sample, ip_derived only)**
 
-Output of `request_log_stats_by_class.py --exclude-stress-tests` on a small log: **18** requests after excluding stress paths (8 excluded), **11** bot and **7** browser; **13 / 7 / 6** records with request_metrics in ALL / BOT / BROWSER. All metrics are **ip_derived** (IP-only; nonce not used). The script reports min, max, mean, median, p05, p50, p95 over per-request values; the table below gives **p05 — p50 — p95** to show both tails and centre.
+Output of `request_log_stats_by_class.py` on a small log: **18** in cohort ALL (11 bot, 7 browser). Of those 18, not all have request_metrics (e.g. single requests); **13** do (**7** BOT + **6** BROWSER). All metrics are **ip_derived** (IP-only; nonce not used). The script reports min, max, mean, median, p05, p50, p95 over per-request values; the table below gives **p05 — p50 — p95** to show both tails and centre.
 
 | Metric | ALL, n=13 | BOT, n=7 | BROWSER, n=6 |
 |--------|------------|----------|--------------|
