@@ -159,6 +159,17 @@ def compute_ip_metrics_stats(
             for k, v in ipd.items():
                 if isinstance(v, (int, float)):
                     values_by_key.setdefault(k, []).append(float(v))
+            # Derived: inter_arrival_std_sec / inter_arrival_mean_sec (per record)
+            std_s = ipd.get("inter_arrival_std_sec")
+            mean_s = ipd.get("inter_arrival_mean_sec")
+            if (
+                isinstance(std_s, (int, float))
+                and isinstance(mean_s, (int, float))
+                and float(mean_s) != 0
+            ):
+                values_by_key.setdefault("inter_arrival_std_per_mean", []).append(
+                    float(std_s) / float(mean_s)
+                )
     if n_with_metrics == 0:
         return None
     out: dict[str, Any] = {"records_with_ip_metrics": n_with_metrics}

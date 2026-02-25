@@ -2098,6 +2098,7 @@ Output of `request_log_stats_by_class.py` on a small log: **27** in cohort ALL (
 | inter_arrival_median_sec | 0.373 — 0.427 — 5.571 | 0.372 — 0.373 — 0.571 | 4.638 — 5.571 — 5.571 |
 | inter_arrival_mean_sec | 0.435 — 0.575 — 5.571 | 0.433 — 0.568 — 0.69 | 4.638 — 5.571 — 5.571 |
 | inter_arrival_std_sec | 0.228 — 0.628 — 7.692 | 0.228 — 0.616 — 0.758 | 7.692 — 7.692 — 7.692 |
+| inter_arrival_std_per_mean | 0.392 — 1.149 — 1.381 | 0.388 — 1.135 — 1.207 | 1.381 — 1.381 — 1.381 |
 | inter_arrival_min_sec | 0.088 — 0.153 — 1.088 | 0.088 — 0.153 — 0.48 | 0.132 — 0.132 — 4.094 |
 | inter_arrival_max_sec | 0.834 — 2.55 — 11.01 | 0.772 — 2.55 — 2.55 | 5.182 — 11.01 — 11.01 |
 
