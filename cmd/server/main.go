@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/config"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
 	"github.com/muliwe/go-client-classifier/internal/server"
@@ -31,6 +32,17 @@ func main() {
 
 	cfg := server.DefaultConfig()
 	cfg.ClassifierCfg = config.ToClassifierConfig(scoringCfg)
+	if scoringCfg.BehavioralEdges != nil {
+		cfg.BehavioralEdges = &classifier.BehavioralEdges{
+			RequestRatePerMinAbove:      scoringCfg.BehavioralEdges.RequestRatePerMinAbove,
+			InterArrivalMedianSecBelow:  scoringCfg.BehavioralEdges.InterArrivalMedianSecBelow,
+			InterArrivalStdPerMeanAbove: scoringCfg.BehavioralEdges.InterArrivalStdPerMeanAbove,
+			MeanMedianRatioAbove:        scoringCfg.BehavioralEdges.InterArrivalMeanMedianRatioAbove,
+		}
+	}
+	if len(scoringCfg.BotScores) > 0 {
+		cfg.BotScores = scoringCfg.BotScores
+	}
 	// Default TTL for challenge nonce store from main config (challenge_ttl_sec)
 	if scoringCfg.ChallengeTTLSec > 0 {
 		cfg.ChallengeTTL = time.Duration(scoringCfg.ChallengeTTLSec) * time.Second

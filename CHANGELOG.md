@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.1.0 (2026-02-26)
+
+### Behavioural-metrics edge values and Appendix M
+
+- **Appendix M**: New [METHODOLOGY.md Appendix M](docs/METHODOLOGY.md#appendix-m-behavioural-metrics-edge-values-for-bot-scoring) defines optional **edge values** (thresholds) for request_metrics: request rate, inter-arrival median, std/mean variance, and mean/median ratio. When Redis and `behavioral_edges` are configured, the classifier adds bot score points per condition before the Client Hints challenge. Median vs mean comparison (bots: mean > median, right-skewed; browsers: median ≈ mean) and references (BOTracle, Cresci et al., Cloudflare, F5, Imperva, Human Security) are documented.
+- **Config**: New top-level `behavioral_edges` in scoring JSON with `request_rate_per_min_above` (1.2), `inter_arrival_median_sec_below` (3.0), `inter_arrival_std_per_mean_above` (1.4), `inter_arrival_mean_median_ratio_above` (1.15). Four new `bot_scores` keys: `high-request-rate`, `low-inter-arrival-median`, `high-inter-arrival-variance`, `mean-above-median` (default 1 point each). See [config/README.md](config/README.md#behavioural-metrics-optional-appendix-m).
+- **ApplyBehavioralSignals**: Classifier now has `ApplyBehavioralSignals(result, requestMetrics, edges, botScores)`; handler calls it after Classify when request_metrics and behavioral config are present. Recomputes net score and may reclassify to bot; appends behavioural reason to response.
+- **request_log_stats_by_class.py**: Script now **always** outputs **behavioural-edge** statistics: for BOT and BROWSER cohorts, `count_by_signals` (0–4), **bot recall** (% with ≥1 signal), **browser FP rate** (% with ≥1 signal), and **mean/median ratio** distribution per cohort. Same four edge constants (1.2, 3.0, 1.4, 1.15) as the classifier. Exact recall/FPR for a cohort are produced by running this script on the same JSONL; see Appendix M.
+- **Tests**: Unit tests for ApplyBehavioralSignals (nil metrics, nil botScores, high-request-rate, low-inter-arrival-median, high-variance, mean-above-median, single-request no inter-arrival). Config test updated for 34 bot_scores keys.
+
 ## v1.0.1 (2026-02-25)
 
 ### Request log stats by class and METHODOLOGY cohort observation

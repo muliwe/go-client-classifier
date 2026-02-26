@@ -4,6 +4,12 @@
     "threshold": 4
   },
   "challenge_ttl_sec": 120,
+  "behavioral_edges": {
+    "request_rate_per_min_above": 1.2,
+    "inter_arrival_median_sec_below": 3.0,
+    "inter_arrival_std_per_mean_above": 1.4,
+    "inter_arrival_mean_median_ratio_above": 1.15
+  },
   "confidence": {
     "no_signal": 0.5,
     "high_signals_threshold": 5,
@@ -90,6 +96,10 @@
     "accept-lang-simple": 1,
     "sec-purpose-invalid": 1,
     "sec-purpose-no-sec-fetch": 2,
-    "challenge-failed": 3
+    "challenge-failed": 3,
+    "high-request-rate": 1,
+    "low-inter-arrival-median": 1,
+    "high-inter-arrival-variance": 1,
+    "mean-above-median": 1
   }
 }

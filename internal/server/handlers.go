@@ -67,7 +67,7 @@ func stripHostPort(hostport string) string {
 	return host
 }
 
-const version = "1.0.1"
+const version = "1.1.0"
 
 // Response represents the API response
 type Response struct {
@@ -96,7 +96,9 @@ type Handler struct {
 	redisClient              RedisPinger        // optional; for /health Redis PING when configured
 	metricsCollector         *metrics.Collector // optional; when Redis configured, records behavioral metrics (Appendix L)
 	challengeCookieMaxAgeSec int                // Max-Age for __ch_nonce cookie; synced with challenge TTL and nonce metrics window (Appendix L)
-	quiet                    bool               // suppress console logging (useful for tests)
+	behavioralEdges          *classifier.BehavioralEdges
+	botScores                map[string]int
+	quiet                    bool
 }
 
 // RedisPinger is used for optional Redis connectivity check in /health. Implemented by the server when Redis is configured.
@@ -112,7 +114,9 @@ type HandlerOptions struct {
 	ChallengeStore           ChallengeStore
 	RedisPinger              RedisPinger
 	MetricsCollector         *metrics.Collector
-	ChallengeCookieMaxAgeSec int // Max-Age (seconds) for __ch_nonce cookie; should match ChallengeTTL. If <= 0, 120 is used when setting the cookie.
+	ChallengeCookieMaxAgeSec int                         // Max-Age (seconds) for __ch_nonce cookie; should match ChallengeTTL. If <= 0, 120 is used when setting the cookie.
+	BehavioralEdges          *classifier.BehavioralEdges // optional; when set with BotScores, ApplyBehavioralSignals is used (Appendix M)
+	BotScores                map[string]int
 }
 
 // NewHandler creates a new handler from options. Collector and Classifier must be set; other fields may be nil/zero.
@@ -125,6 +129,8 @@ func NewHandler(opts HandlerOptions) *Handler {
 		redisClient:              opts.RedisPinger,
 		metricsCollector:         opts.MetricsCollector,
 		challengeCookieMaxAgeSec: opts.ChallengeCookieMaxAgeSec,
+		behavioralEdges:          opts.BehavioralEdges,
+		botScores:                opts.BotScores,
 		quiet:                    false,
 	}
 }
@@ -145,12 +151,9 @@ func formatConfidence(c float64, decimals int) string {
 }
 
 // recordAndLogRequest records the request in metrics, writes full payload to JSONL (parity with /debug), and logs one line to console.
-// Fetches request_metrics and builds challenge_state exactly once; returns both for /debug to reuse. Appendix J (log), Appendix L (metrics).
-func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.ClassificationResult, addr string, responseTime int64, userAgent string, ja4hHash string) (*metrics.RequestMetrics, *ChallengeState) {
-	var requestMetrics *metrics.RequestMetrics
-	if h.metricsCollector != nil {
-		nonce := getChallengeCookie(r)
-		h.metricsCollector.RecordRequest(addr, nonce)
+// If requestMetrics is non-nil it is used (e.g. from HandleClassify after ApplyBehavioralSignals); otherwise builds when metricsCollector is set. Appendix J (log), Appendix L (metrics).
+func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.ClassificationResult, addr string, responseTime int64, userAgent string, ja4hHash string, requestMetrics *metrics.RequestMetrics) (*metrics.RequestMetrics, *ChallengeState) {
+	if h.metricsCollector != nil && requestMetrics == nil {
 		requestMetrics = h.buildRequestMetrics(r)
 	}
 	challengeState := h.buildChallengeState(ja4hHash)
@@ -169,18 +172,30 @@ func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.Classi
 // HandleClassify handles the main classification endpoint.
 // Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
 // When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (Appendix K).
+// When Redis and behavioral edges are configured, request_metrics are applied (Appendix M) before the challenge.
 func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
 	fp := h.collector.Collect(r)
 	result := h.classifier.Classify(fp)
 
+	var requestMetrics *metrics.RequestMetrics
+	if h.metricsCollector != nil {
+		addr := ClientIP(r)
+		nonce := getChallengeCookie(r)
+		h.metricsCollector.RecordRequest(addr, nonce)
+		requestMetrics = h.buildRequestMetrics(r)
+		if requestMetrics != nil && h.behavioralEdges != nil && len(h.botScores) > 0 {
+			h.classifier.ApplyBehavioralSignals(&result, requestMetrics, *h.behavioralEdges, h.botScores)
+		}
+	}
+
 	h.applyChallenge(w, r, "/", fp.HTTP.JA4HHash, &result)
 	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
 
 	responseTime := time.Since(startTime).Milliseconds()
 	addr := ClientIP(r)
-	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash)
+	h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash, requestMetrics)
 
 	// Only exact root path gets 200 JSON; everything else gets 404
 	if r.URL.Path != "/" {
@@ -359,7 +374,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 
 	responseTime := time.Since(startTime).Milliseconds()
 	addr := ClientIP(r)
-	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash)
+	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash, nil)
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)

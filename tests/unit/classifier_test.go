@@ -6,6 +6,7 @@ import (
 
 	"github.com/muliwe/go-client-classifier/internal/classifier"
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/metrics"
 )
 
 func TestClassifierDefaultConfig(t *testing.T) {
@@ -232,5 +233,156 @@ func TestClassify_ImpersonateLikeFingerprint_ClassifiedAsBot(t *testing.T) {
 	}
 	if result.Score > 8 {
 		t.Errorf("Impersonate-like fingerprint net score should be <= 8 for bot classification, got %d", result.Score)
+	}
+}
+
+var defaultBehavioralEdges = classifier.BehavioralEdges{
+	RequestRatePerMinAbove:      1.2,
+	InterArrivalMedianSecBelow:  3.0,
+	InterArrivalStdPerMeanAbove: 1.4,
+	MeanMedianRatioAbove:        1.15,
+}
+
+var defaultBehavioralBotScores = map[string]int{
+	"high-request-rate":           1,
+	"low-inter-arrival-median":    1,
+	"high-inter-arrival-variance": 1,
+	"mean-above-median":           1,
+}
+
+func TestApplyBehavioralSignals_nilMetrics_noChange(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	beforeClass := result.Classification
+	c.ApplyBehavioralSignals(&result, nil, defaultBehavioralEdges, defaultBehavioralBotScores)
+	if result.Score != beforeScore || result.Classification != beforeClass {
+		t.Errorf("ApplyBehavioralSignals(nil metrics) should not change result; got score %d (was %d), class %s (was %s)", result.Score, beforeScore, result.Classification, beforeClass)
+	}
+}
+
+func TestApplyBehavioralSignals_nilBotScores_noChange(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	metrics := &metrics.RequestMetrics{IPDerived: &metrics.DerivedStats{RequestRatePerMin: 5.0}}
+	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, nil)
+	if result.Score != beforeScore {
+		t.Errorf("ApplyBehavioralSignals(nil botScores) should not change result; got score %d (was %d)", result.Score, beforeScore)
+	}
+}
+
+func TestApplyBehavioralSignals_highRequestRate_addsBotScore(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	metrics := &metrics.RequestMetrics{
+		IPRequestCount: 10,
+		IPDerived: &metrics.DerivedStats{
+			RequestRatePerMin:     2.0,
+			InterArrivalMedianSec: 1.0,
+			InterArrivalMeanSec:   1.0,
+			InterArrivalStdSec:    0.5,
+		},
+	}
+	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, defaultBehavioralBotScores)
+	if result.Score >= beforeScore {
+		t.Errorf("ApplyBehavioralSignals(rate 2.0 > 1.2) should add bot score; before %d after %d", beforeScore, result.Score)
+	}
+	if !strings.Contains(result.Reason, "behavioral: high-request-rate") {
+		t.Errorf("Reason should mention behavioral: high-request-rate, got %q", result.Reason)
+	}
+}
+
+func TestApplyBehavioralSignals_lowInterArrivalMedian_addsBotScore(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	metrics := &metrics.RequestMetrics{
+		IPRequestCount: 2,
+		IPDerived: &metrics.DerivedStats{
+			RequestRatePerMin:     0.5,
+			InterArrivalMedianSec: 1.5,
+			InterArrivalMeanSec:   1.5,
+			InterArrivalStdSec:    0.3,
+		},
+	}
+	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, defaultBehavioralBotScores)
+	if result.Score >= beforeScore {
+		t.Errorf("ApplyBehavioralSignals(median 1.5 < 3.0) should add bot score; before %d after %d", beforeScore, result.Score)
+	}
+	if !strings.Contains(result.Reason, "behavioral: low-inter-arrival-median") {
+		t.Errorf("Reason should mention low-inter-arrival-median, got %q", result.Reason)
+	}
+}
+
+func TestApplyBehavioralSignals_highVariance_addsBotScore(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	// std/mean = 2.0/1.0 = 2.0 > 1.4
+	metrics := &metrics.RequestMetrics{
+		IPRequestCount: 2,
+		IPDerived: &metrics.DerivedStats{
+			RequestRatePerMin:     0.5,
+			InterArrivalMedianSec: 2.0,
+			InterArrivalMeanSec:   1.0,
+			InterArrivalStdSec:    2.0,
+		},
+	}
+	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, defaultBehavioralBotScores)
+	if result.Score >= beforeScore {
+		t.Errorf("ApplyBehavioralSignals(std/mean 2.0 > 1.4) should add bot score; before %d after %d", beforeScore, result.Score)
+	}
+	if !strings.Contains(result.Reason, "behavioral: high-inter-arrival-variance") {
+		t.Errorf("Reason should mention high-inter-arrival-variance, got %q", result.Reason)
+	}
+}
+
+func TestApplyBehavioralSignals_meanAboveMedian_addsBotScore(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	// mean/median = 2.0/1.0 = 2.0 > 1.15
+	metrics := &metrics.RequestMetrics{
+		IPRequestCount: 2,
+		IPDerived: &metrics.DerivedStats{
+			RequestRatePerMin:     0.5,
+			InterArrivalMedianSec: 1.0,
+			InterArrivalMeanSec:   2.0,
+			InterArrivalStdSec:    0.5,
+		},
+	}
+	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, defaultBehavioralBotScores)
+	if result.Score >= beforeScore {
+		t.Errorf("ApplyBehavioralSignals(mean/median 2.0 > 1.15) should add bot score; before %d after %d", beforeScore, result.Score)
+	}
+	if !strings.Contains(result.Reason, "behavioral: mean-above-median") {
+		t.Errorf("Reason should mention mean-above-median, got %q", result.Reason)
+	}
+}
+
+func TestApplyBehavioralSignals_singleRequest_noInterArrivalSignals(t *testing.T) {
+	c := classifier.New(classifier.DefaultConfig())
+	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
+	result := c.Classify(fp)
+	beforeScore := result.Score
+	metrics := &metrics.RequestMetrics{
+		IPRequestCount: 1,
+		IPDerived: &metrics.DerivedStats{
+			RequestRatePerMin:     0.5,
+			InterArrivalMedianSec: 1.0,
+			InterArrivalMeanSec:   1.0,
+		},
+	}
+	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, defaultBehavioralBotScores)
+	if result.Score != beforeScore {
+		t.Errorf("ApplyBehavioralSignals(IPRequestCount=1) should not add inter-arrival signals; before %d after %d", beforeScore, result.Score)
 	}
 }

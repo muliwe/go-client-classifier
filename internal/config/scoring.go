@@ -11,13 +11,21 @@ import (
 
 // ScoringConfig is the root of the scoring JSON config (points, thresholds, classifier).
 type ScoringConfig struct {
-	Classifier    ClassifierConfig `json:"classifier"`
-	Confidence    ConfidenceConfig `json:"confidence"`
-	Thresholds    ThresholdsConfig `json:"thresholds"`
-	BrowserScores map[string]int   `json:"browser_scores"`
-	BotScores     map[string]int   `json:"bot_scores"`
-	// ChallengeTTLSec is the default TTL (seconds) for the Client Hints challenge nonce store (Appendix K).
-	ChallengeTTLSec int `json:"challenge_ttl_sec"`
+	Classifier      ClassifierConfig       `json:"classifier"`
+	Confidence      ConfidenceConfig       `json:"confidence"`
+	Thresholds      ThresholdsConfig       `json:"thresholds"`
+	BrowserScores   map[string]int         `json:"browser_scores"`
+	BotScores       map[string]int         `json:"bot_scores"`
+	ChallengeTTLSec int                    `json:"challenge_ttl_sec"`
+	BehavioralEdges *BehavioralEdgesConfig `json:"behavioral_edges,omitempty"`
+}
+
+// BehavioralEdgesConfig holds optional thresholds for request_metrics-based bot signals (Appendix M).
+type BehavioralEdgesConfig struct {
+	RequestRatePerMinAbove           float64 `json:"request_rate_per_min_above"`
+	InterArrivalMedianSecBelow       float64 `json:"inter_arrival_median_sec_below"`
+	InterArrivalStdPerMeanAbove      float64 `json:"inter_arrival_std_per_mean_above"`
+	InterArrivalMeanMedianRatioAbove float64 `json:"inter_arrival_mean_median_ratio_above"`
 }
 
 // ClassifierConfig holds classifier weights and threshold.
@@ -61,6 +69,7 @@ func DefaultScoringConfig() ScoringConfig {
 			Threshold:      4,
 		},
 		ChallengeTTLSec: 120,
+		BehavioralEdges: defaultBehavioralEdges(),
 		Confidence: ConfidenceConfig{
 			NoSignal:              0.5,
 			HighSignalsThreshold:  5,
@@ -86,6 +95,15 @@ func DefaultScoringConfig() ScoringConfig {
 		},
 		BrowserScores: defaultBrowserScores(),
 		BotScores:     defaultBotScores(),
+	}
+}
+
+func defaultBehavioralEdges() *BehavioralEdgesConfig {
+	return &BehavioralEdgesConfig{
+		RequestRatePerMinAbove:           1.2,
+		InterArrivalMedianSecBelow:       3.0,
+		InterArrivalStdPerMeanAbove:      1.4,
+		InterArrivalMeanMedianRatioAbove: 1.15,
 	}
 }
 
@@ -128,36 +146,40 @@ func defaultBrowserScores() map[string]int {
 
 func defaultBotScores() map[string]int {
 	return map[string]int{
-		"obsolete-tls":               3,
-		"exotic-alpn":                3,
-		"blind-probe":                3,
-		"bot-ua":                     3,
-		"ai-crawler":                 2,
-		"low-headers":                1,
-		"missing-typical":            2,
-		"no-ua":                      3,
-		"http1.1":                    1,
-		"accept-*/*":                 1,
-		"no-accept-lang":             1,
-		"low-ciphers":                1,
-		"few-tls-ext":                1,
-		"no-session":                 1,
-		"ja4h-no-lang":               1,
-		"ja4h-low-headers":           1,
-		"ja4h-inconsistent":          2,
-		"ja4h-no-cookies":            2,
-		"header-order-late":          2,
-		"h2-ua-inconsistent":         2,
-		"tls-ua-inconsistent":        3,
-		"ua-browser-no-grease":       3,
-		"h2-ja4-inconsistent":        2,
-		"tls-alpn-http-inconsistent": 2,
-		"no-sni":                     1,
-		"no-alpn":                    1,
-		"accept-lang-simple":         1,
-		"sec-purpose-invalid":        1,
-		"sec-purpose-no-sec-fetch":   2,
-		"challenge-failed":           3, // Client Hints challenge (Appendix K), smoking gun
+		"obsolete-tls":                3,
+		"exotic-alpn":                 3,
+		"blind-probe":                 3,
+		"bot-ua":                      3,
+		"ai-crawler":                  2,
+		"low-headers":                 1,
+		"missing-typical":             2,
+		"no-ua":                       3,
+		"http1.1":                     1,
+		"accept-*/*":                  1,
+		"no-accept-lang":              1,
+		"low-ciphers":                 1,
+		"few-tls-ext":                 1,
+		"no-session":                  1,
+		"ja4h-no-lang":                1,
+		"ja4h-low-headers":            1,
+		"ja4h-inconsistent":           2,
+		"ja4h-no-cookies":             2,
+		"header-order-late":           2,
+		"h2-ua-inconsistent":          2,
+		"tls-ua-inconsistent":         3,
+		"ua-browser-no-grease":        3,
+		"h2-ja4-inconsistent":         2,
+		"tls-alpn-http-inconsistent":  2,
+		"no-sni":                      1,
+		"no-alpn":                     1,
+		"accept-lang-simple":          1,
+		"sec-purpose-invalid":         1,
+		"sec-purpose-no-sec-fetch":    2,
+		"challenge-failed":            3, // Client Hints challenge (Appendix K), smoking gun
+		"high-request-rate":           1, // Appendix M: behavioral metrics
+		"low-inter-arrival-median":    1,
+		"high-inter-arrival-variance": 1,
+		"mean-above-median":           1,
 	}
 }
 
@@ -192,6 +214,9 @@ func Load(path string) (ScoringConfig, error) {
 	}
 	if cfg.ChallengeTTLSec > 0 {
 		merged.ChallengeTTLSec = cfg.ChallengeTTLSec
+	}
+	if cfg.BehavioralEdges != nil {
+		merged.BehavioralEdges = cfg.BehavioralEdges
 	}
 	return merged, nil
 }

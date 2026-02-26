@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 1.0.1 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 1.1.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -40,7 +40,7 @@ Create a single HTTP endpoint that classifies clients as `browser` or `bot` base
 
 **Phase 3** — Inconsistency detection: spatial (JA4H vs HTTP, TLS/HTTP version mismatch) in place. *Planned*: temporal inconsistency (same client, changing FPs), header–UA validation. See [Methodology → Phase 3](docs/METHODOLOGY.md#phase-3-fingerprint-inconsistency-detection).
 
-**Redis & behavioural (Appendix L)** — Optional Redis (`REDIS_URL`): (1) **Challenge store** — nonce→User-Agent stored in Redis so multiple instances share state; (2) **Behavioural metrics** — request counts and timestamps per IP and per `__ch_nonce` (sliding window); collection only, no scoring yet. **`/debug`** returns **`request_metrics`** for the current request (IP and nonce counts in window). See [docs/deploy/README.md](docs/deploy/README.md), [Methodology Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring), [config/README.md](config/README.md#redis-challenge-store-and-behavioural-metrics).
+**Redis & behavioural (Appendix L, M)** — Optional Redis (`REDIS_URL`): (1) **Challenge store** — nonce→User-Agent stored in Redis so multiple instances share state; (2) **Behavioural metrics** — request counts and timestamps per IP and per `__ch_nonce` (sliding window). When **behavioral_edges** are set in scoring config, the classifier adds bot score for rate and inter-arrival conditions ([Appendix M](docs/METHODOLOGY.md#appendix-m-behavioural-metrics-edge-values-for-bot-scoring)). **`/debug`** returns **`request_metrics`** for the current request. See [docs/deploy/README.md](docs/deploy/README.md), [Methodology Appendix L](docs/METHODOLOGY.md#appendix-l-behavioural-monitoring), [config/README.md](config/README.md#redis-challenge-store-and-behavioural-metrics).
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 

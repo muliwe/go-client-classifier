@@ -9,8 +9,9 @@ The scoring config is loaded at service startup (`SCORING_CONFIG` or `config/sco
 | `classifier` | Bot score weight and threshold: `net = browser_score - bot_score_weight * bot_score`; class **browser** if `net > threshold`. |
 | `confidence` | Confidence calculation parameters (no_signal, thresholds and multipliers by signal count, min/max). |
 | `thresholds` | Numeric thresholds for signal extraction (header order, cipher count, TLS extensions, JA4H, Accept-Language). |
+| `behavioral_edges` | Optional thresholds for request_metrics-based bot signals (Appendix M). When set with Redis, ApplyBehavioralSignals adds bot score per condition. |
 | `browser_scores` | Points per browser signal (toward "browser" classification). |
-| `bot_scores` | Points per bot signal (toward "bot" classification). |
+| `bot_scores` | Points per bot signal (toward "bot" classification), including optional behavioural keys (high-request-rate, low-inter-arrival-median, high-inter-arrival-variance, mean-above-median). |
 
 File **scoring.default.json** is the reference default with current values for commit and comparison.
 
@@ -63,6 +64,25 @@ Strong automation indicators; a single such signal already strongly pulls toward
 | `ja4h-low-headers` | Few headers in JA4H (< 5). |
 | `no-sni` | TLS available (direct connection) but client did not send SNI (real browsers send SNI for HTTPS). Only applied with direct TLS, not behind proxy. |
 | `no-alpn` | TLS available (direct connection) but client did not send ALPN (modern browsers send h2/http/1.1). Only applied with direct TLS, not behind proxy. |
+| `high-request-rate` | Request rate (from Redis metrics) above threshold; see [Behavioural metrics](#behavioural-metrics-optional-appendix-m) below. |
+| `low-inter-arrival-median` | Median inter-arrival time below threshold (when ≥2 requests in window). |
+| `high-inter-arrival-variance` | Inter-arrival std/mean above threshold (when ≥2 requests). |
+| `mean-above-median` | Mean/median inter-arrival ratio above threshold (when ≥2 requests, median > 0). |
+
+---
+
+## Behavioural metrics (optional, Appendix M)
+
+When **Redis** is configured and scoring config includes **`behavioral_edges`** and the corresponding **`bot_scores`** keys, the classifier applies request-metrics-based signals before the Client Hints challenge. See [METHODOLOGY.md Appendix M](../docs/METHODOLOGY.md#appendix-m-behavioural-metrics-edge-values-for-bot-scoring).
+
+| Config key / bot_scores key | Default | Description |
+|-----------------------------|---------|-------------|
+| `behavioral_edges.request_rate_per_min_above` | 1.2 | Add `high-request-rate` bot point when request rate (req/min in window) exceeds this. |
+| `behavioral_edges.inter_arrival_median_sec_below` | 3.0 | Add `low-inter-arrival-median` when median inter-arrival (s) is below this (requires ≥2 requests in window). |
+| `behavioral_edges.inter_arrival_std_per_mean_above` | 1.4 | Add `high-inter-arrival-variance` when std/mean of inter-arrival times exceeds this. |
+| `behavioral_edges.inter_arrival_mean_median_ratio_above` | 1.15 | Add `mean-above-median` when mean/median inter-arrival ratio exceeds this (right-skewed gaps → bot-like). |
+
+The four **bot_scores** keys (`high-request-rate`, `low-inter-arrival-median`, `high-inter-arrival-variance`, `mean-above-median`) default to **1** point each. Exact recall and false positive rate for a cohort can be computed by running **request_log_stats_by_class.py** on the same JSONL; see Appendix M.
 
 ---
 
@@ -144,7 +164,7 @@ The server can run a behavioural challenge using HTTP Client Hints (Accept-CH, C
 When **`REDIS_URL`** is set (e.g. `redis://localhost:6379/0`), the server uses Redis for both the challenge (nonce) store and behavioural metrics collection. **The in-memory nonce store is not used** in this case; the single source of truth is Redis. This design supports load-balanced deployments where all instances share the same nonce state. References: [METHODOLOGY.md Appendix L](../docs/METHODOLOGY.md#appendix-l-behavioural-monitoring); Redis rate-limiting patterns (Redis.io); BOTracle (Kadel et al., arXiv:2412.02266).
 
 1. **Challenge (nonce) store** — The nonce → User-Agent mapping is stored in Redis. Key pattern: `{REDIS_CHALLENGE_PREFIX}:nonce:<nonce>` (default prefix `ch`). TTL follows `CHALLENGE_TTL_SEC` / `challenge_ttl_sec`.
-2. **Behavioural metrics** — Per client IP and per `__ch_nonce` (when present), request timestamps are recorded in Redis sorted sets for future use in rate-based and inter-arrival features (Cresci et al., Knowledge-Based Systems, 2021). No scoring is performed in the current release. See [METHODOLOGY.md Appendix L](../docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) and [docs/deploy/README.md](../docs/deploy/README.md).
+2. **Behavioural metrics** — Per client IP and per `__ch_nonce` (when present), request timestamps are recorded in Redis sorted sets. When `behavioral_edges` are set in scoring config, the classifier adds bot score points for rate and inter-arrival conditions (see [Appendix M](../docs/METHODOLOGY.md#appendix-m-behavioural-metrics-edge-values-for-bot-scoring)). See [METHODOLOGY.md Appendix L](../docs/METHODOLOGY.md#appendix-l-behavioural-monitoring) and [docs/deploy/README.md](../docs/deploy/README.md).
 
 **Environment:**
 

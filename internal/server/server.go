@@ -65,6 +65,10 @@ type Config struct {
 	// Redis is set when REDIS_URL is configured; enables Redis-backed challenge store and metrics collection.
 	Redis *RedisConfig
 
+	// Behavioral edges and bot_scores for request_metrics-based signals (Appendix M). When set, ApplyBehavioralSignals is called before challenge.
+	BehavioralEdges *classifier.BehavioralEdges
+	BotScores       map[string]int
+
 	// TLS configuration
 	TLSEnabled  bool
 	TLSAddr     string // HTTPS listen address (e.g. ":8443"); when set with TLSEnabled, HTTP stays on Addr and HTTPS on TLSAddr
@@ -184,6 +188,8 @@ func New(cfg Config) (*Server, error) {
 		RedisPinger:              redisPinger,
 		MetricsCollector:         metricsCollector,
 		ChallengeCookieMaxAgeSec: cookieMaxAgeSec,
+		BehavioralEdges:          cfg.BehavioralEdges,
+		BotScores:                cfg.BotScores,
 	})
 
 	// Setup routes

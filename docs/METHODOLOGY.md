@@ -478,7 +478,7 @@ When the request is from a **trusted proxy** (X-Internal-Proxy: 1), the log also
 
 1. **HTTP/2 frame-level capture**: Not implemented in Go. HTTP/2 fingerprint is **consumed from proxy** (e.g. nginx X-FP-H2) in v0.5.0 and used in classification; SETTINGS/WINDOW_UPDATE/PRIORITY capture is done at nginx via modules. Native Go H2 frame parsing is not planned (see Phase 2, [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse)).
 
-2. **Behavioral analysis**: Single-request classification remains the primary decision. **Behavioral metrics are collected** (Redis, per IP and per `__ch_nonce`; sliding-window counts and timestamps) for future use — see [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring). **Scoring** based on these metrics is not yet implemented; `/debug` exposes `request_metrics` for the current request.
+2. **Behavioral analysis**: Single-request classification remains the primary decision. **Behavioral metrics are collected** (Redis, per IP and per `__ch_nonce`; sliding-window counts and timestamps) — see [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring). **Optional scoring** from these metrics is implemented when `behavioral_edges` are configured ([Appendix M](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring)); `/debug` exposes `request_metrics` for the current request.
 
 3. **Evasion vulnerability**: Sophisticated bots can spoof headers (except Sec-Fetch-*).
 
@@ -608,8 +608,8 @@ Methodologies for cross-checking "complex" fingerprints (TLS JA3/JA4, HTTP/2, JA
 
 | Task | Priority | Reference | Status |
 |------|----------|-----------|--------|
-| [x] Request count/timestamp collection (Redis, per IP and per __ch_nonce); /debug request_metrics | High | Appendix L, Redis rate-limiting patterns | Done (v1.0.0); scoring not yet |
-| [ ] Request timing pattern analysis (inter-arrival, rate-based scoring) | High | Cloudflare signals, Cresci et al. | Planned |
+| [x] Request count/timestamp collection (Redis, per IP and per __ch_nonce); /debug request_metrics | High | Appendix L, Redis rate-limiting patterns | Done (v1.0.0) |
+| [x] Request timing pattern analysis (inter-arrival, rate-based scoring) | High | Cloudflare signals, Cresci et al. | Done (v1.1.0; Appendix M) |
 | [ ] Path access pattern clustering | Medium | - | Planned |
 | [ ] Session fingerprint consistency tracking | Medium | FP-Inconsistent [7] | Planned |
 | [ ] Mouse/keyboard event analysis (if JS available) | Low | FP-Inspector [8] | Planned |
@@ -2090,30 +2090,30 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 
 **Occasional observation: cohort distributions (small sample, ip_derived only)**
 
-Output of `request_log_stats_by_class.py` (snapshot **tests/testdata/stats.json**): **83** in cohort ALL (65 bot, 18 browser). All **83** have request_metrics (**65** BOT + **18** BROWSER). All metrics are **ip_derived** (IP-only). Table below: **p05 — p50 — p95** per metric.
+Output of `request_log_stats_by_class.py` (snapshot **tests/testdata/stats.json**): **248** in cohort ALL (196 bot, 52 browser). All **248** have request_metrics (**196** BOT + **52** BROWSER). All metrics are **ip_derived** (IP-only).
 
-| Metric | ALL, n=83 | BOT, n=65 | BROWSER, n=18 |
-|--------|------------|-----------|---------------|
-| ip_request_count | 1 — 2 — 14 | 1 — 3 — 14.8 | 1 — 1 — 4.15 |
-| request_rate_per_min | 0.2 — 0.4 — 2.8 | 0.2 — 0.6 — 2.96 | 0.2 — 0.2 — 0.83 |
-| inter_arrival_median_sec | 0.003 — 0.471 — 77.458 | 0.003 — 0.373 — 112.781 | 0.186 — 1.321 — 5.571 |
-| inter_arrival_mean_sec | 0.048 — 0.75 — 77.458 | 0.033 — 0.671 — 112.781 | 0.186 — 1.385 — 5.571 |
-| inter_arrival_std_sec | 0.114 — 0.828 — 7.228 | 0.05 — 0.75 — 4.671 | 0.936 — 1.449 — 7.692 |
-| inter_arrival_std_per_mean | 0.208 — 1.181 — 2.187 | 0.14 — 1.169 — 2.205 | 0.854 — 1.263 — 1.381 |
-| inter_arrival_min_sec | 0.002 — 0.143 — 77.458 | 0.002 — 0.12 — 112.781 | 0.086 — 0.152 — 4.679 |
-| inter_arrival_max_sec | 0.048 — 2.55 — 79.3 | 0.033 — 2.55 — 112.781 | 0.186 — 2.768 — 11.01 |
+| Metric | ALL, n=248 | BOT, n=196 | BROWSER, n=52 |
+|--------|-------------|------------|---------------|
+| ip_request_count | 1 — 1 — 11 | 1 — 1 — 12 | 1 — 1 — 5 |
+| request_rate_per_min | 0.2 — 0.2 — 2.2 | 0.2 — 0.2 — 2.4 | 0.2 — 0.2 — 0.9 |
+| inter_arrival_median_sec | 0.004 — 2.023 — 100.274 | 0.003 — 1.169 — 128.675 | 0.497 — 6.718 — 64.257 |
+| inter_arrival_mean_sec | 0.207 — 2.103 — 100.274 | 0.067 — 1.497 — 128.675 | 0.497 — 6.718 — 64.257 |
+| inter_arrival_std_sec | 0.230 — 2.374 — 85.518 | 0.228 — 2.236 — 85.807 | 1.017 — 4.024 — 36.084 |
+| inter_arrival_std_per_mean | 0.361 — 1.084 — 2.204 | 0.359 — 1.135 — 2.216 | 0.482 — 1.011 — 1.381 |
+| inter_arrival_min_sec | 0.002 — 0.599 — 66.741 | 0.002 — 0.475 — 121.725 | 0.086 — 5.183 — 56.268 |
+| inter_arrival_max_sec | 0.240 — 4.063 — 182.766 | 0.067 — 3.343 — 182.766 | 0.497 — 9.608 — 91.798 |
 
 (Cell format: **p05 — p50 — p95**.)
 
-**Analysis:** **BOT**: wide spread of inter-arrival (median p50 0.37 s, p95 up to 112.8 s), higher rate (p50 0.6/min, p95 2.96/min). **BROWSER**: shorter p95 tail (median/mean p50 1.3–1.4 s, max p95 11.01 s), lower rate (p50 0.2/min, p95 0.83/min). **inter_arrival_std_per_mean**: BOT p50 1.169 (p95 2.2), BROWSER p50 1.263 (p95 1.38). In this sample **bots** show both very short gaps and long pauses (high p95); **browsers** stay in a narrower band. Calibration over a broader log recommended.
+**Analysis:** **BOT**: very wide inter-arrival spread (median p50 1.17 s, p95 up to 128.7 s; max p95 182.8 s), request rate p50 0.2/min (p95 2.4/min). **BROWSER**: longer median/mean p50 (6.72 s), p95 up to 64–92 s; lower rate (p50 0.2/min, p95 0.89/min). **inter_arrival_std_per_mean**: BOT p50 1.135 (p95 2.22), BROWSER p50 1.011 (p95 1.38). In this sample **bots** show both short bursts and long pauses; **browsers** have higher median gaps (6.7 s) but still long p95 tails. Calibration over a broader log recommended.
 
-**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort (this snapshot: BOT p50 0.6/min, inter-arrival p95 up to 113 s; BROWSER p50 0.2/min, p95 11 s) is **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
+**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort (this snapshot: 248 records; BOT median gap 1.2 s, p95 to 129 s; BROWSER median 6.7 s, p95 to 92 s) is **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
 
 The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
 
 ### Scope and limitations
 
-- **No scoring**: This appendix defines only collection and storage. Integration of these metrics into the classifier (e.g. score weights or thresholds) is out of scope here.
+- **No scoring**: This appendix defines only collection and storage. Optional integration of these metrics into the classifier (edge values and bot_score weights) is defined in [Appendix M](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring).
 - **Best-effort**: Metric updates are best-effort; backpressure or Redis unavailability must not change classification or response.
 - **Privacy and retention**: Operators should configure TTLs and key scope in line with data retention and privacy policy.
 
@@ -2128,6 +2128,49 @@ The figures above are for orientation only; scoring or blocking rules based on t
 - Imperva, “Bad Bot Report,” 2025. <https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf>.
 - F5 Labs, “2025 Advanced Persistent Bots Report,” 2025. Request rate and behavioural patterns post-mitigation. <https://www.f5.com/labs/articles/2025-advanced-persistent-bots-report>.
 - Cloudflare, “Improved Bot Management flexibility and visibility with new high-precision heuristics,” 2025. Request rate density, inter-arrival time, median analysis. <https://blog.cloudflare.com/bots-heuristics>.
+
+---
+
+## Appendix M: Behavioural-metrics edge values for bot scoring
+
+This appendix defines optional **edge values** (thresholds) for the metrics exposed in [Appendix L](#appendix-l-behavioural-monitoring). When `request_metrics` are available and the collector has produced derived stats for the current request’s IP (or nonce), the classifier may add **bot score** points for each condition that holds. These behavioural signals are **additive** to the fingerprint-based score (see [Scoring Algorithm](#scoring-algorithm)); they are applied in a post-step (e.g. `ApplyBehavioralSignals`) and do not replace TLS/HTTP/UA signals. If Redis or the metrics collector is unavailable, or derived stats are absent, no behavioural points are added.
+
+### Median vs mean inter-arrival comparison
+
+Empirically, **bot** traffic in labelled cohorts often exhibits **mean inter-arrival time greater than median** (right-skewed distribution of gaps: short bursts followed by occasional long pauses). **Browser** traffic in the same cohorts tends to show **median ≈ mean** (narrower or more symmetric spread within the observation window). The ratio *mean / median* is therefore discriminative: values noticeably above 1.0 are consistent with automated, burst-then-pause pacing; values near 1.0 are consistent with more regular human pacing. This aligns with the literature on inter-arrival regularity (Cresci et al., 2021; BOTracle, 2024).
+
+### Edge values and conditions
+
+The following table gives the **proposed edge values** and the condition under which one bot-score point is added per signal. Thresholds are configurable (e.g. in scoring config or a dedicated `behavioral_edges` section); the values below are defaults derived from cohort analysis and cited practice.
+
+| Signal name               | Condition (per request’s ip_derived or nonce_derived) | Default edge | Rationale |
+|---------------------------|--------------------------------------------------------|--------------|-----------|
+| **high-request-rate**     | `request_rate_per_min > E_rate`                        | **1.2** req/min | BOT cohort p95 ≈ 2.4, BROWSER p95 ≈ 0.89; 1.2 lies above browser p95 and flags high-rate automation (Cloudflare-style rate density; Human Security, F5, Imperva). |
+| **low-inter-arrival-median** | `inter_arrival_median_sec < E_median` (when n ≥ 2) | **3.0** s | BOT median ≈ 1.2 s, BROWSER ≈ 6.7 s; 3 s separates majority of bots from majority of browsers. Human pacing is typically “several to tens of seconds” (Appendix L). |
+| **high-inter-arrival-variance** | `inter_arrival_std_per_mean > E_var` (when n ≥ 2) | **1.40** | Just above BROWSER p95 (≈1.38); BOT p50 ≈ 1.14. High std/mean indicates burst-then-pause, irregular pacing (Cresci et al.; on-the-fly classification). |
+| **mean-above-median**     | `inter_arrival_mean_sec / inter_arrival_median_sec > E_ratio` (when n ≥ 2, median > 0) | **1.15** | BOT p50: mean ≈ 1.5 s, median ≈ 1.2 s → ratio ≈ 1.28; BROWSER p50: both ≈ 6.7 s → ratio ≈ 1.0. Right-skewed gaps indicate automation. |
+
+Inter-arrival conditions apply only when the derived stats are based on at least two requests in the window (so that median, mean, and std are defined). The formula for classification is unchanged: *net_score = browser_score − BotScoreWeight × bot_score*; behavioural points are added to *bot_score* before computing *net_score* and the final class.
+
+### Recall and false positive rate (cohort)
+
+Exact **bot recall** (proportion of bot-labelled records that receive at least one behavioural point) and **browser false positive rate** (proportion of browser-labelled records that receive at least one behavioural point) depend on the cohort and deployment. The tool **request_log_stats_by_class.py** (see [tools/python/request_log_stats_by_class.py](../tools/python/request_log_stats_by_class.py)) computes these from request logs: it applies the same four edge conditions per record and outputs, for the BOT and BROWSER cohorts, `count_by_signals` (0–4), `recall_pct` (BOT), and `fp_rate_pct` (BROWSER), plus a **mean/median ratio** distribution per cohort. Run it on the same JSONL used for evaluation to obtain cohort-specific figures. No normative accuracy claims are made; baselines are deployment-specific.
+
+### Scope and limitations
+
+- **Additive only**: Behavioural signals add to the existing bot/browser score; they do not replace fingerprint-based classification.
+- **Best-effort**: If metrics are unavailable, classification proceeds without behavioural points. No guarantee of recall or false positive rate across sites or time.
+- **Configurable**: Edge values and bot_score weights for each signal are set in configuration (e.g. `config/scoring.json`); see config README and [Scoring Algorithm](#scoring-algorithm).
+
+### References (Appendix M)
+
+- BOTracle: J. Kadel, R. A. See, R. Sinha, M. Fischer, “BOTracle: A framework for Discriminating Bots and Humans,” arXiv:2412.02266, 2024. <https://arxiv.org/abs/2412.02266>.
+- S. Cresci et al., “Efficient on-the-fly Web bot detection,” Knowledge-Based Systems, 2021. <https://www.sciencedirect.com/science/article/pii/S0950705121003373>.
+- Cloudflare, “Improved Bot Management flexibility and visibility with new high-precision heuristics,” 2025. <https://blog.cloudflare.com/bots-heuristics>.
+- F5 Labs, “2025 Advanced Persistent Bots Report,” 2025. <https://www.f5.com/labs/articles/2025-advanced-persistent-bots-report>.
+- Imperva, “Bad Bot Report,” 2025. <https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf>.
+- Human Security, “Bot Detection Guide,” 2025. <https://humansecurity.com/learn/topics/what-is-bot-detection>.
+- Data-driven human and bot recognition from web activity logs (hybrid learning), ScienceDirect, 2023. <https://www.sciencedirect.com/science/article/pii/S2352864823000330>.
 
 ---
 

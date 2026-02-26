@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/muliwe/go-client-classifier/internal/fingerprint"
+	"github.com/muliwe/go-client-classifier/internal/metrics"
 
 	"github.com/google/uuid"
 )
@@ -42,6 +43,14 @@ type Config struct {
 	ChallengeFailedBotScore int
 	// Client Hints challenge: browser score added when challenge passed; 0 = no bonus.
 	ChallengePassedBrowserScore int
+}
+
+// BehavioralEdges holds thresholds for request_metrics-based bot signals (Appendix M).
+type BehavioralEdges struct {
+	RequestRatePerMinAbove      float64
+	InterArrivalMedianSecBelow  float64
+	InterArrivalStdPerMeanAbove float64
+	MeanMedianRatioAbove        float64
 }
 
 // DefaultConfig returns default classifier configuration (fallback when config load fails).
@@ -322,4 +331,79 @@ func (c *Classifier) calculateConfidence(s fingerprint.Signals, netScore int) fl
 // Use after ApplyChallengeSignal so confidence reflects challenge outcome (e.g. lower when bot_score > 0).
 func (c *Classifier) ConfidenceFromSignals(signals fingerprint.Signals, netScore int) float64 {
 	return c.calculateConfidence(signals, netScore)
+}
+
+// ApplyBehavioralSignals adds bot score points when request_metrics meet behavioral edge conditions (Appendix M).
+// When requestMetrics is nil or derived stats are absent, no change. Uses edges for thresholds and botScores
+// for the points per signal (e.g. high-request-rate, low-inter-arrival-median, high-inter-arrival-variance, mean-above-median).
+// Recomputes result.Score and may flip classification to bot; appends to result.Reason.
+func (c *Classifier) ApplyBehavioralSignals(result *fingerprint.ClassificationResult, requestMetrics *metrics.RequestMetrics, edges BehavioralEdges, botScores map[string]int) {
+	if requestMetrics == nil || botScores == nil {
+		return
+	}
+	derived := requestMetrics.IPDerived
+	if requestMetrics.Nonce != "" && requestMetrics.NonceDerived != nil {
+		derived = requestMetrics.NonceDerived
+	}
+	if derived == nil {
+		return
+	}
+	nReq := requestMetrics.IPRequestCount
+	if requestMetrics.Nonce != "" && requestMetrics.NonceDerived != nil {
+		nReq = requestMetrics.NonceRequestCount
+	}
+	hasInterArrival := nReq >= 2
+	weight := c.cfg.BotScoreWeight
+	if weight <= 0 {
+		weight = 4
+	}
+	threshold := c.cfg.Threshold
+	added := 0
+	if derived.RequestRatePerMin > edges.RequestRatePerMinAbove {
+		if n := botScores["high-request-rate"]; n > 0 {
+			result.Signals.BotScore += n
+			result.Signals.ScoreBreakdown = injectBotBreakdown(result.Signals.ScoreBreakdown, "high-request-rate", n)
+			result.Reason += "; behavioral: high-request-rate"
+			added += n
+		}
+	}
+	if hasInterArrival && derived.InterArrivalMedianSec < edges.InterArrivalMedianSecBelow {
+		if n := botScores["low-inter-arrival-median"]; n > 0 {
+			result.Signals.BotScore += n
+			result.Signals.ScoreBreakdown = injectBotBreakdown(result.Signals.ScoreBreakdown, "low-inter-arrival-median", n)
+			result.Reason += "; behavioral: low-inter-arrival-median"
+			added += n
+		}
+	}
+	if hasInterArrival && derived.InterArrivalMeanSec > 0 {
+		stdPerMean := derived.InterArrivalStdSec / derived.InterArrivalMeanSec
+		if stdPerMean > edges.InterArrivalStdPerMeanAbove {
+			if n := botScores["high-inter-arrival-variance"]; n > 0 {
+				result.Signals.BotScore += n
+				result.Signals.ScoreBreakdown = injectBotBreakdown(result.Signals.ScoreBreakdown, "high-inter-arrival-variance", n)
+				result.Reason += "; behavioral: high-inter-arrival-variance"
+				added += n
+			}
+		}
+		if derived.InterArrivalMedianSec > 0 {
+			ratio := derived.InterArrivalMeanSec / derived.InterArrivalMedianSec
+			if ratio > edges.MeanMedianRatioAbove {
+				if n := botScores["mean-above-median"]; n > 0 {
+					result.Signals.BotScore += n
+					result.Signals.ScoreBreakdown = injectBotBreakdown(result.Signals.ScoreBreakdown, "mean-above-median", n)
+					result.Reason += "; behavioral: mean-above-median"
+					added += n
+				}
+			}
+		}
+	}
+	if added == 0 {
+		return
+	}
+	result.Score = result.Signals.BrowserScore - weight*result.Signals.BotScore
+	if result.Score <= threshold && result.Classification == ClassificationBrowser {
+		result.Classification = ClassificationBot
+		result.Reason += "; reclassified by behavioral metrics"
+	}
+	result.Confidence = c.calculateConfidence(result.Signals, result.Score)
 }
