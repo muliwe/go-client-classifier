@@ -2090,24 +2090,24 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 
 **Occasional observation: cohort distributions (small sample, ip_derived only)**
 
-Output of `request_log_stats_by_class.py` on a small log: **27** in cohort ALL (20 bot, 7 browser). Of those 27, not all have request_metrics (e.g. single requests); **21** do (**15** BOT + **6** BROWSER). All metrics are **ip_derived** (IP-only; nonce not used). The script reports min, max, mean, median, p05, p50, p95 over per-request values; the table below gives **p05 — p50 — p95** to show both tails and centre.
+Output of `request_log_stats_by_class.py` (snapshot **tests/testdata/stats.json**): **83** in cohort ALL (65 bot, 18 browser). All **83** have request_metrics (**65** BOT + **18** BROWSER). All metrics are **ip_derived** (IP-only). Table below: **p05 — p50 — p95** per metric.
 
-| Metric | ALL, n=21 | BOT, n=15 | BROWSER, n=6 |
-|--------|------------|-----------|--------------|
-| ip_request_count | 1.0 — 5.0 — 14.0 | 1.7 — 8.0 — 14.3 | 1.0 — 1.0 — 3.0 |
-| request_rate_per_min | 0.2 — 1.0 — 2.8 | 0.34 — 1.6 — 2.86 | 0.2 — 0.2 — 0.6 |
-| inter_arrival_median_sec | 0.373 — 0.427 — 5.571 | 0.372 — 0.373 — 0.571 | 4.638 — 5.571 — 5.571 |
-| inter_arrival_mean_sec | 0.435 — 0.575 — 5.571 | 0.433 — 0.568 — 0.69 | 4.638 — 5.571 — 5.571 |
-| inter_arrival_std_sec | 0.228 — 0.628 — 7.692 | 0.228 — 0.616 — 0.758 | 7.692 — 7.692 — 7.692 |
-| inter_arrival_std_per_mean | 0.392 — 1.149 — 1.381 | 0.388 — 1.135 — 1.207 | 1.381 — 1.381 — 1.381 |
-| inter_arrival_min_sec | 0.088 — 0.153 — 1.088 | 0.088 — 0.153 — 0.48 | 0.132 — 0.132 — 4.094 |
-| inter_arrival_max_sec | 0.834 — 2.55 — 11.01 | 0.772 — 2.55 — 2.55 | 5.182 — 11.01 — 11.01 |
+| Metric | ALL, n=83 | BOT, n=65 | BROWSER, n=18 |
+|--------|------------|-----------|---------------|
+| ip_request_count | 1 — 2 — 14 | 1 — 3 — 14.8 | 1 — 1 — 4.15 |
+| request_rate_per_min | 0.2 — 0.4 — 2.8 | 0.2 — 0.6 — 2.96 | 0.2 — 0.2 — 0.83 |
+| inter_arrival_median_sec | 0.003 — 0.471 — 77.458 | 0.003 — 0.373 — 112.781 | 0.186 — 1.321 — 5.571 |
+| inter_arrival_mean_sec | 0.048 — 0.75 — 77.458 | 0.033 — 0.671 — 112.781 | 0.186 — 1.385 — 5.571 |
+| inter_arrival_std_sec | 0.114 — 0.828 — 7.228 | 0.05 — 0.75 — 4.671 | 0.936 — 1.449 — 7.692 |
+| inter_arrival_std_per_mean | 0.208 — 1.181 — 2.187 | 0.14 — 1.169 — 2.205 | 0.854 — 1.263 — 1.381 |
+| inter_arrival_min_sec | 0.002 — 0.143 — 77.458 | 0.002 — 0.12 — 112.781 | 0.086 — 0.152 — 4.679 |
+| inter_arrival_max_sec | 0.048 — 2.55 — 79.3 | 0.033 — 2.55 — 112.781 | 0.186 — 2.768 — 11.01 |
 
 (Cell format: **p05 — p50 — p95**.)
 
-**Analysis:** In this sample, **BOT** traffic exhibits **narrow inter-arrival intervals** (p05–p95 for mean: 0.43–0.69 s, for max: 2.55 s) and a **higher request rate** (p50: 1.6/min, p95: 2.86/min), reflecting short and regular request spacing. **BROWSER** traffic shows **longer inter-arrival gaps** (median/mean p50: 5.57 s, max p50: 11.01 s) and a **lower request rate** (p50: 0.2/min, p95: 0.6/min); with six browser records with metrics, the spread stays narrow for this cohort (e.g. inter_arrival_std_sec constant at 7.69 s). The **ALL** cohort mixes both: p50 aligns with bot-like rates and short gaps, while p95 is pulled up by browser-like long intervals (5.57 s, 11.01 s). At the IP level, this run illustrates that **bots tend to have denser, more regular request patterns**, whereas **browsers tend to have fewer requests and longer inter-arrival gaps**. Cohort distributions will vary by dataset; calibration over a broader log is recommended.
+**Analysis:** **BOT**: wide spread of inter-arrival (median p50 0.37 s, p95 up to 112.8 s), higher rate (p50 0.6/min, p95 2.96/min). **BROWSER**: shorter p95 tail (median/mean p50 1.3–1.4 s, max p95 11.01 s), lower rate (p50 0.2/min, p95 0.83/min). **inter_arrival_std_per_mean**: BOT p50 1.169 (p95 2.2), BROWSER p50 1.263 (p95 1.38). In this sample **bots** show both very short gaps and long pauses (high p95); **browsers** stay in a narrower band. Calibration over a broader log recommended.
 
-**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort numbers (BOT: ~1.6/min, 0.5–0.7 s gaps; BROWSER: ~0.2–0.4/min, ~5.6–11 s gaps) are **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
+**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort (this snapshot: BOT p50 0.6/min, inter-arrival p95 up to 113 s; BROWSER p50 0.2/min, p95 11 s) is **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
 
 The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
 
