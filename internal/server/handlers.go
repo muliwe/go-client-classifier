@@ -363,6 +363,7 @@ type ChallengeState struct {
 // HandleDebug returns detailed fingerprint for debugging (optional endpoint).
 // Same collect/classify/challenge/log path as HandleClassify; only the response body differs (full debug JSON).
 // When Redis metrics are configured, request_metrics contains sliding-window counts and request history (Appendix L).
+// The current request is recorded before building request_metrics so /debug traffic accumulates in the window.
 func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
@@ -374,6 +375,9 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 
 	responseTime := time.Since(startTime).Milliseconds()
 	addr := ClientIP(r)
+	if h.metricsCollector != nil {
+		h.metricsCollector.RecordRequest(addr, getChallengeCookie(r))
+	}
 	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash, nil)
 
 	w.Header().Set("Content-Type", "application/json")
