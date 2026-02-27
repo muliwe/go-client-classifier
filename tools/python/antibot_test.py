@@ -29,7 +29,26 @@ Dependencies:
 """
 
 import json
+import random
+import time
+
 from curl_cffi import requests
+
+# Pause between requests so behavioural edges don't fire (Appendix M):
+# rate <= 2/min → gap >= 30 s; median >= 4 s; std/mean < 1.35; mean/median ~ 1.
+# 30 s base gives ~2 req/min; jitter so gaps aren't uniform.
+PAUSE_BETWEEN_REQUESTS_SEC = 30.0
+# Random deviation (jitter): more human-like; keep std/mean below edge 1.35.
+PAUSE_DEVIATION_SEC = 4.0
+
+
+def _pause_between_requests() -> None:
+    """Sleep for PAUSE_BETWEEN_REQUESTS_SEC ± PAUSE_DEVIATION_SEC (min 25 s so rate stays ≤ 2/min)."""
+    if PAUSE_BETWEEN_REQUESTS_SEC <= 0:
+        return
+    sec = PAUSE_BETWEEN_REQUESTS_SEC + random.uniform(-PAUSE_DEVIATION_SEC, PAUSE_DEVIATION_SEC)
+    sec = max(25.0, sec)  # 60/25 = 2.4/min upper bound; 30±4 gives ~2/min
+    time.sleep(sec)
 
 # Cookie jar: cookies for domain .invent.sale (used in requests to antibot)
 INVENT_COOKIES = [
@@ -71,13 +90,18 @@ ACCEPT_LANGUAGE_RICH = "ru-RU,ru;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6"
 def test_antibot(
     url: str = "https://antibot.invent.sale/debug",
     session: requests.Session | None = None,
+    pause_after: bool = False,
 ) -> dict:
-    """Send a request impersonating Chrome and return the antibot verdict. Uses session's cookie jar; response Set-Cookie is stored in it."""
+    """Send a request impersonating Chrome and return the antibot verdict. Uses session's cookie jar; response Set-Cookie is stored in it.
+    If pause_after, sleep PAUSE_BETWEEN_REQUESTS_SEC so the next request doesn't trigger behavioural edges."""
     if session is None:
         session = _session_with_initial_cookies()
     headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
     response = session.get(url, impersonate="chrome", headers=headers)
-    return response.json()
+    data = response.json()
+    if pause_after:
+        _pause_between_requests()
+    return data
 
 
 def _ja3_hash_from_result(data: dict) -> str:
@@ -132,7 +156,9 @@ def test_antibot_with_profiles(
 
     headers = {"Accept-Language": ACCEPT_LANGUAGE_RICH}
     multi_instance_hint = False
-    for profile in profiles:
+    for i, profile in enumerate(profiles):
+        if i > 0:
+            _pause_between_requests()
         try:
             response = session.get(url, impersonate=profile, headers=headers)
             data = response.json()
@@ -163,7 +189,7 @@ if __name__ == "__main__":
     session = _session_with_initial_cookies()
 
     print("=== Single test (chrome profile) ===")
-    result = test_antibot(session=session)
+    result = test_antibot(session=session, pause_after=True)
     print(json.dumps(result, indent=2))
     ja3 = _ja3_hash_from_result(result)
     ja4h = _ja4h_hash_from_result(result)
@@ -172,5 +198,5 @@ if __name__ == "__main__":
           f"score={result.get('score')} browser={sig.get('browser_score')} bot={sig.get('bot_score')}, "
           f"ja3: {ja3}, ja4h: {ja4h}")
 
-    print("\n=== Multi-profile test (same cookie jar, incl. from first request) ===")
+    print(f"\n=== Multi-profile test (same cookie jar, {PAUSE_BETWEEN_REQUESTS_SEC}s±{PAUSE_DEVIATION_SEC}s pause between requests to avoid behavioural edges) ===")
     test_antibot_with_profiles(session=session)

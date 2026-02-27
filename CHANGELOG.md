@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.1.1 (2026-02-27)
+
+### /debug: metrics accumulation and behavioural score
+
+- **HandleDebug records request and applies behavioural signals**: `/debug` now calls `RecordRequest(addr, nonce)` before building `request_metrics`, so traffic to `/debug` accumulates in the sliding window and `ip_derived` is populated. It then calls `ApplyBehavioralSignals` (when `behavioral_edges` and `bot_scores` are configured) so the debug response shows the same score and `score_breakdown` as the main classifier endpoint (including behavioural bot points).
+- **request_log_stats_by_class.py**: When `ip_derived` has no `inter_arrival_std_per_mean` (Go logs only `inter_arrival_std_sec` and `inter_arrival_mean_sec`), the script now computes std/mean from std_sec/mean_sec so the gap_std_mean criterion and count_per_signal work correctly.
+
+### antibot_test.py: pauses to avoid behavioural edges
+
+- **Pauses between requests**: 30±4 s between requests so `request_rate_per_min` stays ≤ 2 and inter-arrival median/mean remain above edges; optional jitter (PAUSE_DEVIATION_SEC) so gaps aren’t perfectly uniform. Reduces false bot score from behavioural signals when running the test repeatedly from the same IP.
+
 ## v1.1.0 (2026-02-26)
 
 ### Behavioural-metrics edge values and Appendix M
