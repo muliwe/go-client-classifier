@@ -2088,26 +2088,26 @@ The following comparison uses `request_metrics` from two reference runs (testdat
 
 **Conclusion:** In this snapshot, the bot shows a **wide spread** of inter-arrival times (min 0.05 s, max 38 s) and **high std** (9.2 s) — bursty automated pacing with occasional long pauses. The browser’s **nonce_derived** shows a **narrower range** (0.12–3.4 s) and **lower std** (1.0 s), consistent with more regular, short successions of requests (e.g. navigation/clicks) without long idle gaps in the window. So in this example, **high max gap and high std** coincide with the bot; **compact min–max and moderate std** coincide with the browser. This aligns with the literature (humans often more variable at longer time scales; here the bot’s variance is driven by a few very long gaps). Optional use: flag or review IPs/nonces with e.g. `inter_arrival_max_sec` or `inter_arrival_std_sec` above a deployment-specific threshold in addition to fingerprint/UA signals.
 
-**Occasional observation: cohort distributions (small sample, ip_derived only)**
+**Occasional observation: cohort distributions (ip_derived only)**
 
-Output of `request_log_stats_by_class.py` (snapshot **tests/testdata/stats.json**): **248** in cohort ALL (196 bot, 52 browser). All **248** have request_metrics (**196** BOT + **52** BROWSER). All metrics are **ip_derived** (IP-only).
+Output of `request_log_stats_by_class.py` on an extended log: **948** in cohort ALL (703 BOT, 245 BROWSER). All have request_metrics; metrics are **ip_derived** (IP-only). BOT/BROWSER labels come from log classification (fingerprint/UA only, before behavioural scoring); see Appendix M for recall/FP and cohort-labelling note.
 
-| Metric | ALL, n=248 | BOT, n=196 | BROWSER, n=52 |
-|--------|-------------|------------|---------------|
-| ip_request_count | 1 — 1 — 11 | 1 — 1 — 12 | 1 — 1 — 5 |
-| request_rate_per_min | 0.2 — 0.2 — 2.2 | 0.2 — 0.2 — 2.4 | 0.2 — 0.2 — 0.9 |
-| inter_arrival_median_sec | 0.004 — 2.023 — 100.274 | 0.003 — 1.169 — 128.675 | 0.497 — 6.718 — 64.257 |
-| inter_arrival_mean_sec | 0.207 — 2.103 — 100.274 | 0.067 — 1.497 — 128.675 | 0.497 — 6.718 — 64.257 |
-| inter_arrival_std_sec | 0.230 — 2.374 — 85.518 | 0.228 — 2.236 — 85.807 | 1.017 — 4.024 — 36.084 |
-| inter_arrival_std_per_mean | 0.361 — 1.084 — 2.204 | 0.359 — 1.135 — 2.216 | 0.482 — 1.011 — 1.381 |
-| inter_arrival_min_sec | 0.002 — 0.599 — 66.741 | 0.002 — 0.475 — 121.725 | 0.086 — 5.183 — 56.268 |
-| inter_arrival_max_sec | 0.240 — 4.063 — 182.766 | 0.067 — 3.343 — 182.766 | 0.497 — 9.608 — 91.798 |
+| Metric | ALL, n=948 | BOT, n=703 | BROWSER, n=245 |
+|--------|-------------|------------|----------------|
+| ip_request_count | 1 — 1 — 13 | 1 — 1 — 14 | 1 — 1 — 10 |
+| request_rate_per_min | 0.2 — 0.2 — 2.6 | 0.2 — 0.2 — 2.8 | 0.2 — 0.2 — 2.0 |
+| inter_arrival_median_sec | 0.091 — 6.736 — 133.543 | 0.031 — 4.534 — 147.046 | 0.71 — 10.574 — 68.666 |
+| inter_arrival_mean_sec | 0.278 — 8.91 — 133.543 | 0.253 — 6.681 — 147.046 | 0.805 — 11.905 — 68.666 |
+| inter_arrival_std_sec | 0.276 — 4.417 — 66.965 | 0.228 — 3.071 — 68.492 | 0.887 — 6.704 — 50.811 |
+| inter_arrival_std_per_mean | 0.109 — 0.806 — 1.981 | 0.068 — 0.849 — 2.075 | 0.184 — 0.7 — 1.384 |
+| inter_arrival_min_sec | 0.025 — 3.44 — 128.889 | 0.008 — 3.089 — 145.085 | 0.178 — 4.521 — 66.299 |
+| inter_arrival_max_sec | 0.357 — 13.975 — 164.418 | 0.272 — 13.44 — 182.766 | 1.413 — 20.75 — 96.093 |
 
 (Cell format: **p05 — p50 — p95**.)
 
-**Analysis:** **BOT**: very wide inter-arrival spread (median p50 1.17 s, p95 up to 128.7 s; max p95 182.8 s), request rate p50 0.2/min (p95 2.4/min). **BROWSER**: longer median/mean p50 (6.72 s), p95 up to 64–92 s; lower rate (p50 0.2/min, p95 0.89/min). **inter_arrival_std_per_mean**: BOT p50 1.135 (p95 2.22), BROWSER p50 1.011 (p95 1.38). In this sample **bots** show both short bursts and long pauses; **browsers** have higher median gaps (6.7 s) but still long p95 tails. Calibration over a broader log recommended.
+**Analysis:** **BOT**: inter-arrival median p50 4.53 s (p95 147 s), request rate p95 2.8/min; std_per_mean p50 0.85 (p95 2.08). **BROWSER**: longer median p50 10.57 s (p95 69 s), rate p95 2.0/min; std_per_mean p50 0.70 (p95 1.38). Bots still show shorter median gaps and higher rate/variance than browsers; separation is consistent with the literature. For edge calibration on this cohort, see [Appendix M](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring) (recall/FPR and optional threshold refinement).
 
-**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort (this snapshot: 248 records; BOT median gap 1.2 s, p95 to 129 s; BROWSER median 6.7 s, p95 to 92 s) is **consistent in direction** with this literature: higher rate and shorter, more regular gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
+**Comparison with recent benchmarks and literature (2025–2026):** Industry and academic work consistently treats **request rate** and **inter-arrival timing** as discriminative. Imperva (2025 Bad Bot Report) and F5 (2025 Advanced Persistent Bots Report) report that malicious bots comprise a large share of traffic and that behavioural patterns (including request pacing) remain key signals after mitigation. BOTracle (2024, cited in Appendix L) achieves high accuracy on e-commerce traffic by combining heuristics with behavioural analysis and notes that bot vs human inter-arrival distributions differ (e.g. Weibull/sigmoid for bots vs distinct human session patterns). Cresci et al. (2021) use on-the-fly classification based on request timing and rate. Cloudflare (2025) Bot Management uses request-rate density and inter-arrival–style heuristics in a ruleset engine. Our **ip_derived** cohort (e.g. 948 records; BOT median gap 4.5 s, p95 to 147 s; BROWSER median 10.6 s, p95 to 69 s) is **consistent in direction** with this literature: higher rate and shorter median gaps in the bot cohort; lower rate and longer gaps in the browser cohort. This appendix does not define accuracy benchmarks or thresholds; it only collects metrics. Published 2025 benchmarks (e.g. Roundtable vs reCAPTCHA) compare full detection systems (often behavioural biometrics + device signals) and report detection rates (e.g. 33–87% depending on system and test set). Our classifier is fingerprint/UA-based with optional request-metrics logging for research; comparison to those benchmarks would require a full detection pipeline and labelled evaluation set.
 
 The figures above are for orientation only; scoring or blocking rules based on these metrics are out of scope for this appendix.
 
@@ -2141,20 +2141,26 @@ Empirically, **bot** traffic in labelled cohorts often exhibits **mean inter-arr
 
 ### Edge values and conditions
 
-The following table gives the **proposed edge values** and the condition under which one bot-score point is added per signal. Thresholds are configurable (e.g. in scoring config or a dedicated `behavioral_edges` section); the values below are defaults derived from cohort analysis and cited practice.
+The following table gives the **default edge values** and the condition under which **2 bot-score points** are added per signal (strong signal). Thresholds are configurable in scoring config (`behavioral_edges`); the values below are defaults calibrated on an extended cohort (see below).
 
 | Signal name               | Condition (per request’s ip_derived or nonce_derived) | Default edge | Rationale |
 |---------------------------|--------------------------------------------------------|--------------|-----------|
-| **high-request-rate**     | `request_rate_per_min > E_rate`                        | **1.2** req/min | BOT cohort p95 ≈ 2.4, BROWSER p95 ≈ 0.89; 1.2 lies above browser p95 and flags high-rate automation (Cloudflare-style rate density; Human Security, F5, Imperva). |
-| **low-inter-arrival-median** | `inter_arrival_median_sec < E_median` (when n ≥ 2) | **3.0** s | BOT median ≈ 1.2 s, BROWSER ≈ 6.7 s; 3 s separates majority of bots from majority of browsers. Human pacing is typically “several to tens of seconds” (Appendix L). |
-| **high-inter-arrival-variance** | `inter_arrival_std_per_mean > E_var` (when n ≥ 2) | **1.40** | Just above BROWSER p95 (≈1.38); BOT p50 ≈ 1.14. High std/mean indicates burst-then-pause, irregular pacing (Cresci et al.; on-the-fly classification). |
-| **mean-above-median**     | `inter_arrival_mean_sec / inter_arrival_median_sec > E_ratio` (when n ≥ 2, median > 0) | **1.15** | BOT p50: mean ≈ 1.5 s, median ≈ 1.2 s → ratio ≈ 1.28; BROWSER p50: both ≈ 6.7 s → ratio ≈ 1.0. Right-skewed gaps indicate automation. |
+| **high-request-rate**     | `request_rate_per_min > E_rate`                        | **2.0** req/min | BROWSER p95 ≈ 2.0; 2.0 reduces FP. BOT p95 ≈ 2.8 so high-rate automation still flagged (Cloudflare-style rate density; Human Security, F5, Imperva). |
+| **low-inter-arrival-median** | `inter_arrival_median_sec < E_median` (when n ≥ 2) | **4.0** s | BOT p50 ≈ 4.5 s, BROWSER p50 ≈ 10.6 s; 4 s increases bot recall. Human pacing is typically “several to tens of seconds” (Appendix L). |
+| **high-inter-arrival-variance** | `inter_arrival_std_per_mean > E_var` (when n ≥ 2) | **1.35** | Just below BROWSER p95 (≈1.38); BOT p95 ≈ 2.08. High std/mean indicates burst-then-pause (Cresci et al.). |
+| **mean-above-median**     | `inter_arrival_mean_sec / inter_arrival_median_sec > E_ratio` (when n ≥ 2, median > 0) | **1.2** | Right-skewed gaps (mean &gt; median) indicate automation. 1.2 flags strong bot-like skew; BROWSER p95 ratio ≈ 1.38–2.18. |
 
-Inter-arrival conditions apply only when the derived stats are based on at least two requests in the window (so that median, mean, and std are defined). The formula for classification is unchanged: *net_score = browser_score − BotScoreWeight × bot_score*; behavioural points are added to *bot_score* before computing *net_score* and the final class.
+Inter-arrival conditions apply only when the derived stats are based on at least two requests in the window (so that median, mean, and std are defined). The formula for classification is unchanged: *net_score = browser_score − BotScoreWeight × bot_score*; **each behavioural signal adds 2 points** to *bot_score* before computing *net_score* and the final class.
 
 ### Recall and false positive rate (cohort)
 
-Exact **bot recall** (proportion of bot-labelled records that receive at least one behavioural point) and **browser false positive rate** (proportion of browser-labelled records that receive at least one behavioural point) depend on the cohort and deployment. The tool **request_log_stats_by_class.py** (see [tools/python/request_log_stats_by_class.py](../tools/python/request_log_stats_by_class.py)) computes these from request logs: it applies the same four edge conditions per record and outputs, for the BOT and BROWSER cohorts, `count_by_signals` (0–4), `recall_pct` (BOT), and `fp_rate_pct` (BROWSER), plus a **mean/median ratio** distribution per cohort. Run it on the same JSONL used for evaluation to obtain cohort-specific figures. No normative accuracy claims are made; baselines are deployment-specific.
+Exact **bot recall** (proportion of bot-labelled records that receive at least one behavioural point) and **browser false positive rate** (proportion of browser-labelled records that receive at least one behavioural point) depend on the cohort and deployment. **Cohort labelling:** BOT and BROWSER in the stats script are taken from the log **classification** field, which is set by the classifier **before** behavioural scoring (fingerprint/UA only). So some "browser" labels may be false negatives (bots that passed fingerprint) and some "bot" labels may be false positives; recall and FP rate are with respect to this pre-behavioural label. The tool **request_log_stats_by_class.py** (see [tools/python/request_log_stats_by_class.py](../tools/python/request_log_stats_by_class.py)) computes these from request logs: it applies the same four edge conditions per record and outputs, for the BOT and BROWSER cohorts, `count_by_signals` (0–4), `recall_pct` (BOT), and `fp_rate_pct` (BROWSER), plus a **mean/median ratio** distribution per cohort. Run it on the same JSONL used for evaluation to obtain cohort-specific figures. No normative accuracy claims are made; baselines are deployment-specific.
+
+**Extended cohort (example run):** On **948** records (703 BOT, 245 BROWSER), edges **2.0, 4.0, 1.35, 1.2** yielded **bot recall 34.99%** and **browser FP rate 31.02%**. Counts: BOT count_by_signals {0: 457, 1: 136, 2: 62, 3: 39, 4: 9}, count_per_signal {req_per_min: 59, gap_median: 182, gap_std_mean: 46, gap_mean_median: 126}; BROWSER count_by_signals {0: 169, 1: 66, 2: 6, 3: 2, 4: 2}, count_per_signal {req_per_min: 12, gap_median: 40, gap_std_mean: 11, gap_mean_median: 29}. Re-run **request_log_stats_by_class.py** on your JSONL to see cohort-specific figures.
+
+### Edge calibration (extended cohort)
+
+Defaults are **E_rate 2.0**, **E_median 4.0**, **E_var 1.35**, **E_ratio 1.2** (see table above). Each of the four behavioural signals adds **2** bot-score points (config `bot_scores`). Operators can override in `behavioral_edges` and `bot_scores` (e.g. `config/scoring.json`) and re-run the stats script to observe new recall and FP rate.
 
 ### Scope and limitations
 

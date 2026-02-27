@@ -77,12 +77,12 @@ When **Redis** is configured and scoring config includes **`behavioral_edges`** 
 
 | Config key / bot_scores key | Default | Description |
 |-----------------------------|---------|-------------|
-| `behavioral_edges.request_rate_per_min_above` | 1.2 | Add `high-request-rate` bot point when request rate (req/min in window) exceeds this. |
-| `behavioral_edges.inter_arrival_median_sec_below` | 3.0 | Add `low-inter-arrival-median` when median inter-arrival (s) is below this (requires ≥2 requests in window). |
-| `behavioral_edges.inter_arrival_std_per_mean_above` | 1.4 | Add `high-inter-arrival-variance` when std/mean of inter-arrival times exceeds this. |
-| `behavioral_edges.inter_arrival_mean_median_ratio_above` | 1.15 | Add `mean-above-median` when mean/median inter-arrival ratio exceeds this (right-skewed gaps → bot-like). |
+| `behavioral_edges.request_rate_per_min_above` | 2.0 | Add `high-request-rate` bot points when request rate (req/min in window) exceeds this. |
+| `behavioral_edges.inter_arrival_median_sec_below` | 4.0 | Add `low-inter-arrival-median` when median inter-arrival (s) is below this (requires ≥2 requests in window). |
+| `behavioral_edges.inter_arrival_std_per_mean_above` | 1.35 | Add `high-inter-arrival-variance` when std/mean of inter-arrival times exceeds this. |
+| `behavioral_edges.inter_arrival_mean_median_ratio_above` | 1.2 | Add `mean-above-median` when mean/median inter-arrival ratio exceeds this (right-skewed gaps → bot-like). |
 
-The four **bot_scores** keys (`high-request-rate`, `low-inter-arrival-median`, `high-inter-arrival-variance`, `mean-above-median`) default to **1** point each. Exact recall and false positive rate for a cohort can be computed by running **request_log_stats_by_class.py** on the same JSONL; see Appendix M.
+The four **bot_scores** keys (`high-request-rate`, `low-inter-arrival-median`, `high-inter-arrival-variance`, `mean-above-median`) default to **2** points each (strong signal). Exact recall and false positive rate for a cohort can be computed by running **request_log_stats_by_class.py** on the same JSONL; see Appendix M. Note: cohort BOT/BROWSER in the script are from log classification (fingerprint/UA only, before behavioural scoring).
 
 ---
 

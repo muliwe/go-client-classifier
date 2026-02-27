@@ -94,7 +94,7 @@ func TestDefaultScoringConfig_fullStructure(t *testing.T) {
 		"ua-browser-no-grease": 3, "h2-ja4-inconsistent": 2, "tls-alpn-http-inconsistent": 2,
 		"no-sni": 1, "no-alpn": 1, "accept-lang-simple": 1,
 		"sec-purpose-invalid": 1, "sec-purpose-no-sec-fetch": 2, "challenge-failed": 3,
-		"high-request-rate": 1, "low-inter-arrival-median": 1, "high-inter-arrival-variance": 1, "mean-above-median": 1,
+		"high-request-rate": 2, "low-inter-arrival-median": 2, "high-inter-arrival-variance": 2, "mean-above-median": 2,
 	}
 	for key, want := range wantBotScores {
 		got, ok := cfg.BotScores[key]

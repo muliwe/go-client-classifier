@@ -100,10 +100,10 @@ func DefaultScoringConfig() ScoringConfig {
 
 func defaultBehavioralEdges() *BehavioralEdgesConfig {
 	return &BehavioralEdgesConfig{
-		RequestRatePerMinAbove:           1.2,
-		InterArrivalMedianSecBelow:       3.0,
-		InterArrivalStdPerMeanAbove:      1.4,
-		InterArrivalMeanMedianRatioAbove: 1.15,
+		RequestRatePerMinAbove:           2.0,
+		InterArrivalMedianSecBelow:       4.0,
+		InterArrivalStdPerMeanAbove:      1.35,
+		InterArrivalMeanMedianRatioAbove: 1.2,
 	}
 }
 
@@ -176,10 +176,10 @@ func defaultBotScores() map[string]int {
 		"sec-purpose-invalid":         1,
 		"sec-purpose-no-sec-fetch":    2,
 		"challenge-failed":            3, // Client Hints challenge (Appendix K), smoking gun
-		"high-request-rate":           1, // Appendix M: behavioral metrics
-		"low-inter-arrival-median":    1,
-		"high-inter-arrival-variance": 1,
-		"mean-above-median":           1,
+		"high-request-rate":           2, // Appendix M: behavioral metrics (strong signal)
+		"low-inter-arrival-median":    2,
+		"high-inter-arrival-variance": 2,
+		"mean-above-median":           2,
 	}
 }
 

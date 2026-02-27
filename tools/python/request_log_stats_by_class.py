@@ -3,7 +3,7 @@ Request metrics (IP only) by cohort: all / bot / browser.
 
 Reads request logs from JSON or JSONL. Outputs three cohorts (all, bot, browser;
 optionally exclude stress tests from "all") and for each the distribution of
-request_metrics from logs: ip_request_count, ip_derived.* (min/max/mean/median/p50/p95).
+request_metrics from logs: ip_request_count, ip_derived.* (min/max/mean/median/p05/p20/p50/p80/p95).
 Nonce is not used.
 
 Usage:
@@ -184,7 +184,9 @@ def compute_ip_metrics_stats(
             "mean": round(sum(vals) / n, 3),
             "median": round(_percentile(sorted_vals, 50) or 0, 3),
             "p05": round(_percentile(sorted_vals, 5) or 0, 3),
+            "p20": round(_percentile(sorted_vals, 20) or 0, 3),
             "p50": round(_percentile(sorted_vals, 50) or 0, 3),
+            "p80": round(_percentile(sorted_vals, 80) or 0, 3),
             "p95": round(_percentile(sorted_vals, 95) or 0, 3),
         }
     return out
@@ -193,38 +195,63 @@ def compute_ip_metrics_stats(
 STRESS_PATHS = ("/", "/health", "/debug")
 
 # Behavioural edge thresholds (METHODOLOGY Appendix M; configurable in classifier).
-EDGE_REQUEST_RATE_PER_MIN = 1.2
-EDGE_INTER_ARRIVAL_MEDIAN_SEC = 3.0
-EDGE_INTER_ARRIVAL_STD_PER_MEAN = 1.40
-EDGE_MEAN_MEDIAN_RATIO = 1.15
+# Default behavioural edges (METHODOLOGY Appendix M). Overridable via CLI (--req-per-min, --gap-*, etc.).
+# Must match config/scoring.json behavioral_edges and classifier bot_scores (2 pts each).
+EDGE_REQUEST_RATE_PER_MIN = 2.0
+EDGE_INTER_ARRIVAL_MEDIAN_SEC = 4.0
+EDGE_INTER_ARRIVAL_STD_PER_MEAN = 1.35
+EDGE_MEAN_MEDIAN_RATIO = 1.2
 
 
-def _count_behavioural_signals(rm: dict[str, Any] | None) -> int:
+def _get_edges(
+    edge_rate: float | None = None,
+    edge_median_sec: float | None = None,
+    edge_std_per_mean: float | None = None,
+    edge_ratio: float | None = None,
+) -> dict[str, float]:
+    """Return effective edge values (CLI overrides or module defaults)."""
+    return {
+        "request_rate_per_min_above": edge_rate if edge_rate is not None else EDGE_REQUEST_RATE_PER_MIN,
+        "inter_arrival_median_sec_below": edge_median_sec if edge_median_sec is not None else EDGE_INTER_ARRIVAL_MEDIAN_SEC,
+        "inter_arrival_std_per_mean_above": edge_std_per_mean if edge_std_per_mean is not None else EDGE_INTER_ARRIVAL_STD_PER_MEAN,
+        "inter_arrival_mean_median_ratio_above": edge_ratio if edge_ratio is not None else EDGE_MEAN_MEDIAN_RATIO,
+    }
+
+
+def _behavioural_signal_flags(
+    rm: dict[str, Any] | None,
+    edges: dict[str, float] | None = None,
+) -> tuple[bool, bool, bool, bool]:
     """
-    Return number of behavioural-edge signals (0–4) for this record's request_metrics.
-    Uses ip_derived only. Inter-arrival signals require at least two requests in the window.
+    Return (req_per_min, gap_median, gap_std_mean, gap_mean_median) for this record.
+    Uses ip_derived only. Inter-arrival flags require at least two requests in the window.
     """
     if not rm or not isinstance(rm, dict):
-        return 0
+        return (False, False, False, False)
     ipd = rm.get("ip_derived")
     if not isinstance(ipd, dict):
-        return 0
-    count = 0
+        return (False, False, False, False)
+    e = edges or _get_edges()
     rate = ipd.get("request_rate_per_min")
-    if isinstance(rate, (int, float)) and float(rate) > EDGE_REQUEST_RATE_PER_MIN:
-        count += 1
+    flag_rate = isinstance(rate, (int, float)) and float(rate) > e["request_rate_per_min_above"]
     median_s = ipd.get("inter_arrival_median_sec")
     mean_s = ipd.get("inter_arrival_mean_sec")
-    std_s = ipd.get("inter_arrival_std_sec")
     has_inter_arrival = (
         isinstance(median_s, (int, float))
         and isinstance(mean_s, (int, float))
     )
-    if has_inter_arrival and isinstance(median_s, (int, float)) and float(median_s) < EDGE_INTER_ARRIVAL_MEDIAN_SEC:
-        count += 1
+    flag_median = bool(
+        has_inter_arrival and isinstance(median_s, (int, float)) and float(median_s) < e["inter_arrival_median_sec_below"]
+    )
     std_per_mean = ipd.get("inter_arrival_std_per_mean")
-    if has_inter_arrival and isinstance(std_per_mean, (int, float)) and float(std_per_mean) > EDGE_INTER_ARRIVAL_STD_PER_MEAN:
-        count += 1
+    if has_inter_arrival and std_per_mean is None and isinstance(mean_s, (int, float)) and float(mean_s) != 0:
+        std_s = ipd.get("inter_arrival_std_sec")
+        if isinstance(std_s, (int, float)):
+            std_per_mean = float(std_s) / float(mean_s)
+    flag_std_mean = bool(
+        has_inter_arrival and isinstance(std_per_mean, (int, float)) and float(std_per_mean) > e["inter_arrival_std_per_mean_above"]
+    )
+    flag_ratio = False
     if (
         has_inter_arrival
         and isinstance(median_s, (int, float))
@@ -232,29 +259,48 @@ def _count_behavioural_signals(rm: dict[str, Any] | None) -> int:
         and float(median_s) > 0
     ):
         ratio = float(mean_s) / float(median_s)
-        if ratio > EDGE_MEAN_MEDIAN_RATIO:
-            count += 1
-    return count
+        flag_ratio = ratio > e["inter_arrival_mean_median_ratio_above"]
+    return (flag_rate, flag_median, flag_std_mean, flag_ratio)
+
+
+def _count_behavioural_signals(
+    rm: dict[str, Any] | None,
+    edges: dict[str, float] | None = None,
+) -> int:
+    """Return number of behavioural-edge signals (0–4) for this record."""
+    return sum(_behavioural_signal_flags(rm, edges))
 
 
 def compute_behavioral_edges_stats(
     records: list[dict[str, Any]],
     cohort: str,
+    edges: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """
-    For records with request_metrics, count how many have 0, 1, 2, 3, 4 behavioural signals.
-    cohort is "bot" or "browser": sets recall_pct (bot) or fp_rate_pct (browser).
+    For records with request_metrics, count how many have 0, 1, 2, 3, 4 behavioural signals
+    and how many triggered each of the four criteria (req_per_min, gap_median, gap_std_mean, gap_mean_median).
     """
     count_by_signals: dict[int, int] = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    count_per_signal: dict[str, int] = {"req_per_min": 0, "gap_median": 0, "gap_std_mean": 0, "gap_mean_median": 0}
     for r in records:
         rm = r.get("request_metrics")
-        n = _count_behavioural_signals(rm)
+        flags = _behavioural_signal_flags(rm, edges)
+        n = sum(flags)
         count_by_signals[n] = count_by_signals.get(n, 0) + 1
+        if flags[0]:
+            count_per_signal["req_per_min"] += 1
+        if flags[1]:
+            count_per_signal["gap_median"] += 1
+        if flags[2]:
+            count_per_signal["gap_std_mean"] += 1
+        if flags[3]:
+            count_per_signal["gap_mean_median"] += 1
     n_total = len(records)
     n_with_at_least_one = sum(count_by_signals.get(k, 0) for k in range(1, 5))
     pct = round(100.0 * n_with_at_least_one / n_total, 2) if n_total else 0.0
     out: dict[str, Any] = {
         "count_by_signals": count_by_signals,
+        "count_per_signal": count_per_signal,
         "n_total": n_total,
     }
     if cohort == "bot":
@@ -293,7 +339,9 @@ def compute_mean_median_ratio_stats(
         "mean": round(sum(ratios) / len(ratios), 3),
         "median": round(_percentile(sorted_ratios, 50) or 0, 3),
         "p05": round(_percentile(sorted_ratios, 5) or 0, 3),
+        "p20": round(_percentile(sorted_ratios, 20) or 0, 3),
         "p50": round(_percentile(sorted_ratios, 50) or 0, 3),
+        "p80": round(_percentile(sorted_ratios, 80) or 0, 3),
         "p95": round(_percentile(sorted_ratios, 95) or 0, 3),
         "n": len(ratios),
     }
@@ -309,7 +357,7 @@ def _format_ip_metrics_text(im: dict[str, Any] | None) -> str:
             continue
         lines.append(
             f"  {key}: min={val.get('min')} max={val.get('max')} mean={val.get('mean')} "
-            f"median={val.get('median')} p05={val.get('p05')} p50={val.get('p50')} p95={val.get('p95')}"
+            f"median={val.get('median')} p05={val.get('p05')} p20={val.get('p20')} p50={val.get('p50')} p80={val.get('p80')} p95={val.get('p95')}"
         )
     return "\n".join(lines) if len(lines) > 1 else lines[0]
 
@@ -350,7 +398,32 @@ def main() -> int:
         action="store_true",
         help="Print to stderr request_metrics that are rejected (no numeric ip metric)",
     )
+    parser.add_argument("--req-per-min", type=float, default=None, metavar="N",
+        help="Requests per minute threshold (signal if >). Default: %.1f" % EDGE_REQUEST_RATE_PER_MIN)
+    parser.add_argument("--gap-median-sec", type=float, default=None, metavar="N",
+        help="Gap between requests, median (sec); signal if <. Default: %.1f" % EDGE_INTER_ARRIVAL_MEDIAN_SEC)
+    parser.add_argument("--gap-std-mean", type=float, default=None, metavar="N",
+        help="Gap between requests, std/mean; signal if >. Default: %.2f" % EDGE_INTER_ARRIVAL_STD_PER_MEAN)
+    parser.add_argument("--gap-mean-median", type=float, default=None, metavar="N",
+        help="Gap between requests, mean/median; signal if >. Default: %.2f" % EDGE_MEAN_MEDIAN_RATIO)
     args = parser.parse_args()
+
+    edges = _get_edges(
+        edge_rate=args.req_per_min,
+        edge_median_sec=args.gap_median_sec,
+        edge_std_per_mean=args.gap_std_mean,
+        edge_ratio=args.gap_mean_median,
+    )
+    print(
+        "Behavioral edges: request_rate_per_min_above=%.2f inter_arrival_median_sec_below=%.2f "
+        "inter_arrival_std_per_mean_above=%.2f inter_arrival_mean_median_ratio_above=%.2f" % (
+            edges["request_rate_per_min_above"],
+            edges["inter_arrival_median_sec_below"],
+            edges["inter_arrival_std_per_mean_above"],
+            edges["inter_arrival_mean_median_ratio_above"],
+        ),
+        file=sys.stderr,
+    )
 
     file_paths = iter_files_by_globs(args.globs)
     if not file_paths:
@@ -391,8 +464,8 @@ def main() -> int:
     stats_browser = {"total": len(records_browser), "ip_metrics_stats": compute_ip_metrics_stats(records_browser, debug_reject=debug_reject)}
 
     # Behavioural-edge recall/FPR (METHODOLOGY Appendix M).
-    behavioral_bot = compute_behavioral_edges_stats(records_bot, cohort="bot")
-    behavioral_browser = compute_behavioral_edges_stats(records_browser, cohort="browser")
+    behavioral_bot = compute_behavioral_edges_stats(records_bot, cohort="bot", edges=edges)
+    behavioral_browser = compute_behavioral_edges_stats(records_browser, cohort="browser", edges=edges)
     mean_median_bot = compute_mean_median_ratio_stats(records_bot)
     mean_median_browser = compute_mean_median_ratio_stats(records_browser)
 
@@ -410,15 +483,17 @@ def main() -> int:
         # Behavioural edges (BOT and BROWSER).
         lines.append("=== Behavioural edges (bot) ===")
         lines.append(f"  count_by_signals: {behavioral_bot['count_by_signals']}")
+        lines.append(f"  count_per_signal: {behavioral_bot['count_per_signal']}")
         lines.append(f"  bot recall (% with >=1 signal): {behavioral_bot.get('recall_pct', 'N/A')}%")
         if mean_median_bot:
-            lines.append(f"  mean/median ratio: min={mean_median_bot['min']} max={mean_median_bot['max']} mean={mean_median_bot['mean']} median={mean_median_bot['median']} p05={mean_median_bot['p05']} p50={mean_median_bot['p50']} p95={mean_median_bot['p95']} n={mean_median_bot['n']}")
+            lines.append(f"  mean/median ratio: min={mean_median_bot['min']} max={mean_median_bot['max']} mean={mean_median_bot['mean']} median={mean_median_bot['median']} p05={mean_median_bot['p05']} p20={mean_median_bot['p20']} p50={mean_median_bot['p50']} p80={mean_median_bot['p80']} p95={mean_median_bot['p95']} n={mean_median_bot['n']}")
         lines.append("")
         lines.append("=== Behavioural edges (browser) ===")
         lines.append(f"  count_by_signals: {behavioral_browser['count_by_signals']}")
+        lines.append(f"  count_per_signal: {behavioral_browser['count_per_signal']}")
         lines.append(f"  browser FP rate (% with >=1 signal): {behavioral_browser.get('fp_rate_pct', 'N/A')}%")
         if mean_median_browser:
-            lines.append(f"  mean/median ratio: min={mean_median_browser['min']} max={mean_median_browser['max']} mean={mean_median_browser['mean']} median={mean_median_browser['median']} p05={mean_median_browser['p05']} p50={mean_median_browser['p50']} p95={mean_median_browser['p95']} n={mean_median_browser['n']}")
+            lines.append(f"  mean/median ratio: min={mean_median_browser['min']} max={mean_median_browser['max']} mean={mean_median_browser['mean']} median={mean_median_browser['median']} p05={mean_median_browser['p05']} p20={mean_median_browser['p20']} p50={mean_median_browser['p50']} p80={mean_median_browser['p80']} p95={mean_median_browser['p95']} n={mean_median_browser['n']}")
         text = "\n".join(lines).rstrip()
     else:
         out = {
