@@ -375,10 +375,16 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 
 	responseTime := time.Since(startTime).Milliseconds()
 	addr := ClientIP(r)
+	var requestMetrics *metrics.RequestMetrics
 	if h.metricsCollector != nil {
 		h.metricsCollector.RecordRequest(addr, getChallengeCookie(r))
+		requestMetrics = h.buildRequestMetrics(r)
+		if requestMetrics != nil && h.behavioralEdges != nil && len(h.botScores) > 0 {
+			h.classifier.ApplyBehavioralSignals(&result, requestMetrics, *h.behavioralEdges, h.botScores)
+		}
 	}
-	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash, nil)
+	result.Confidence = h.classifier.ConfidenceFromSignals(result.Signals, result.Score)
+	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash, requestMetrics)
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
