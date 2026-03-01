@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.1.2 (2026-03-01)
+
+### Collector: TLS from proxy — cipher/extension counts and supported groups from JA3
+
+- **collectTLSFromProxy fills CipherSuitesCount, ExtensionsCount, SupportedGroups from X-FP-JA3**: When TLS is taken from trusted proxy headers (X-Internal-Proxy: 1), the raw JA3 string (X-FP-JA3) is parsed and used to set `cipher_suites_count`, `extensions_count`, and `supported_groups` in the fingerprint. Previously these fields stayed 0 / null when behind a proxy, so scoring for high-ciphers, tls-ext>=10, multi-groups (browser) and low-ciphers, few-tls-ext (bot) did not apply. Now the same scoring logic applies for proxied TLS when nginx forwards X-FP-JA3.
+- **parseJA3Counts**: New helper parses JA3 format (Version,Ciphers,Extensions,EllipticCurves,PointFormats) and returns cipher count, extension count, and supported group IDs. Used only when building TLS fingerprint from proxy.
+- **SupportedVersions and SignatureSchemes** remain unset when from proxy (not present in JA3 format).
+- **Tests**: `TestCollect_TrustedProxy_JA3FillsCountsAndGroups` verifies that with X-FP-JA3 from reference_bot_curl_cffi.json the collector sets the counts and groups and that score_breakdown includes high-ciphers, multi-groups, tls-ext>=10. `TestCollect_TrustedProxy_TLSSignalsForScoring` verifies modern-tls and ssl-greased when TLS is from proxy.
+
 ## v1.1.1 (2026-02-27)
 
 ### /debug: metrics accumulation and behavioural score

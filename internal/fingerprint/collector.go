@@ -118,6 +118,8 @@ func (c *Collector) collectTLS(r *http.Request) TLSFingerprint {
 // collectTLSFromProxy builds TLS fingerprint from trusted proxy headers
 // (e.g. nginx with ssl_ja3 and proxy_set_header X-FP-*).
 // JA3 hash: prefer X-FP-JA3-HASH (32-char MD5); else X-FP-JA3 if it looks like MD5; else compute MD5 from raw JA3 string.
+// CipherSuitesCount, ExtensionsCount, SupportedGroups are derived from raw X-FP-JA3 when present,
+// so that scoring (high-ciphers, tls-ext>=10, multi-groups / low-ciphers, few-tls-ext) applies correctly.
 func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	fp := TLSFingerprint{
 		Available: true,
@@ -133,7 +135,38 @@ func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	fp.JA3Hash = resolveJA3HashFromProxy(r.Header.Get(HeaderFPJA3Hash), r.Header.Get(HeaderFPJA3))
 	fp.JA4Hash = r.Header.Get(HeaderFPJA4)
 	fp.SSLGreased = r.Header.Get(HeaderFPSSLGreased)
+
+	// Derive counts and groups from raw JA3 for scoring (high-ciphers, tls-ext>=10, multi-groups, low-ciphers, few-tls-ext)
+	if ja3Raw := strings.TrimSpace(r.Header.Get(HeaderFPJA3)); ja3Raw != "" {
+		cipherN, extN, groups := parseJA3Counts(ja3Raw)
+		fp.CipherSuitesCount = cipherN
+		fp.ExtensionsCount = extN
+		fp.SupportedGroups = groups
+	}
 	return fp
+}
+
+// parseJA3Counts parses the raw JA3 string (format: Version,Ciphers,Extensions,EllipticCurves,PointFormats)
+// and returns cipher count, extension count, and supported group IDs for use in scoring.
+// Returns zero values on parse error or empty fields.
+func parseJA3Counts(ja3Raw string) (cipherCount, extCount int, supportedGroups []string) {
+	parts := strings.Split(ja3Raw, ",")
+	if len(parts) < 4 {
+		return 0, 0, nil
+	}
+	// Field 2: ciphers (dash-separated, e.g. "4865-4866-4867-...")
+	if parts[1] != "" {
+		cipherCount = len(strings.Split(parts[1], "-"))
+	}
+	// Field 3: extensions (dash-separated)
+	if len(parts) > 2 && parts[2] != "" {
+		extCount = len(strings.Split(parts[2], "-"))
+	}
+	// Field 4: elliptic curves (dash-separated), used for HasMultipleGroups
+	if len(parts) > 3 && parts[3] != "" {
+		supportedGroups = strings.Split(parts[3], "-")
+	}
+	return cipherCount, extCount, supportedGroups
 }
 
 // resolveJA3HashFromProxy returns the 32-char JA3 MD5 hash for use in known-library/browser lookups.
