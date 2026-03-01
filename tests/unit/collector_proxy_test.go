@@ -306,6 +306,10 @@ func TestCollect_TrustedProxy_JA3FillsCountsAndGroups(t *testing.T) {
 	if len(fp.TLS.OfferedCipherSuites) > 0 && fp.TLS.OfferedCipherSuites[0] != "TLS_AES_128_GCM_SHA256" {
 		t.Errorf("OfferedCipherSuites[0] = %q, want TLS_AES_128_GCM_SHA256", fp.TLS.OfferedCipherSuites[0])
 	}
+	// JA3 field 3 contains extension 35 (session_ticket) → HasSessionTicket true
+	if !fp.TLS.HasSessionTicket {
+		t.Error("HasSessionTicket should be true when JA3 extensions contain 35 (session_ticket)")
+	}
 
 	s := fingerprint.ExtractSignals(fp)
 	if !s.HighCipherCount {
@@ -322,6 +326,29 @@ func TestCollect_TrustedProxy_JA3FillsCountsAndGroups(t *testing.T) {
 	}
 	if !strings.Contains(s.ScoreBreakdown, "tls-ext>=10") {
 		t.Errorf("score_breakdown should award tls-ext>=10 when ExtensionsCount >= 10 from proxy JA3; got %q", s.ScoreBreakdown)
+	}
+}
+
+func TestCollect_TrustedProxy_JA3ExtensionPresence(t *testing.T) {
+	// JA3 with ext 35 (session_ticket) but no 42 (early_data)
+	ja3WithSessionTicket := "771,4865-4866,5-11-35-43-13,29-23-24,0"
+	req := mustRequest("GET", "https://example.com/", nil)
+	req.Header.Set("X-Internal-Proxy", "1")
+	req.Header.Set("X-FP-JA3", ja3WithSessionTicket)
+
+	fp := fingerprint.NewCollector().Collect(req)
+	if !fp.TLS.HasSessionTicket {
+		t.Error("HasSessionTicket should be true when extension 35 is in JA3 field 3")
+	}
+	if fp.TLS.HasEarlyData {
+		t.Error("HasEarlyData should be false when extension 42 is not in JA3")
+	}
+
+	// JA3 without extension 35
+	req.Header.Set("X-FP-JA3", "771,4865,43-13-0,29-23,0")
+	fp = fingerprint.NewCollector().Collect(req)
+	if fp.TLS.HasSessionTicket {
+		t.Error("HasSessionTicket should be false when extension 35 is not in JA3")
 	}
 }
 

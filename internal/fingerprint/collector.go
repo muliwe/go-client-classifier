@@ -139,34 +139,47 @@ func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	fp.JA4Hash = r.Header.Get(HeaderFPJA4)
 	fp.SSLGreased = r.Header.Get(HeaderFPSSLGreased)
 
-	// Derive counts, cipher names, and group names from raw JA3 (IANA ID dictionaries in code)
+	// Derive counts, cipher names, group names, and extension presence from raw JA3
 	if ja3Raw := strings.TrimSpace(r.Header.Get(HeaderFPJA3)); ja3Raw != "" {
-		cipherIDs, extN, groupIDs := parseJA3Counts(ja3Raw)
+		cipherIDs, extIDs, groupIDs := parseJA3Counts(ja3Raw)
 		fp.CipherSuitesCount = len(cipherIDs)
-		fp.ExtensionsCount = extN
+		fp.ExtensionsCount = len(extIDs)
 		fp.OfferedCipherSuites = ja3CipherIDsToNames(cipherIDs)
 		fp.SupportedGroups = ja3SupportedGroupIDsToNames(groupIDs)
+		fp.HasSessionTicket = ja3ContainsExtension(extIDs, 35) // session_ticket
+		fp.HasEarlyData = ja3ContainsExtension(extIDs, 42)     // early_data
 	}
 	return fp
 }
 
 // parseJA3Counts parses the raw JA3 string (format: Version,Ciphers,Extensions,EllipticCurves,PointFormats)
-// and returns cipher IDs, extension count, and supported group IDs for use in scoring and name lookup.
-func parseJA3Counts(ja3Raw string) (cipherIDs []string, extCount int, groupIDs []string) {
+// and returns cipher IDs, extension IDs, and supported group IDs for use in scoring and name lookup.
+func parseJA3Counts(ja3Raw string) (cipherIDs []string, extIDs []string, groupIDs []string) {
 	parts := strings.Split(ja3Raw, ",")
 	if len(parts) < 4 {
-		return nil, 0, nil
+		return nil, nil, nil
 	}
 	if parts[1] != "" {
 		cipherIDs = strings.Split(parts[1], "-")
 	}
 	if len(parts) > 2 && parts[2] != "" {
-		extCount = len(strings.Split(parts[2], "-"))
+		extIDs = strings.Split(parts[2], "-")
 	}
 	if len(parts) > 3 && parts[3] != "" {
 		groupIDs = strings.Split(parts[3], "-")
 	}
-	return cipherIDs, extCount, groupIDs
+	return cipherIDs, extIDs, groupIDs
+}
+
+// ja3ContainsExtension returns true if the JA3 extension list (field 3, IDs as strings) contains the given extension type ID.
+func ja3ContainsExtension(extIDs []string, extType uint16) bool {
+	s := strconv.FormatUint(uint64(extType), 10)
+	for _, id := range extIDs {
+		if strings.TrimSpace(id) == s {
+			return true
+		}
+	}
+	return false
 }
 
 // ja3CipherIDsToNames converts JA3 field-2 cipher suite IDs (decimal) to IANA names. Unknown IDs stay as decimal string.
