@@ -239,14 +239,14 @@ func TestClassify_ImpersonateLikeFingerprint_ClassifiedAsBot(t *testing.T) {
 var defaultBehavioralEdges = classifier.BehavioralEdges{
 	RequestRatePerMinAbove:      2.0,
 	InterArrivalMedianSecBelow:  4.0,
-	InterArrivalStdPerMeanAbove: 1.35,
+	InterArrivalStdPerMeanAbove: 1.45,
 	MeanMedianRatioAbove:        1.2,
 }
 
 var defaultBehavioralBotScores = map[string]int{
 	"high-request-rate":           2,
-	"low-inter-arrival-median":    2,
-	"high-inter-arrival-variance": 2,
+	"low-inter-arrival-median":    1, // weak signal (1 pt)
+	"high-inter-arrival-variance": 1,
 	"mean-above-median":           2,
 }
 
@@ -325,7 +325,7 @@ func TestApplyBehavioralSignals_highVariance_addsBotScore(t *testing.T) {
 	fp := fingerprint.Fingerprint{HTTP: fingerprint.HTTPFingerprint{UserAgent: "curl/7.0", HeaderCount: 2}}
 	result := c.Classify(fp)
 	beforeScore := result.Score
-	// std/mean = 2.0/1.0 = 2.0 > 1.35
+	// std/mean = 2.0/1.0 = 2.0 > 1.45
 	metrics := &metrics.RequestMetrics{
 		IPRequestCount: 2,
 		IPDerived: &metrics.DerivedStats{
@@ -337,7 +337,7 @@ func TestApplyBehavioralSignals_highVariance_addsBotScore(t *testing.T) {
 	}
 	c.ApplyBehavioralSignals(&result, metrics, defaultBehavioralEdges, defaultBehavioralBotScores)
 	if result.Score >= beforeScore {
-		t.Errorf("ApplyBehavioralSignals(std/mean 2.0 > 1.35) should add bot score; before %d after %d", beforeScore, result.Score)
+		t.Errorf("ApplyBehavioralSignals(std/mean 2.0 > 1.45) should add bot score; before %d after %d", beforeScore, result.Score)
 	}
 	if !strings.Contains(result.Reason, "behavioral: high-inter-arrival-variance") {
 		t.Errorf("Reason should mention high-inter-arrival-variance, got %q", result.Reason)

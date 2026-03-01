@@ -25,6 +25,17 @@ from typing import Any, Iterator
 from tqdm import tqdm
 
 
+STRESS_PATHS = ("/", "/health", "/debug")
+
+# Behavioural edge thresholds (METHODOLOGY Appendix M; configurable in classifier).
+# Default behavioural edges (METHODOLOGY Appendix M). Overridable via CLI (--req-per-min, --gap-*, etc.).
+# Must match config/scoring.json behavioral_edges and classifier bot_scores (2 pts each).
+EDGE_REQUEST_RATE_PER_MIN = 2.0
+EDGE_INTER_ARRIVAL_MEDIAN_SEC = 4.0
+EDGE_INTER_ARRIVAL_STD_PER_MEAN = 1.45
+EDGE_MEAN_MEDIAN_RATIO = 1.2
+
+
 def extract_record(rec: dict[str, Any]) -> dict[str, Any] | None:
     """Extract classification, path, user_agent and request_metrics from one log record. Standalone extractor."""
     classification = (rec.get("classification") or "").strip().lower()
@@ -192,17 +203,6 @@ def compute_ip_metrics_stats(
     return out
 
 
-STRESS_PATHS = ("/", "/health", "/debug")
-
-# Behavioural edge thresholds (METHODOLOGY Appendix M; configurable in classifier).
-# Default behavioural edges (METHODOLOGY Appendix M). Overridable via CLI (--req-per-min, --gap-*, etc.).
-# Must match config/scoring.json behavioral_edges and classifier bot_scores (2 pts each).
-EDGE_REQUEST_RATE_PER_MIN = 2.0
-EDGE_INTER_ARRIVAL_MEDIAN_SEC = 4.0
-EDGE_INTER_ARRIVAL_STD_PER_MEAN = 1.35
-EDGE_MEAN_MEDIAN_RATIO = 1.2
-
-
 def _get_edges(
     edge_rate: float | None = None,
     edge_median_sec: float | None = None,
@@ -273,6 +273,14 @@ def _count_behavioural_signals(
 
 SIGNAL_NAMES = ("req_per_min", "gap_median", "gap_std_mean", "gap_mean_median")
 
+# Bot-score points per signal (must match config/scoring.json: high-request-rate 2, low-inter-arrival-median 1, high-inter-arrival-variance 1, mean-above-median 2).
+BEHAVIORAL_BOT_SCORE_WEIGHTS: tuple[int, ...] = (2, 1, 1, 2)
+
+
+def _behavioral_points(flags: tuple[bool, bool, bool, bool]) -> int:
+    """Return bot-score points for this record (0–6 with default weights)."""
+    return sum(w for w, f in zip(BEHAVIORAL_BOT_SCORE_WEIGHTS, flags) if f)
+
 
 def compute_behavioral_edges_stats(
     records: list[dict[str, Any]],
@@ -280,16 +288,21 @@ def compute_behavioral_edges_stats(
     edges: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """
-    For records with request_metrics, count how many have 0, 1, 2, 3, 4 behavioural signals
+    For records with request_metrics, count how many have 0, 1, 2, 3, 4 behavioural signals;
+    count by weighted bot-score points (0–6 with default weights 2,1,1,2);
     and how many triggered each of the four criteria (req_per_min, gap_median, gap_std_mean, gap_mean_median).
     """
     count_by_signals: dict[int, int] = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    max_points = sum(BEHAVIORAL_BOT_SCORE_WEIGHTS)
+    count_by_points: dict[int, int] = {p: 0 for p in range(max_points + 1)}
     count_per_signal: dict[str, int] = {"req_per_min": 0, "gap_median": 0, "gap_std_mean": 0, "gap_mean_median": 0}
     for r in records:
         rm = r.get("request_metrics")
         flags = _behavioural_signal_flags(rm, edges)
         n = sum(flags)
         count_by_signals[n] = count_by_signals.get(n, 0) + 1
+        points = _behavioral_points(flags)
+        count_by_points[points] = count_by_points.get(points, 0) + 1
         if flags[0]:
             count_per_signal["req_per_min"] += 1
         if flags[1]:
@@ -303,6 +316,7 @@ def compute_behavioral_edges_stats(
     pct = round(100.0 * n_with_at_least_one / n_total, 2) if n_total else 0.0
     out: dict[str, Any] = {
         "count_by_signals": count_by_signals,
+        "count_by_points": {k: v for k, v in count_by_points.items() if v > 0},
         "count_per_signal": count_per_signal,
         "n_total": n_total,
     }
@@ -553,6 +567,7 @@ def main() -> int:
         # Behavioural edges (BOT and BROWSER).
         lines.append("=== Behavioural edges (bot) ===")
         lines.append(f"  count_by_signals: {behavioral_bot['count_by_signals']}")
+        lines.append(f"  count_by_points: {behavioral_bot['count_by_points']}  (weights: req_per_min=2, gap_median=1, gap_std_mean=1, gap_mean_median=2)")
         lines.append(f"  count_per_signal: {behavioral_bot['count_per_signal']}")
         lines.append(f"  bot recall (% with >=1 signal): {behavioral_bot.get('recall_pct', 'N/A')}%")
         if mean_median_bot:
@@ -560,6 +575,7 @@ def main() -> int:
         lines.append("")
         lines.append("=== Behavioural edges (browser) ===")
         lines.append(f"  count_by_signals: {behavioral_browser['count_by_signals']}")
+        lines.append(f"  count_by_points: {behavioral_browser['count_by_points']}  (weights: req_per_min=2, gap_median=1, gap_std_mean=1, gap_mean_median=2)")
         lines.append(f"  count_per_signal: {behavioral_browser['count_per_signal']}")
         lines.append(f"  browser FP rate (% with >=1 signal): {behavioral_browser.get('fp_rate_pct', 'N/A')}%")
         if mean_median_browser:

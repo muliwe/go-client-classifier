@@ -7,7 +7,7 @@
   "behavioral_edges": {
     "request_rate_per_min_above": 2.0,
     "inter_arrival_median_sec_below": 4.0,
-    "inter_arrival_std_per_mean_above": 1.35,
+    "inter_arrival_std_per_mean_above": 1.45,
     "inter_arrival_mean_median_ratio_above": 1.2
   },
   "confidence": {
@@ -98,8 +98,8 @@
     "sec-purpose-no-sec-fetch": 2,
     "challenge-failed": 3,
     "high-request-rate": 2,
-    "low-inter-arrival-median": 2,
-    "high-inter-arrival-variance": 2,
+    "low-inter-arrival-median": 1,
+    "high-inter-arrival-variance": 1,
     "mean-above-median": 2
   }
 }

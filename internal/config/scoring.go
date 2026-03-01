@@ -102,7 +102,7 @@ func defaultBehavioralEdges() *BehavioralEdgesConfig {
 	return &BehavioralEdgesConfig{
 		RequestRatePerMinAbove:           2.0,
 		InterArrivalMedianSecBelow:       4.0,
-		InterArrivalStdPerMeanAbove:      1.35,
+		InterArrivalStdPerMeanAbove:      1.45,
 		InterArrivalMeanMedianRatioAbove: 1.2,
 	}
 }
@@ -177,8 +177,8 @@ func defaultBotScores() map[string]int {
 		"sec-purpose-no-sec-fetch":    2,
 		"challenge-failed":            3, // Client Hints challenge (Appendix K), smoking gun
 		"high-request-rate":           2, // Appendix M: behavioral metrics (strong signal)
-		"low-inter-arrival-median":    2,
-		"high-inter-arrival-variance": 2,
+		"low-inter-arrival-median":    1, // weak signal: higher FP overlap in cohorts (Bayesian P(browser|signal=1) ~0.18)
+		"high-inter-arrival-variance": 1, // weak signal: P(browser|signal=1) ~0.12
 		"mean-above-median":           2,
 	}
 }

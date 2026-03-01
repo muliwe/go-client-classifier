@@ -35,11 +35,11 @@ import time
 from curl_cffi import requests
 
 # Pause between requests so behavioural edges don't fire (Appendix M):
-# rate <= 2/min → gap >= 30 s; median >= 4 s; std/mean < 1.35; mean/median ~ 1.
+# rate <= 2/min → gap >= 30 s; median >= 4 s; std/mean < 1.45; mean/median ~ 1.
 # 30 s base gives ~2 req/min; jitter so gaps aren't uniform.
 PAUSE_BETWEEN_REQUESTS_SEC = 30.0
 PAUSE_BETWEEN_REQUESTS_SEC_MIN = 25.0
-# Random deviation (jitter): more human-like; keep std/mean below edge 1.35.
+# Random deviation (jitter): more human-like; keep std/mean below edge 1.45.
 PAUSE_DEVIATION_SEC = 4.0
 
 

@@ -12,6 +12,15 @@ All notable changes to this project are documented in this file.
 
 - **Appendix L (bottom)**: New subsection **Summary: Bayesian per-signal diagnostics** documents the script’s Bayesian block: contingency counts, four posteriors, and an example. **Calculation methodology** is split into labelled blocks (labels and contingency; priors; likelihoods; marginal; posteriors) with one formula per line for readability. **Using the results for edge refinement** describes how to use P(bot|signal=1) and P(browser|signal=1) to tighten or relax edges, iterative calibration steps (run script → compare signals → adjust edges → re-run → deploy), and optional signal weighting by discriminative power.
 
+### Behavioural signals: weak signals and edge 1.45
+
+- **Weak signals (1 pt)**: **low-inter-arrival-median** and **high-inter-arrival-variance** now add **1** bot-score point (config `bot_scores`); **high-request-rate** and **mean-above-median** remain **2** points. Rationale: Bayesian P(browser|signal=1) is higher for gap_median (~0.18) and gap_std_mean (~0.12), so lower weight reduces false positives. Defaults in `internal/config/scoring.go`, `config/scoring.json`; METHODOLOGY Appendix M table and Edge calibration updated; config README and unit tests adjusted.
+- **Edge E_var 1.45**: Default **inter_arrival_std_per_mean_above** changed from 1.35 to **1.45** (script `EDGE_INTER_ARRIVAL_STD_PER_MEAN`, config, METHODOLOGY, antibot_test.py comments).
+
+### request_log_stats_by_class.py: count by weighted points
+
+- **count_by_points**: In addition to `count_by_signals` (0–4 signals), the script now outputs **count_by_points** — distribution by sum of bot-score points (0–6) using current weights (req_per_min=2, gap_median=1, gap_std_mean=1, gap_mean_median=2). Printed for both BOT and BROWSER cohorts in text and in JSON `behavioral_edges.count_by_points`. Only point values with count > 0 are shown.
+
 ### Collector: TLS from proxy — cipher/extension counts, supported groups, names, supported_versions
 
 - **collectTLSFromProxy fills CipherSuitesCount, ExtensionsCount, SupportedGroups from X-FP-JA3**: When TLS is taken from trusted proxy headers (X-Internal-Proxy: 1), the raw JA3 string (X-FP-JA3) is parsed and used to set `cipher_suites_count`, `extensions_count`, and `supported_groups` in the fingerprint. Previously these fields stayed 0 / null when behind a proxy, so scoring for high-ciphers, tls-ext>=10, multi-groups (browser) and low-ciphers, few-tls-ext (bot) did not apply. Now the same scoring logic applies for proxied TLS when nginx forwards X-FP-JA3.

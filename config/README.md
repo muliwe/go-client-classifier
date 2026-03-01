@@ -81,10 +81,10 @@ When **Redis** is configured and scoring config includes **`behavioral_edges`** 
 |-----------------------------|---------|-------------|
 | `behavioral_edges.request_rate_per_min_above` | 2.0 | Add `high-request-rate` bot points when request rate (req/min in window) exceeds this. |
 | `behavioral_edges.inter_arrival_median_sec_below` | 4.0 | Add `low-inter-arrival-median` when median inter-arrival (s) is below this (requires ≥2 requests in window). |
-| `behavioral_edges.inter_arrival_std_per_mean_above` | 1.35 | Add `high-inter-arrival-variance` when std/mean of inter-arrival times exceeds this. |
+| `behavioral_edges.inter_arrival_std_per_mean_above` | 1.45 | Add `high-inter-arrival-variance` when std/mean of inter-arrival times exceeds this. |
 | `behavioral_edges.inter_arrival_mean_median_ratio_above` | 1.2 | Add `mean-above-median` when mean/median inter-arrival ratio exceeds this (right-skewed gaps → bot-like). |
 
-The four **bot_scores** keys (`high-request-rate`, `low-inter-arrival-median`, `high-inter-arrival-variance`, `mean-above-median`) default to **2** points each. Exact recall and false positive rate for a cohort can be computed by running **request_log_stats_by_class.py** on the same JSONL; see Appendix M. Note: cohort BOT/BROWSER in the script are from log classification (fingerprint/UA only, before behavioural scoring).
+The four **bot_scores** keys (`high-request-rate`, `low-inter-arrival-median`, `high-inter-arrival-variance`, `mean-above-median`) default to **2** points each, except **low-inter-arrival-median** and **high-inter-arrival-variance** (weak signals, **1** point each) due to higher false-positive overlap in cohorts. Exact recall and false positive rate for a cohort can be computed by running **request_log_stats_by_class.py** on the same JSONL; see Appendix M. Note: cohort BOT/BROWSER in the script are from log classification (fingerprint/UA only, before behavioural scoring).
 
 ---
 
