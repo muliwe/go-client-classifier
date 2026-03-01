@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## v1.1.2 (2026-03-01)
 
+### request_log_stats_by_class.py: Bayesian probabilities per behavioural signal
+
+- **Behavioural edges (Bayesian per signal)**: For each of the four behavioural signals (req_per_min, gap_median, gap_std_mean, gap_mean_median) the script now outputs contingency counts (TP, FP, TN, FN) and Bayesian posterior probabilities: P(bot|signal=1), P(browser|signal=1), P(bot|signal=0), P(browser|signal=0) — i.e. probability that a positive signal is truly bot (TP) or false positive (FP), and that a negative signal is missed bot (FN) or true negative (TN). Priors are derived from cohort sizes in the log. Section appears after "Behavioural edges (bot)" and "(browser)" in text output; in JSON the same data is under `behavioral_edges_bayesian_per_signal`.
+
+### METHODOLOGY.md Appendix L: Bayesian methodology and edge refinement
+
+- **Appendix L (bottom)**: New subsection **Summary: Bayesian per-signal diagnostics** documents the script’s Bayesian block: contingency counts, four posteriors, and an example. **Calculation methodology** is split into labelled blocks (labels and contingency; priors; likelihoods; marginal; posteriors) with one formula per line for readability. **Using the results for edge refinement** describes how to use P(bot|signal=1) and P(browser|signal=1) to tighten or relax edges, iterative calibration steps (run script → compare signals → adjust edges → re-run → deploy), and optional signal weighting by discriminative power.
+
 ### Collector: TLS from proxy — cipher/extension counts, supported groups, names, supported_versions
 
 - **collectTLSFromProxy fills CipherSuitesCount, ExtensionsCount, SupportedGroups from X-FP-JA3**: When TLS is taken from trusted proxy headers (X-Internal-Proxy: 1), the raw JA3 string (X-FP-JA3) is parsed and used to set `cipher_suites_count`, `extensions_count`, and `supported_groups` in the fingerprint. Previously these fields stayed 0 / null when behind a proxy, so scoring for high-ciphers, tls-ext>=10, multi-groups (browser) and low-ciphers, few-tls-ext (bot) did not apply. Now the same scoring logic applies for proxied TLS when nginx forwards X-FP-JA3.

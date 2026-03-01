@@ -2129,6 +2129,58 @@ The figures above are for orientation only; scoring or blocking rules based on t
 - F5 Labs, “2025 Advanced Persistent Bots Report,” 2025. Request rate and behavioural patterns post-mitigation. <https://www.f5.com/labs/articles/2025-advanced-persistent-bots-report>.
 - Cloudflare, “Improved Bot Management flexibility and visibility with new high-precision heuristics,” 2025. Request rate density, inter-arrival time, median analysis. <https://blog.cloudflare.com/bots-heuristics>.
 
+### Summary: Bayesian per-signal diagnostics (request_log_stats_by_class.py)
+
+The tool **request_log_stats_by_class.py** (see [tools/python/request_log_stats_by_class.py](../tools/python/request_log_stats_by_class.py)) outputs a **Behavioural edges (Bayesian per signal)** block after the BOT and BROWSER cohort stats. For each of the four behavioural signals (req_per_min, gap_median, gap_std_mean, gap_mean_median) it reports:
+
+- **Contingency counts**: TP (signal=1 and BOT), FP (signal=1 and BROWSER), TN (signal=0 and BROWSER), FN (signal=0 and BOT).
+- **Bayesian posterior probabilities** (priors from cohort sizes in the log):
+  - **P(bot|signal=1)** — probability that a positive signal is truly bot (true positive interpretation).
+  - **P(browser|signal=1)** — probability that a positive signal is from a browser (false positive).
+  - **P(bot|signal=0)** — probability that a negative signal is from a bot (false negative).
+  - **P(browser|signal=0)** — probability that a negative signal is from a browser (true negative).
+
+**Calculation methodology.**
+
+- **Labels and contingency.** BOT/BROWSER labels are taken from the log classification (pre-behavioural). For each signal, the same edge condition as in the classifier is applied per record (e.g. `request_rate_per_min > E_rate` for req_per_min). Contingency counts:
+  - **TP** = records with signal=1 in BOT cohort  
+  - **FP** = records with signal=1 in BROWSER cohort  
+  - **FN** = records with signal=0 in BOT cohort  
+  - **TN** = records with signal=0 in BROWSER cohort  
+
+- **Priors** (empirical from cohort sizes):
+
+  *P*(bot) = *n*<sub>bot</sub> / *n*<sub>total</sub>  
+  *P*(browser) = *n*<sub>browser</sub> / *n*<sub>total</sub>  
+
+- **Likelihoods** (fractions of each cohort that trigger or do not trigger the signal):
+
+  *P*(signal=1 | bot) = TP / *n*<sub>bot</sub>  
+  *P*(signal=1 | browser) = FP / *n*<sub>browser</sub>  
+  *P*(signal=0 | bot) = FN / *n*<sub>bot</sub>  
+  *P*(signal=0 | browser) = TN / *n*<sub>browser</sub>  
+
+- **Marginal** (total probability of signal state):
+
+  *P*(signal=1) = *P*(signal=1|bot)·*P*(bot) + *P*(signal=1|browser)·*P*(browser)  
+  *P*(signal=0) = 1 − *P*(signal=1)  
+
+- **Posteriors** (Bayes’ rule):
+
+  *P*(bot | signal=1) = *P*(signal=1|bot)·*P*(bot) / *P*(signal=1)  
+  *P*(browser | signal=1) = *P*(signal=1|browser)·*P*(browser) / *P*(signal=1)  
+  *P*(bot | signal=0) = *P*(signal=0|bot)·*P*(bot) / *P*(signal=0)  
+  *P*(browser | signal=0) = *P*(signal=0|browser)·*P*(browser) / *P*(signal=0)
+
+**Using the results for edge refinement.** The posteriors support data-driven tuning of the four edge parameters (E_rate, E_median, E_var, E_ratio) in `behavioral_edges` (see [Appendix M](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring) and config):
+
+- **P(bot|signal=1)** high and **P(browser|signal=1)** low → the signal is discriminative when it fires; the current edge is well aligned (few false positives among positives). If P(browser|signal=1) is high, consider **tightening** the edge (e.g. higher E_rate, lower E_median) so fewer browser records cross the threshold, at the cost of lower bot recall.
+- **P(bot|signal=0)** high → many bots do not trigger this signal (low per-signal recall). To increase recall, consider **relaxing** the edge (e.g. lower E_rate, higher E_median) so more bots cross it; re-run the script and check that browser FP rate remains acceptable.
+- **Iterative calibration**: (1) Run the script on a representative JSONL with current edges; (2) compare P(bot|signal=1) and P(browser|signal=1) across the four signals to see which are noisiest; (3) adjust one or two edges in config (e.g. `--req-per-min`, `--gap-median-sec` in the script for a quick test); (4) re-run and compare new contingency counts and posteriors; (5) deploy the chosen edges to scoring config and re-evaluate recall/FPR from the script’s BOT/BROWSER blocks.
+- **Signal weighting**: Signals with consistently higher P(bot|signal=1) could be given higher bot_score weight in config than noisier signals; the current default is 2 points per signal (Appendix M).
+
+Example (ip_derived log, 2017 BOT / 801 BROWSER, edges 2.0 / 4.0 / 1.35 / 1.2): **req_per_min** had the highest P(bot|signal=1) ≈ 0.95 and lowest P(browser|signal=1) ≈ 0.05; **gap_median** showed more overlap (P(bot|signal=1) ≈ 0.82, P(browser|signal=1) ≈ 0.18). Use these figures to compare discriminative power of each signal on your cohort and to interpret recall/FP trade-offs.
+
 ---
 
 ## Appendix M: Behavioural-metrics edge values for bot scoring

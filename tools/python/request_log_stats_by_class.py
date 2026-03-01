@@ -271,6 +271,9 @@ def _count_behavioural_signals(
     return sum(_behavioural_signal_flags(rm, edges))
 
 
+SIGNAL_NAMES = ("req_per_min", "gap_median", "gap_std_mean", "gap_mean_median")
+
+
 def compute_behavioral_edges_stats(
     records: list[dict[str, Any]],
     cohort: str,
@@ -308,6 +311,72 @@ def compute_behavioral_edges_stats(
     elif cohort == "browser":
         out["fp_rate_pct"] = pct
     return out
+
+
+def compute_signal_contingency(
+    records_bot: list[dict[str, Any]],
+    records_browser: list[dict[str, Any]],
+    edges: dict[str, float] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """
+    For each of the 4 behavioural signals, build contingency (TP, FP, TN, FN) and
+    Bayesian probabilities: P(bot|signal=1), P(browser|signal=1), P(bot|signal=0), P(browser|signal=0).
+    """
+    e = edges or _get_edges()
+    n_bot = len(records_bot)
+    n_browser = len(records_browser)
+    n_total = n_bot + n_browser
+    if n_total == 0:
+        return {}
+    p_bot_prior = n_bot / n_total
+    p_browser_prior = n_browser / n_total
+
+    # Per-signal: (signal_positive_in_bot, signal_positive_in_browser)
+    def count_positive(records: list[dict[str, Any]], signal_idx: int) -> int:
+        return sum(
+            1
+            for r in records
+            if _behavioural_signal_flags(r.get("request_metrics"), e)[signal_idx]
+        )
+
+    result: dict[str, dict[str, Any]] = {}
+    for idx, name in enumerate(SIGNAL_NAMES):
+        tp = count_positive(records_bot, idx)
+        fp = count_positive(records_browser, idx)
+        fn = n_bot - tp
+        tn = n_browser - fp
+
+        # P(signal=1 | bot), P(signal=1 | browser)
+        p_signal_given_bot = tp / n_bot if n_bot else 0.0
+        p_signal_given_browser = fp / n_browser if n_browser else 0.0
+        p_signal1 = p_signal_given_bot * p_bot_prior + p_signal_given_browser * p_browser_prior
+        p_signal0 = 1.0 - p_signal1 if p_signal1 <= 1.0 else 0.0
+
+        # P(signal=0 | bot), P(signal=0 | browser)
+        p_no_signal_given_bot = fn / n_bot if n_bot else 0.0
+        p_no_signal_given_browser = tn / n_browser if n_browser else 0.0
+
+        # Bayesian posteriors
+        # P(bot | signal=1) = P(signal=1|bot)*P(bot) / P(signal=1)
+        p_bot_given_signal1 = (p_signal_given_bot * p_bot_prior / p_signal1) if p_signal1 else 0.0
+        # P(browser | signal=1)
+        p_browser_given_signal1 = (p_signal_given_browser * p_browser_prior / p_signal1) if p_signal1 else 0.0
+        # P(bot | signal=0)
+        p_bot_given_signal0 = (p_no_signal_given_bot * p_bot_prior / p_signal0) if p_signal0 else 0.0
+        # P(browser | signal=0)
+        p_browser_given_signal0 = (p_no_signal_given_browser * p_browser_prior / p_signal0) if p_signal0 else 0.0
+
+        result[name] = {
+            "TP": tp,
+            "FP": fp,
+            "TN": tn,
+            "FN": fn,
+            "P(bot|signal=1)": round(p_bot_given_signal1, 4),
+            "P(browser|signal=1)": round(p_browser_given_signal1, 4),
+            "P(bot|signal=0)": round(p_bot_given_signal0, 4),
+            "P(browser|signal=0)": round(p_browser_given_signal0, 4),
+        }
+    return result
 
 
 def compute_mean_median_ratio_stats(
@@ -466,6 +535,7 @@ def main() -> int:
     # Behavioural-edge recall/FPR (METHODOLOGY Appendix M).
     behavioral_bot = compute_behavioral_edges_stats(records_bot, cohort="bot", edges=edges)
     behavioral_browser = compute_behavioral_edges_stats(records_browser, cohort="browser", edges=edges)
+    signal_bayes = compute_signal_contingency(records_bot, records_browser, edges=edges)
     mean_median_bot = compute_mean_median_ratio_stats(records_bot)
     mean_median_browser = compute_mean_median_ratio_stats(records_browser)
 
@@ -494,6 +564,21 @@ def main() -> int:
         lines.append(f"  browser FP rate (% with >=1 signal): {behavioral_browser.get('fp_rate_pct', 'N/A')}%")
         if mean_median_browser:
             lines.append(f"  mean/median ratio: min={mean_median_browser['min']} max={mean_median_browser['max']} mean={mean_median_browser['mean']} median={mean_median_browser['median']} p05={mean_median_browser['p05']} p20={mean_median_browser['p20']} p50={mean_median_browser['p50']} p80={mean_median_browser['p80']} p95={mean_median_browser['p95']} n={mean_median_browser['n']}")
+        # Bayesian probabilities per signal (TP/FP/TN/FN and posteriors).
+        # signal=1: P(bot|1)=TP prob, P(browser|1)=FP prob; signal=0: P(bot|0)=FN prob, P(browser|0)=TN prob.
+        lines.append("")
+        lines.append("=== Behavioural edges (Bayesian per signal) ===")
+        lines.append("  (TP/FP/TN/FN counts; P(bot|signal=1)=TP, P(browser|signal=1)=FP, P(bot|signal=0)=FN, P(browser|signal=0)=TN)")
+        for sig_name in SIGNAL_NAMES:
+            sb = signal_bayes.get(sig_name, {})
+            if not sb:
+                continue
+            lines.append(f"  [{sig_name}] TP={sb['TP']} FP={sb['FP']} TN={sb['TN']} FN={sb['FN']}")
+            lines.append(
+                f"    P(bot|signal=1)=%s P(browser|signal=1)=%s "
+                "P(bot|signal=0)=%s P(browser|signal=0)=%s"
+                % (sb["P(bot|signal=1)"], sb["P(browser|signal=1)"], sb["P(bot|signal=0)"], sb["P(browser|signal=0)"])
+            )
         text = "\n".join(lines).rstrip()
     else:
         out = {
@@ -510,6 +595,7 @@ def main() -> int:
                 "behavioral_edges": behavioral_browser,
                 "mean_median_ratio": mean_median_browser,
             },
+            "behavioral_edges_bayesian_per_signal": signal_bayes,
         }
         text = json.dumps(out, indent=2, ensure_ascii=False)
 
