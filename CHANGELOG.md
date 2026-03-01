@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## v1.1.2 (2026-03-01)
+## v1.2.0 (2026-03-01)
 
 ### request_log_stats_by_class.py: Bayesian probabilities per behavioural signal
 
