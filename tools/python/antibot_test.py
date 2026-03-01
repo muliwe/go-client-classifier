@@ -38,6 +38,7 @@ from curl_cffi import requests
 # rate <= 2/min → gap >= 30 s; median >= 4 s; std/mean < 1.35; mean/median ~ 1.
 # 30 s base gives ~2 req/min; jitter so gaps aren't uniform.
 PAUSE_BETWEEN_REQUESTS_SEC = 30.0
+PAUSE_BETWEEN_REQUESTS_SEC_MIN = 25.0
 # Random deviation (jitter): more human-like; keep std/mean below edge 1.35.
 PAUSE_DEVIATION_SEC = 4.0
 
@@ -47,7 +48,7 @@ def _pause_between_requests() -> None:
     if PAUSE_BETWEEN_REQUESTS_SEC <= 0:
         return
     sec = PAUSE_BETWEEN_REQUESTS_SEC + random.uniform(-PAUSE_DEVIATION_SEC, PAUSE_DEVIATION_SEC)
-    sec = max(25.0, sec)  # 60/25 = 2.4/min upper bound; 30±4 gives ~2/min
+    sec = max(PAUSE_BETWEEN_REQUESTS_SEC_MIN, sec)  # 60/25 = 2.4/min upper bound; 30±4 gives ~2/min
     time.sleep(sec)
 
 # Cookie jar: cookies for domain .invent.sale (used in requests to antibot)
