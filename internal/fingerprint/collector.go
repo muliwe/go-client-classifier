@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/psanford/tlsfingerprint"
@@ -128,6 +129,8 @@ func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	v := r.Header.Get(HeaderFPTLSVersion)
 	if v != "" {
 		fp.Version = normalizeTLSVersionFromProxy(v)
+		// Supported versions: we only have negotiated version from proxy; set it as minimal inferred list.
+		fp.SupportedVersions = []string{fp.Version}
 	}
 	fp.CipherSuite = r.Header.Get(HeaderFPTLSCipher)
 	fp.ALPN = r.Header.Get(HeaderFPTLSALPN)
@@ -136,37 +139,102 @@ func (c *Collector) collectTLSFromProxy(r *http.Request) TLSFingerprint {
 	fp.JA4Hash = r.Header.Get(HeaderFPJA4)
 	fp.SSLGreased = r.Header.Get(HeaderFPSSLGreased)
 
-	// Derive counts and groups from raw JA3 for scoring (high-ciphers, tls-ext>=10, multi-groups, low-ciphers, few-tls-ext)
+	// Derive counts, cipher names, and group names from raw JA3 (IANA ID dictionaries in code)
 	if ja3Raw := strings.TrimSpace(r.Header.Get(HeaderFPJA3)); ja3Raw != "" {
-		cipherN, extN, groups := parseJA3Counts(ja3Raw)
-		fp.CipherSuitesCount = cipherN
+		cipherIDs, extN, groupIDs := parseJA3Counts(ja3Raw)
+		fp.CipherSuitesCount = len(cipherIDs)
 		fp.ExtensionsCount = extN
-		fp.SupportedGroups = groups
+		fp.OfferedCipherSuites = ja3CipherIDsToNames(cipherIDs)
+		fp.SupportedGroups = ja3SupportedGroupIDsToNames(groupIDs)
 	}
 	return fp
 }
 
 // parseJA3Counts parses the raw JA3 string (format: Version,Ciphers,Extensions,EllipticCurves,PointFormats)
-// and returns cipher count, extension count, and supported group IDs for use in scoring.
-// Returns zero values on parse error or empty fields.
-func parseJA3Counts(ja3Raw string) (cipherCount, extCount int, supportedGroups []string) {
+// and returns cipher IDs, extension count, and supported group IDs for use in scoring and name lookup.
+func parseJA3Counts(ja3Raw string) (cipherIDs []string, extCount int, groupIDs []string) {
 	parts := strings.Split(ja3Raw, ",")
 	if len(parts) < 4 {
-		return 0, 0, nil
+		return nil, 0, nil
 	}
-	// Field 2: ciphers (dash-separated, e.g. "4865-4866-4867-...")
 	if parts[1] != "" {
-		cipherCount = len(strings.Split(parts[1], "-"))
+		cipherIDs = strings.Split(parts[1], "-")
 	}
-	// Field 3: extensions (dash-separated)
 	if len(parts) > 2 && parts[2] != "" {
 		extCount = len(strings.Split(parts[2], "-"))
 	}
-	// Field 4: elliptic curves (dash-separated), used for HasMultipleGroups
 	if len(parts) > 3 && parts[3] != "" {
-		supportedGroups = strings.Split(parts[3], "-")
+		groupIDs = strings.Split(parts[3], "-")
 	}
-	return cipherCount, extCount, supportedGroups
+	return cipherIDs, extCount, groupIDs
+}
+
+// ja3CipherIDsToNames converts JA3 field-2 cipher suite IDs (decimal) to IANA names. Unknown IDs stay as decimal string.
+var cipherSuiteIDToName = map[uint16]string{
+	0x1301: "TLS_AES_128_GCM_SHA256",
+	0x1302: "TLS_AES_256_GCM_SHA384",
+	0x1303: "TLS_CHACHA20_POLY1305_SHA256",
+	0xc02b: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+	0xc02c: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	0xc02f: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+	0xc030: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+	0x009c: "TLS_RSA_WITH_AES_128_GCM_SHA256",
+	0x009d: "TLS_RSA_WITH_AES_256_GCM_SHA384",
+	0x2f:   "TLS_RSA_WITH_AES_128_CBC_SHA",
+	0x35:   "TLS_RSA_WITH_AES_256_CBC_SHA",
+	0xc013: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+	0xc014: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+	0xc027: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+	0xc028: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+	0x003c: "TLS_RSA_WITH_AES_128_CBC_SHA256",
+	0x003d: "TLS_RSA_WITH_AES_256_CBC_SHA256",
+}
+
+func ja3CipherIDsToNames(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(ids))
+	for _, s := range ids {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		id, err := strconv.ParseUint(s, 10, 16)
+		if err != nil {
+			names = append(names, s)
+			continue
+		}
+		if name, ok := cipherSuiteIDToName[uint16(id)]; ok {
+			names = append(names, name)
+		} else if isGREASE(uint16(id)) {
+			names = append(names, "GREASE")
+		} else {
+			names = append(names, fmt.Sprintf("%d", id))
+		}
+	}
+	return names
+}
+
+// ja3SupportedGroupIDsToNames converts JA3 field-4 IDs (decimal strings) to IANA names using supportedGroupName.
+func ja3SupportedGroupIDsToNames(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(ids))
+	for _, s := range ids {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		id, err := strconv.ParseUint(s, 10, 16)
+		if err != nil {
+			names = append(names, s)
+			continue
+		}
+		names = append(names, supportedGroupName(uint16(id)))
+	}
+	return names
 }
 
 // resolveJA3HashFromProxy returns the 32-char JA3 MD5 hash for use in known-library/browser lookups.
@@ -281,9 +349,10 @@ func formatSupportedGroups(groups []uint16) []string {
 	return names
 }
 
-// signatureSchemeName returns human-readable name for signature scheme
+// signatureSchemeName returns human-readable name for signature scheme.
+// IDs from IANA TLS SignatureScheme registry: https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml (section TLS SignatureScheme), CSV: tls-signaturescheme.csv
 func signatureSchemeName(scheme uint16) string {
-	// Common signature schemes
+	// Common signature schemes (IANA TLS SignatureScheme)
 	names := map[uint16]string{
 		0x0201: "rsa_pkcs1_sha1",
 		0x0203: "ecdsa_sha1",
@@ -308,7 +377,8 @@ func signatureSchemeName(scheme uint16) string {
 	return fmt.Sprintf("0x%04x", scheme)
 }
 
-// supportedGroupName returns human-readable name for supported group
+// supportedGroupName returns human-readable name for supported group (elliptic curve / FFDHE).
+// IDs from IANA TLS Supported Groups: https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml (section TLS Supported Groups), CSV: tls-parameters-8.csv
 func supportedGroupName(group uint16) string {
 	names := map[uint16]string{
 		0x0017: "secp256r1",

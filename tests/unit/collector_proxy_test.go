@@ -42,6 +42,9 @@ func TestCollect_TrustedProxy_ReusesNginxHeaders(t *testing.T) {
 	if fp.TLS.JA3Hash != "abcd1234abcd1234abcd1234abcd1234" {
 		t.Errorf("JA3 = %q", fp.TLS.JA3Hash)
 	}
+	if len(fp.TLS.SupportedVersions) != 1 || fp.TLS.SupportedVersions[0] != "TLS 1.3" {
+		t.Errorf("SupportedVersions = %v, want [TLS 1.3] (inferred from X-FP-TLS-Version)", fp.TLS.SupportedVersions)
+	}
 	if fp.HTTP.H2Fingerprint != "settings:a:b:c" {
 		t.Errorf("H2Fingerprint = %q, want settings:a:b:c", fp.HTTP.H2Fingerprint)
 	}
@@ -286,14 +289,22 @@ func TestCollect_TrustedProxy_JA3FillsCountsAndGroups(t *testing.T) {
 	if len(fp.TLS.SupportedGroups) != 4 {
 		t.Errorf("len(SupportedGroups) = %d, want 4 (from JA3 field 4)", len(fp.TLS.SupportedGroups))
 	}
+	// SupportedGroups are IANA names from JA3 field-4 IDs (4588→0x11ec unknown, 29→x25519, 23→secp256r1, 24→secp384r1)
 	if fp.TLS.SupportedGroups != nil {
-		expected := []string{"4588", "29", "23", "24"}
+		expected := []string{"0x11ec", "x25519", "secp256r1", "secp384r1"}
 		for i, g := range expected {
 			if i >= len(fp.TLS.SupportedGroups) || fp.TLS.SupportedGroups[i] != g {
 				t.Errorf("SupportedGroups = %v, want %v", fp.TLS.SupportedGroups, expected)
 				break
 			}
 		}
+	}
+	// OfferedCipherSuites are IANA names from JA3 field-2 (4865→TLS_AES_128_GCM_SHA256, etc.)
+	if len(fp.TLS.OfferedCipherSuites) != 15 {
+		t.Errorf("OfferedCipherSuites len = %d, want 15", len(fp.TLS.OfferedCipherSuites))
+	}
+	if len(fp.TLS.OfferedCipherSuites) > 0 && fp.TLS.OfferedCipherSuites[0] != "TLS_AES_128_GCM_SHA256" {
+		t.Errorf("OfferedCipherSuites[0] = %q, want TLS_AES_128_GCM_SHA256", fp.TLS.OfferedCipherSuites[0])
 	}
 
 	s := fingerprint.ExtractSignals(fp)

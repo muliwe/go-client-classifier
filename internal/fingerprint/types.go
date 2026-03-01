@@ -11,23 +11,24 @@ type Fingerprint struct {
 
 // TLSFingerprint contains TLS-level signals
 type TLSFingerprint struct {
-	Version            string   `json:"version"`               // TLS version (e.g., "TLS 1.3")
-	CipherSuite        string   `json:"cipher_suite"`          // Negotiated cipher suite
-	ALPN               string   `json:"alpn"`                  // Negotiated protocol (h2, http/1.1)
-	ServerName         string   `json:"server_name"`           // SNI hostname
-	CipherSuitesCount  int      `json:"cipher_suites_count"`   // Number of offered cipher suites
-	ExtensionsCount    int      `json:"extensions_count"`      // Number of TLS extensions
-	SupportedVersions  []string `json:"supported_versions"`    // Client-offered TLS versions
-	SignatureSchemes   []string `json:"signature_schemes"`     // Supported signature algorithms
-	SupportedGroups    []string `json:"supported_groups"`      // Supported elliptic curves
-	HasSessionTicket   bool     `json:"has_session_ticket"`    // Session resumption support
-	HasEarlyData       bool     `json:"has_early_data"`        // 0-RTT support
-	JA3Hash            string   `json:"ja3_hash,omitempty"`    // JA3 fingerprint hash (32-char MD5)
-	JA4Hash            string   `json:"ja4_hash,omitempty"`    // JA4 fingerprint hash
-	SSLGreased         string   `json:"ssl_greased,omitempty"` // GREASE values from proxy (X-FP-SSL-GREASED); format depends on nginx module
-	CertificateRequest bool     `json:"certificate_request"`   // Client cert requested
-	Available          bool     `json:"available"`             // TLS info was available
-	FromProxy          bool     `json:"from_proxy"`            // TLS data came from trusted proxy headers (e.g. nginx)
+	Version             string   `json:"version"`                         // TLS version (e.g., "TLS 1.3")
+	CipherSuite         string   `json:"cipher_suite"`                    // Negotiated cipher suite
+	ALPN                string   `json:"alpn"`                            // Negotiated protocol (h2, http/1.1)
+	ServerName          string   `json:"server_name"`                     // SNI hostname
+	CipherSuitesCount   int      `json:"cipher_suites_count"`             // Number of offered cipher suites
+	OfferedCipherSuites []string `json:"offered_cipher_suites,omitempty"` // Offered cipher suite names (from JA3 when from proxy)
+	ExtensionsCount     int      `json:"extensions_count"`                // Number of TLS extensions
+	SupportedVersions   []string `json:"supported_versions"`              // Client-offered TLS versions
+	SignatureSchemes    []string `json:"signature_schemes"`               // Supported signature algorithms
+	SupportedGroups     []string `json:"supported_groups"`                // Supported elliptic curves
+	HasSessionTicket    bool     `json:"has_session_ticket"`              // Session resumption support
+	HasEarlyData        bool     `json:"has_early_data"`                  // 0-RTT support
+	JA3Hash             string   `json:"ja3_hash,omitempty"`              // JA3 fingerprint hash (32-char MD5)
+	JA4Hash             string   `json:"ja4_hash,omitempty"`              // JA4 fingerprint hash
+	SSLGreased          string   `json:"ssl_greased,omitempty"`           // GREASE values from proxy (X-FP-SSL-GREASED); format depends on nginx module
+	CertificateRequest  bool     `json:"certificate_request"`             // Client cert requested
+	Available           bool     `json:"available"`                       // TLS info was available
+	FromProxy           bool     `json:"from_proxy"`                      // TLS data came from trusted proxy headers (e.g. nginx)
 }
 
 // HTTPFingerprint contains HTTP-level signals
