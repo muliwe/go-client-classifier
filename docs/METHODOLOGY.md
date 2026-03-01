@@ -25,6 +25,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix J: Request log statistics and collection methodology](#appendix-j-request-log-statistics-and-collection-methodology)
 - [Appendix K: Client Hints behavioural challenge](#appendix-k-client-hints-behavioural-challenge)
 - [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring)
+- [Appendix M: Behavioural-metrics edge values for bot scoring](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring)
 
 ---
 
