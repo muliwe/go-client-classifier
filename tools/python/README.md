@@ -68,9 +68,20 @@ python antibot_test.py
 
   Options: same as `request_log_stats.py` plus `--no-progress`. Text output: three sections (ALL, BOT, BROWSER). JSON output: `{"all": {...}, "bot": {...}, "browser": {...}}`.
 
+- **behavioral_bars.py** — splits values of four behavioural metrics (request_rate_per_min, inter_arrival_median_sec, inter_arrival_std_per_mean, inter_arrival_mean_median_ratio) from `request_metrics.ip_derived` into 99 percentile bars (p01–p99). For each bar it outputs: total row count, rows classified as browser, as bot, bot−browser, and (bot−browser)/(bot+browser). Optionally generates and saves charts per parameter with the current edge threshold marked (METHODOLOGY Appendix M).
+
+  ```bash
+  poetry run python behavioral_bars.py "logs/requests.jsonl"
+  poetry run python behavioral_bars.py -o report.json --charts-dir ./charts "logs/**/*.jsonl"
+  poetry run python behavioral_bars.py --p-from 5 --p-to 95 "logs/requests.jsonl"
+  poetry run python behavioral_bars.py --req-per-min 2.0 --gap-median-sec 4.0 "logs/**/requests_*.jsonl"
+  ```
+
+  Options: `-o` — output JSON (default: stdout); `--charts-dir` — directory for PNG charts; `--p-from`, `--p-to` — percentile bar range, 1-based (default: 1 and 99, i.e. p01–p99); `--no-progress`; `--req-per-min`, `--gap-median-sec`, `--gap-std-mean`, `--gap-mean-median` — edge thresholds for display on charts.
+
 ## Dependencies
 
-Managed via Poetry, see `pyproject.toml`. Main ones: `curl-cffi`, `pandas`, `numpy`.
+Managed via Poetry, see `pyproject.toml`. Main ones: `curl-cffi`, `pandas`, `numpy`, `matplotlib` (for behavioral_bars.py charts).
 
 Adding a new dependency:
 

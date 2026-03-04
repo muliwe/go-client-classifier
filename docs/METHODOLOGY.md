@@ -2215,6 +2215,32 @@ Exact **bot recall** (proportion of bot-labelled records that receive at least o
 
 Defaults are **E_rate 2.0**, **E_median 4.0**, **E_var 1.45**, **E_ratio 1.2** (see table above). Behavioural signals add **1 or 2** bot-score points (config `bot_scores`): **low-inter-arrival-median** and **high-inter-arrival-variance** 1 pt (weak signals), others 2 pt. Operators can override in `behavioral_edges` and `bot_scores` (e.g. `config/scoring.json`) and re-run the stats script to observe new recall and FP rate.
 
+### Percentile-bar analysis for edge placement
+
+A **percentile-bar report** (produced by **behavioral_bars.py** in `tools/python`) splits each behavioural metric’s empirical distribution into bars by percentile and, for each bar, outputs: **value** (the percentile value at the bar’s upper bound), **total**, **browser**, **bot**, **bot_minus_browser**, and **bot_minus_browser_over_sum** = (bot − browser) / (bot + browser). Empty bars (total = 0) are omitted. The tool accepts `--p-from` / `--p-to` to restrict the percentile range and writes JSON (and optional PNG charts with the current edge marked).
+
+**Interpretation.** For a given metric and edge *E*:
+
+- **Below the edge** (value &lt; *E*): Bars should ideally show **bot_minus_browser_over_sum** near zero or negative (browser-heavy or balanced). If bars just below *E* have strongly positive ratios, the edge may be too high (too much bot-like traffic is not flagged).
+- **At and above the edge** (value ≥ *E*): Bars should show **positive** and typically **increasing** bot_minus_browser_over_sum (bot-heavy). If the first bar above *E* is still browser-heavy or only weakly discriminative, consider **raising** the edge to reduce false positives; if the bar just below *E* is already strongly bot-heavy, consider **lowering** the edge to improve recall.
+
+**Conclusion from example percentile report (ip_derived cohort).** On the same extended cohort as above, the percentile-bar output supports the default edges as reasonable:
+
+- **request_rate_per_min (edge 2.0):** Bars with value ≤ 2.0 show mixed or modest positive ratios (e.g. 0.07 to 0.31); bars with value &gt; 2.0 (2.4, 2.6, 3.0, …) show strong discriminative power (bot_minus_browser_over_sum ≈ 0.69–0.91). Placing the edge at 2.0 separates low-rate (browser-dominated or mixed) from high-rate (bot-dominated) traffic without shifting.
+- **inter_arrival_median_sec (edge 4.0 s):** Bars below 4 s are more bot-heavy; bars above 4 s become browser-heavy or mixed. Edge 4.0 sits at a region where separation is visible; raising it would lose bot recall, lowering it would increase browser FP.
+- **inter_arrival_std_per_mean (edge 1.45)** and **inter_arrival_mean_median_ratio (edge 1.2):** Similarly, the bar tables and charts show where (bot − browser) / (bot + browser) turns positive and grows; the default edges lie in that transition zone.
+
+**Procedure for edge shifts.** (1) Run `behavioral_bars.py` on a representative JSONL with current edges and optional `--charts-dir` for plots. (2) For each of the four parameters, locate the bar whose **value** equals or straddles the current edge. (3) Check bars immediately below and above: if the bar above the edge has low or negative discriminative power, consider raising the edge; if the bar below has very high discriminative power, consider lowering the edge. (4) Re-run **request_log_stats_by_class.py** with candidate edges (e.g. `--req-per-min`, `--gap-median-sec`) to compare recall and FP rate. (5) Update `behavioral_edges` in config only after validating on the same or a held-out cohort. No single cohort is normative; repeat the analysis when the traffic mix or labelling changes.
+
+**Analysis of example percentile report (ip_derived, 4625 records).** Using the bars in `tests/testdata/percentile_report.json`:
+
+- **request_rate_per_min (edge 2.0):** The bar at value 2.0 has ratio 0.27 (21 bot, 12 browser); the first bar above the edge (value 2.4) has ratio 0.83 (55 bot, 5 browser). The edge sits at the transition from mixed to strongly bot-heavy; **no shift recommended**.
+- **inter_arrival_median_sec (edge 4.0 s):** The bar at value 3.84 s has ratio 0.53 (bot-heavy); the bar at value 4.09 s has ratio −0.03 (balanced, slightly browser-heavy). The edge falls exactly where the distribution flips from bot-dominated to balanced; **no shift recommended**.
+- **inter_arrival_std_per_mean (edge 1.45):** Bars just below 1.45 (value 1.40–1.44) have ratios ~0.33–0.41; the first bar above (value 1.48) has ratio 0.78. The edge marks a clear step up in discriminative power; **no shift recommended**.
+- **inter_arrival_mean_median_ratio (edge 1.2):** Bars at value 1.16 have ratio −0.10 (browser-heavy); at 1.19–1.21 the ratio rises to 0.42–0.53. The edge lies in this transition; **no shift recommended**.
+
+**Conclusion:** On this cohort, all four default edges (2.0, 4.0, 1.45, 1.2) are well aligned with the percentile-bar transitions. **No edge shift is recommended**; operators should re-run the analysis on their own logs and adjust only if their bars show a different pattern (e.g. strong bot-heavy ratio persisting well below the edge, or browser-heavy ratio just above it).
+
 ### Scope and limitations
 
 - **Additive only**: Behavioural signals add to the existing bot/browser score; they do not replace fingerprint-based classification.

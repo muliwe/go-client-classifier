@@ -76,3 +76,5 @@ docs/nginx_prod.md
 tools/python/poetry.lock
 logs/logs/
 logs/logs.zip
+logs/charts/
+tools/python/charts/

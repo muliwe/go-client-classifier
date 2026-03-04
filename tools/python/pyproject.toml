@@ -13,6 +13,7 @@ curl-cffi = "^0.14"
 pandas = "^2.0"
 numpy = "^2.0"
 tqdm = "^4.66"
+matplotlib = "^3.8"
 
 [tool.poetry.group.dev.dependencies]
 # add dev deps here if needed, e.g. pytest, ruff

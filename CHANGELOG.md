@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.3.0 (2026-03-04)
+
+### behavioral_bars.py: percentile-bar analysis for behavioural metrics
+
+- **New script** `tools/python/behavioral_bars.py`: Splits the four behavioural metrics (request_rate_per_min, inter_arrival_median_sec, inter_arrival_std_per_mean, inter_arrival_mean_median_ratio) from `request_metrics.ip_derived` into percentile bars (p01–p99). For each bar outputs: total, browser, bot, bot_minus_browser, bot_minus_browser_over_sum; **value** is the percentile value (upper bound of the bar). Empty bars (total = 0) are omitted from the JSON. Options: `--p-from`, `--p-to` for percentile range (default 1–99); `--charts-dir` to save PNG charts per parameter with x-axis in metric values and edge line; `--req-per-min`, `--gap-median-sec`, etc. to override edge display. See [tools/python/README.md](tools/python/README.md).
+- **Charts**: One figure per parameter (three subplots: total/browser/bot, bot−browser, ratio); x-axis is the metric value (not bar index); vertical line at current edge.
+
+### METHODOLOGY Appendix M: percentile-bar methodology and edge analysis
+
+- **Percentile-bar analysis for edge placement**: New subsection documents the behavioral_bars.py output (value, p_lo, p_hi, bot_minus_browser_over_sum), how to interpret bars below/above the edge, and when to consider raising or lowering an edge.
+- **Procedure for edge shifts**: Five-step process (run behavioral_bars.py → locate bars around edge → check discriminative power → re-run request_log_stats_by_class.py with candidate edges → update config after validation).
+- **Analysis of example percentile report**: Using `tests/testdata/percentile_report.json` (4625 records), each of the four default edges (2.0, 4.0, 1.45, 1.2) is checked against the bar transitions; **no edge shift is recommended** on this cohort. Conclusion and operator guidance added.
+
 ## v1.2.0 (2026-03-01)
 
 ### request_log_stats_by_class.py: Bayesian probabilities per behavioural signal
