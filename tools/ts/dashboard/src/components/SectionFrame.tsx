@@ -37,10 +37,13 @@ function useFillDashes() {
 }
 
 interface SectionFrameTopProps {
+  /** Full title string (e.g. for aria). */
   title: string;
+  /** Optional node to render instead of title (e.g. with span for "last " to hide on small screens). */
+  titleNode?: React.ReactNode;
 }
 
-export function SectionFrameTop({ title }: SectionFrameTopProps) {
+export function SectionFrameTop({ title, titleNode }: SectionFrameTopProps) {
   const { lineRef, charRef, dashCount } = useFillDashes();
 
   return (
@@ -49,7 +52,7 @@ export function SectionFrameTop({ title }: SectionFrameTopProps) {
       role="presentation"
     >
       <span className="dashboard-section-frame-start" aria-hidden="true">
-        ┌─ {title}{" "}
+        ┌─ {titleNode ?? title}{" "}
       </span>
       <div
         ref={lineRef}

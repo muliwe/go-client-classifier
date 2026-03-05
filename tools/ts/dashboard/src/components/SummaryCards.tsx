@@ -50,7 +50,10 @@ export function SummaryCards({ windows }: SummaryCardsProps) {
                         </span>
                       </div>
                       <div className="summary-row">
-                        <span className="summary-label">browser</span>
+                        <span className="summary-label">
+                          <span className="summary-label-full">browser</span>
+                          <span className="summary-label-short">br.</span>
+                        </span>
                         <span className="summary-value summary-value--browser">
                           {formatInt(w.browser)} {browserPct.toFixed(1)}%
                         </span>

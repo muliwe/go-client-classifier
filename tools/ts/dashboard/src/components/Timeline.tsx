@@ -12,26 +12,29 @@ interface TimelineProps {
   timelineBucketSec?: number;
 }
 
-/** Build timeline section title from payload meta (window + bucket). */
+/** Build timeline section title from payload meta (window + bucket). Returns full string and inner part (after "last ") for optional "last" hiding on small screens. */
 function timelineTitle(
   windowSec: number | undefined,
   bucketSec: number | undefined,
-): string {
+): { full: string; inner: string } {
   const w = windowSec ?? 600;
   const b = bucketSec ?? 10;
   const minutes = Math.round(w / 60);
   const hours = w / 3600;
+  let inner: string;
   if (hours >= 1 && Math.abs(hours - Math.round(hours)) < 0.01) {
     const h = Math.round(hours);
-    if (b === 60)
-      return `Timeline (last ${h} hour${h > 1 ? "s" : ""}, by minute)`;
-    if (b === 600)
-      return `Timeline (last ${h} hour${h > 1 ? "s" : ""}, by 10 min)`;
+    if (b === 60) inner = `${h} hour${h > 1 ? "s" : ""}, by minute`;
+    else if (b === 600) inner = `${h} hour${h > 1 ? "s" : ""}, by 10 min`;
+    else inner = `${minutes} minutes`;
+  } else {
+    if (b === 10) inner = `${minutes} minutes, by 10 sec`;
+    else if (b === 60) inner = `${minutes} minutes, by minute`;
+    else if (b === 600) inner = `${minutes} minutes, by 10 min`;
+    else inner = `${minutes} minutes`;
   }
-  if (b === 10) return `Timeline (last ${minutes} minutes, by 10 sec)`;
-  if (b === 60) return `Timeline (last ${minutes} minutes, by minute)`;
-  if (b === 600) return `Timeline (last ${minutes} minutes, by 10 min)`;
-  return `Timeline (last ${minutes} minutes)`;
+  const full = `Timeline (last ${inner})`;
+  return { full, inner };
 }
 
 /** Normalise t to a number (Unix seconds) for comparison. */
@@ -53,7 +56,16 @@ export function Timeline({
   timelineWindowSec,
   timelineBucketSec,
 }: TimelineProps) {
-  const title = timelineTitle(timelineWindowSec, timelineBucketSec);
+  const { full: titleFull, inner: titleInner } = timelineTitle(
+    timelineWindowSec,
+    timelineBucketSec,
+  );
+  const titleNode = (
+    <>
+      Timeline ( <span className="timeline-title-last">last </span>
+      {titleInner} )
+    </>
+  );
   const chartRef = useRef<HTMLDivElement>(null);
   const chRulerRef = useRef<HTMLSpanElement>(null);
   const [maxBarChars, setMaxBarChars] = useState(50);
@@ -81,7 +93,7 @@ export function Timeline({
     return (
       <section className="dashboard-section" aria-labelledby="timeline-heading">
         <h2 id="timeline-heading" className="dashboard-section-title">
-          <SectionFrameTop title={title} />
+          <SectionFrameTop title={titleFull} titleNode={titleNode} />
         </h2>
         <BlockWithPipes>
           <p className="dashboard-empty">No timeline data.</p>
@@ -99,7 +111,7 @@ export function Timeline({
   return (
     <section className="dashboard-section" aria-labelledby="timeline-heading">
       <h2 id="timeline-heading" className="dashboard-section-title">
-        <SectionFrameTop title={title} />
+        <SectionFrameTop title={titleFull} titleNode={titleNode} />
       </h2>
       <BlockWithPipes>
         <div ref={chartRef} className="timeline-chart">
@@ -175,13 +187,16 @@ export function Timeline({
                     /
                     <span className="timeline-char timeline-char--bot">
                       {formatInt(p.bot)}
-                    </span>{" "}
-                    <span className="timeline-char timeline-char--browser">
-                      {browserPct.toFixed(0)}%
                     </span>
-                    /
-                    <span className="timeline-char timeline-char--bot">
-                      {botPct.toFixed(0)}%
+                    <span className="timeline-bar-pct">
+                      {" "}
+                      <span className="timeline-char timeline-char--browser">
+                        {browserPct.toFixed(0)}%
+                      </span>
+                      /
+                      <span className="timeline-char timeline-char--bot">
+                        {botPct.toFixed(0)}%
+                      </span>
                     </span>
                   </span>
                 </div>

@@ -5,10 +5,13 @@
   --dashboard-text: #c9d1d9;
   --dashboard-green: #3fb950;
   --dashboard-red: #f85149;
+  --dashboard-line-height: 1.2;
 }
 
 .dashboard-root {
   min-height: 100vh;
+  min-width: 0;
+  overflow-x: hidden;
   background: var(--dashboard-bg);
   color: var(--dashboard-text);
   font-size: 14px;
@@ -20,7 +23,7 @@
 }
 
 .dashboard-header {
-  padding: 0;
+  padding: 0 1ch;
   width: 100%;
   box-sizing: border-box;
 }
@@ -67,8 +70,11 @@
 .dashboard-main {
   padding: 0;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .dashboard-message {
@@ -88,6 +94,9 @@
 .dashboard-section {
   margin: 0;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .dashboard-section-title {
@@ -149,17 +158,18 @@
   opacity: 0.85;
 }
 
-/* Block with vertical pipe borders (│ left and right) */
+/* Block with vertical pipe borders (│ left and right). Single line-height so pipe height matches content rows. */
 .dashboard-block-with-pipes {
   display: grid;
   grid-template-columns: 1ch 1fr 1ch;
   width: 100%;
   min-width: 0;
+  line-height: var(--dashboard-line-height);
 }
 
 .dashboard-block-pipe {
   overflow: hidden;
-  line-height: inherit;
+  line-height: var(--dashboard-line-height);
   position: relative;
   min-height: 0;
 }
@@ -171,16 +181,18 @@
   visibility: hidden;
   pointer-events: none;
   display: block;
-  line-height: inherit;
+  line-height: var(--dashboard-line-height);
 }
 
 .dashboard-block-pipe-text {
   white-space: pre;
   display: block;
+  line-height: var(--dashboard-line-height);
 }
 
 .dashboard-block-content {
   min-width: 0;
+  line-height: var(--dashboard-line-height);
 }
 
 /* Summary cards */
@@ -206,6 +218,7 @@
 
 .summary-card-body {
   padding: 0;
+  line-height: var(--dashboard-line-height);
 }
 
 .summary-card-footer {
@@ -280,7 +293,7 @@
   flex-direction: column;
   gap: 0;
   font-size: 1em;
-  line-height: 1.2;
+  line-height: var(--dashboard-line-height);
 }
 
 .timeline-bar-row {
@@ -325,6 +338,8 @@
 
 /* Signals table */
 .signals-table-wrap {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   color: var(--dashboard-text);
 }
@@ -335,14 +350,25 @@
   font-size: 0.9rem;
   table-layout: fixed;
   color: var(--dashboard-text);
+  margin: 0;
 }
 
+.signals-table thead,
+.signals-table tbody,
+.signals-table tr {
+  margin: 0;
+}
+
+/* Cell line-height = 16.8px to match pipe column (pipes use 1.2 × root font-size). */
 .signals-table th,
 .signals-table td {
-  padding: 0.25rem 0.5rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  vertical-align: top;
   text-align: left;
   overflow: visible;
   color: var(--dashboard-text);
+  line-height: 16.8px;
 }
 
 .signals-table th {
@@ -361,12 +387,12 @@
 
 /* First column: signal_id — double width, ellipsis on overflow */
 .signals-table th:first-child,
-.signals-table-cell--id {
+.signals-table td.signals-table-cell--id {
   width: 28ch;
   min-width: 28ch;
   max-width: 56ch;
   font-family: inherit;
-  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .signals-table th:first-child {
@@ -374,9 +400,16 @@
 }
 
 .signals-table-cell--id {
+  overflow: hidden;
   color: var(--dashboard-text);
+}
+
+.signals-table-cell-id-inner {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .signals-table td.signals-table-cell--bot {
@@ -391,10 +424,49 @@
   color: #ffffff;
 }
 
+/* Short labels for small screens: "browser" → "br." (summary + table only) */
+.summary-label-short,
+.signals-table-th-label-short {
+  display: none;
+}
+
+@media (max-width: 449px) {
+  .timeline-title-last {
+    display: none;
+  }
+  .timeline-bar-pct {
+    display: none;
+  }
+  .summary-label-full {
+    display: none;
+  }
+  .summary-label-short {
+    display: inline;
+  }
+  .signals-table-th-label-full {
+    display: none;
+  }
+  .signals-table-th-label-short {
+    display: inline;
+  }
+  .signals-table th:first-child,
+  .signals-table td.signals-table-cell--id {
+    width: 14ch;
+    min-width: 14ch;
+  }
+  .signals-table th:nth-child(5),
+  .signals-table th:nth-child(6),
+  .signals-table td:nth-child(5),
+  .signals-table td:nth-child(6) {
+    display: none;
+  }
+}
+
 /* Behavioral edges (METHODOLOGY Appendix M) */
 .behavioral-edges-wrap {
   font-size: 0.9rem;
   color: var(--dashboard-text);
+  line-height: var(--dashboard-line-height);
 }
 
 .behavioral-edges-row {

@@ -17,8 +17,8 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "total", label: "total" },
   { key: "browser", label: "browser" },
   { key: "bot", label: "bot" },
-  { key: "browser_pct", label: "browser_pct" },
-  { key: "bot_pct", label: "bot_pct" },
+  { key: "browser_pct", label: "browser%" },
+  { key: "bot_pct", label: "bot%" },
 ];
 
 function sortSignals(
@@ -102,7 +102,18 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                     tabIndex={0}
                     title={`Sort by ${label} (${sortKey === key ? (sortDir === "asc" ? "ascending" : "descending") : key === "signal_id" ? "asc" : "desc"})`}
                   >
-                    {label}
+                    {key === "browser" ? (
+                      <>
+                        <span className="signals-table-th-label-full">
+                          browser
+                        </span>
+                        <span className="signals-table-th-label-short">
+                          br.
+                        </span>
+                      </>
+                    ) : (
+                      label
+                    )}
                     {sortKey === key && (
                       <span className="signals-table-th-sort" aria-hidden>
                         {sortDir === "asc" ? " ▲" : " ▼"}
@@ -128,7 +139,9 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                     }
                   >
                     <td className="signals-table-cell--id">
-                      {String(s.signal_id ?? "")}
+                      <span className="signals-table-cell-id-inner">
+                        {String(s.signal_id ?? "")}
+                      </span>
                     </td>
                     <td>{formatInt(s.total)}</td>
                     <td className="signals-table-cell--browser">
