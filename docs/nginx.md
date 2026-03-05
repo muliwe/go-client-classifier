@@ -306,16 +306,19 @@ Example (adjust paths to your deploy):
 
 ```nginx
     # Dashboard: static build (React app)
-    location /dashboard/ {
-        alias /var/www/dashboard/;   # or /opt/go-client-classifier/tools/ts/dashboard/dist/
-        index index.html;
-        try_files $uri $uri/ /dashboard/index.html;
+    location = /dashboard {
+        return 301 /dashboard/;
     }
 
-    # Dashboard: JSON payload (produced by build_dashboard_payload.py, e.g. via cron)
-    location = /dashboard.json {
+    location = /dashboard/data.json {
         alias /var/www/dashboard/dashboard.json;
         add_header Cache-Control "no-cache";
+    }
+
+    location  ^~ /dashboard/ {
+        alias /opt/go-client-classifier/tools/ts/dashboard/dist/;
+        index index.html;
+        try_files $uri $uri/ /dashboard/index.html;
     }
 ```
 

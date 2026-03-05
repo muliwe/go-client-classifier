@@ -208,6 +208,7 @@ func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
 		message = "You appear to be using an automated client"
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
 	if err := json.NewEncoder(w).Encode(Response{
 		Classification: result.Classification,
 		Confidence:     formatConfidence(result.Confidence, 2),
@@ -329,6 +330,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("Error encoding health response: %v", err)
 	}
@@ -387,6 +389,7 @@ func (h *Handler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	requestMetrics, challengeState := h.recordAndLogRequest(r, result, addr, responseTime, fp.HTTP.UserAgent, fp.HTTP.JA4HHash, requestMetrics)
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	payload := DebugResponse{
