@@ -332,12 +332,12 @@ Classification: browser (confidence: 0.97)
 
 ### Deployment: two data-flow variants
 
-**A) Direct TLS (Go terminates HTTPS)**  
-`client → Go TLS listener (:8443) → ConnContext + r.TLS → collector → signals → classifier → response`  
+**A) Direct TLS (Go terminates HTTPS)**
+`client → Go TLS listener (:8443) → ConnContext + r.TLS → collector → signals → classifier → response`
 TLS and HTTP/2 are observed directly; JA3/JA4 from ClientHello, H2 from the same connection when implemented.
 
-**B) Via nginx (TLS termination at edge)**  
-`client → nginx (443, TLS + JA3 module + H2 fingerprint module) → proxy_pass HTTP → Go (:8080) → collector reads X-FP-* + X-Internal-Proxy: 1 → same signals/classifier → response`  
+**B) Via nginx (TLS termination at edge)**
+`client → nginx (443, TLS + JA3 module + H2 fingerprint module) → proxy_pass HTTP → Go (:8080) → collector reads X-FP-* + X-Internal-Proxy: 1 → same signals/classifier → response`
 TLS and H2 fingerprint are taken from trusted proxy headers (X-FP-TLS-*, X-FP-JA3, X-FP-H2); no ClientHello in Go. See [Appendix F](#appendix-f-nginx-tls-termination-and-proxy-header-reuse) and [docs/nginx.md](nginx.md).
 
 ### Architecture (collector internals)
@@ -1312,7 +1312,7 @@ if s.JA4HConsistentSignal && s.JA4HHighHeaderCount {
     reasons = append(reasons, "ja4h-browser-profile")
 }
 
-// Bot indicators  
+// Bot indicators
 if s.JA4HMissingLanguage {
     reasons = append(reasons, "ja4h-no-language")
 }
@@ -1505,34 +1505,34 @@ Rules above are aligned with the following sources:
 
 ### References (2024–2026 and foundational)
 
-- **[4] Passive Fingerprinting of HTTP/2 Clients** (Akamai, Black Hat EU 2017) — HTTP/2 SETTINGS/frame fingerprinting at the proxy; basis for nginx-http2-fingerprint and similar modules.  
+- **[4] Passive Fingerprinting of HTTP/2 Clients** (Akamai, Black Hat EU 2017) — HTTP/2 SETTINGS/frame fingerprinting at the proxy; basis for nginx-http2-fingerprint and similar modules.
   https://blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf
 
-- **[2] Trusted headers for TLS-terminating reverse proxies** (PingIdentity, 2025) — Backends should only trust client identity/certificate headers from configured trusted proxies; strip or ignore from untrusted sources.  
+- **[2] Trusted headers for TLS-terminating reverse proxies** (PingIdentity, 2025) — Backends should only trust client identity/certificate headers from configured trusted proxies; strip or ignore from untrusted sources.
   https://backstage.pingidentity.com/docs/ig/2025.3/gateway-guide/oauth2-rs-introspect-mtls-header.html
 
-- **[29] nginx-http2-fingerprint** — Passive HTTP/2 fingerprinting (SETTINGS/priority) as nginx module; supplies values for variables/headers (e.g. `X-FP-H2`).  
+- **[29] nginx-http2-fingerprint** — Passive HTTP/2 fingerprinting (SETTINGS/priority) as nginx module; supplies values for variables/headers (e.g. `X-FP-H2`).
   https://github.com/Xetera/nginx-http2-fingerprint
 
-- **[30] Fingerproxy** — HTTPS reverse proxy that captures JA3, JA4, and HTTP/2 fingerprints and forwards them to backends via headers (X-JA3-Fingerprint, X-JA4-Fingerprint, X-HTTP2-Fingerprint). Production use (e.g. Subscan.io).  
+- **[30] Fingerproxy** — HTTPS reverse proxy that captures JA3, JA4, and HTTP/2 fingerprints and forwards them to backends via headers (X-JA3-Fingerprint, X-JA4-Fingerprint, X-HTTP2-Fingerprint). Production use (e.g. Subscan.io).
   https://github.com/wi1dcard/fingerproxy
 
-- **[31] Finch** — Real-time fingerprint-based actions (JA3, JA4, QUIC, JA4H, HTTP/2); supports block, reroute, tarpit.  
+- **[31] Finch** — Real-time fingerprint-based actions (JA3, JA4, QUIC, JA4H, HTTP/2); supports block, reroute, tarpit.
   https://github.com/0x4D31/finch
 
-- **RFC 9440** — Client-Cert and Client-Cert-Chain HTTP header fields for TLS-terminating reverse proxies (TTRPs); standardizes secure forwarding of client certificate information.  
+- **RFC 9440** — Client-Cert and Client-Cert-Chain HTTP header fields for TLS-terminating reverse proxies (TTRPs); standardizes secure forwarding of client certificate information.
   https://httpwg.org/specs/rfc9440.html
 
-- **[6] HTTP/2 fingerprinting and bypass** (NST Browser, 2025) — SETTINGS frame and transport-layer fingerprinting; cannot be spoofed via browser APIs; used in anti-bot/scraping.  
+- **[6] HTTP/2 fingerprinting and bypass** (NST Browser, 2025) — SETTINGS frame and transport-layer fingerprinting; cannot be spoofed via browser APIs; used in anti-bot/scraping.
   https://www.nstbrowser.io/blog/http-2-bypass
 
-- **TLS fingerprinting in 2026** (proxies.sx, 2026) — JA4+ adoption; inter-request and ML-based detection; fingerprinting at edge/proxy.  
+- **TLS fingerprinting in 2026** (proxies.sx, 2026) — JA4+ adoption; inter-request and ML-based detection; fingerprinting at edge/proxy.
   https://www.proxies.sx/use-cases/privacy/tls-fingerprint
 
-- **[32] Scrapfly HTTP/2 Fingerprint** — Format and components: SETTINGS, WINDOW_UPDATE, PRIORITY, pseudo-header order; used to detect scrapers/bots; browser vs library differences.  
+- **[32] Scrapfly HTTP/2 Fingerprint** — Format and components: SETTINGS, WINDOW_UPDATE, PRIORITY, pseudo-header order; used to detect scrapers/bots; browser vs library differences.
   https://scrapfly.io/web-scraping-tools/http2-fingerprint
 
-- **[33] HTTP/2 fingerprinting** (lwt hiker) — Browsers send PRIORITY; libraries often omit; SETTINGS/window differ (e.g. curl); impersonation requires matching frame behaviour.  
+- **[33] HTTP/2 fingerprinting** (lwt hiker) — Browsers send PRIORITY; libraries often omit; SETTINGS/window differ (e.g. curl); impersonation requires matching frame behaviour.
   https://lwthiker.com/networks/2022/06/17/http2-fingerprinting.html
 
 ### JA3 behind proxy and JA4 options
@@ -1551,8 +1551,8 @@ Methodologies for checking consistency between "complex" fingerprints (TLS JA3/J
 
 ### Spatial vs temporal inconsistency
 
-- **Spatial**: Two attributes in the *same* request contradict each other (e.g. User-Agent says Chrome, TLS fingerprint says curl; or JA4H says HTTP/1.1, ALPN says h2).  
-- **Temporal**: The *same* attribute changes across requests from the same client (e.g. JA3 differs between requests that should be the same browser).  
+- **Spatial**: Two attributes in the *same* request contradict each other (e.g. User-Agent says Chrome, TLS fingerprint says curl; or JA4H says HTTP/1.1, ALPN says h2).
+- **Temporal**: The *same* attribute changes across requests from the same client (e.g. JA3 differs between requests that should be the same browser).
 
 FP-Inconsistent [7] uses both: data-driven rules on attribute pairs (spatial) and same-attribute-over-time (temporal). Evasive bots that alter fingerprints often produce invalid combinations; detection targets those combinations. Our project implements **spatial** consistency (JA4H vs HTTP; H2 vs ALPN/version is implicit).
 
@@ -1587,25 +1587,25 @@ HTTP/2 fingerprint reflects the real client stack; it cannot be set via JavaScri
 
 ### References for this section
 
-- **[7] FP-Inconsistent** (arXiv:2406.07647) — Spatial (pair of attributes in one request) and temporal (same attribute over time) inconsistency; data-driven rules; 44–48% evasion reduction, 96.84% TNR.  
-  https://arxiv.org/abs/2406.07647  
-- **DataDome** — TLS fingerprinting reinforces protection; TLS vs declared User-Agent.  
-  https://datadome.co/engineering/how-tls-fingerprinting-reinforces-datadomes-protection/  
-- **JA4 in Action** (Medium) — Detecting bots/fake browsers via JA4; TLS vs UA consistency.  
-  https://medium.com/@belghitishakantar/ja4-in-action-detecting-bots-malware-and-fake-browsers-at-the-tls-level-3ccd890fbce9  
-- **[34] When Handshakes Tell the Truth** (arXiv:2602.09606) — Bot detection via TLS (JA4) fingerprints; 98.63% accuracy, AUC 0.998; features ja4_b, cipher_count, ext_count.  
-  https://arxiv.org/abs/2602.09606  
-- **Browser Polygraph** (Kalantari et al., 2024) — Predict whether fingerprint attributes are consistent with *reported User-Agent*; ML-based.  
-- **curl_cffi / lwt hiker** — Impersonation requires matching TLS *and* HTTP/2 (and often pseudo-header order); mismatches reveal automation.  
-  https://curl-cffi.readthedocs.io/en/latest/impersonate/faq.html  
+- **[7] FP-Inconsistent** (arXiv:2406.07647) — Spatial (pair of attributes in one request) and temporal (same attribute over time) inconsistency; data-driven rules; 44–48% evasion reduction, 96.84% TNR.
+  https://arxiv.org/abs/2406.07647
+- **DataDome** — TLS fingerprinting reinforces protection; TLS vs declared User-Agent.
+  https://datadome.co/engineering/how-tls-fingerprinting-reinforces-datadomes-protection/
+- **JA4 in Action** (Medium) — Detecting bots/fake browsers via JA4; TLS vs UA consistency.
+  https://medium.com/@belghitishakantar/ja4-in-action-detecting-bots-malware-and-fake-browsers-at-the-tls-level-3ccd890fbce9
+- **[34] When Handshakes Tell the Truth** (arXiv:2602.09606) — Bot detection via TLS (JA4) fingerprints; 98.63% accuracy, AUC 0.998; features ja4_b, cipher_count, ext_count.
+  https://arxiv.org/abs/2602.09606
+- **Browser Polygraph** (Kalantari et al., 2024) — Predict whether fingerprint attributes are consistent with *reported User-Agent*; ML-based.
+- **curl_cffi / lwt hiker** — Impersonation requires matching TLS *and* HTTP/2 (and often pseudo-header order); mismatches reveal automation.
+  https://curl-cffi.readthedocs.io/en/latest/impersonate/faq.html
 
 ### Our current implementation
 
-- **Done**: JA4H vs HTTP (cookies, referer, version, language) — spatial consistency; inconsistency → +2 bot.  
-- **Done**: H2 vs User-Agent — when UA looks like a browser but the HTTP/2 fingerprint is library-like (e.g. no PRIORITY, non-browser INITIAL_WINDOW_SIZE or WINDOW_UPDATE), we add +2 bot (`h2-ua-inconsistent`). Uses existing H2 parsed signals; no new data collection.  
+- **Done**: JA4H vs HTTP (cookies, referer, version, language) — spatial consistency; inconsistency → +2 bot.
+- **Done**: H2 vs User-Agent — when UA looks like a browser but the HTTP/2 fingerprint is library-like (e.g. no PRIORITY, non-browser INITIAL_WINDOW_SIZE or WINDOW_UPDATE), we add +2 bot (`h2-ua-inconsistent`). Uses existing H2 parsed signals; no new data collection.
 - **Done**: TLS vs User-Agent — (1) When UA looks like a browser but JA3/JA4 is in a known-library set (curl, Python requests, Go, Node.js), we add +3 bot (`tls-ua-inconsistent`). (2) When UA looks like a browser and JA3/JA4 is in a known-browser set (Chrome, etc.), we add +1 browser (`tls-ua-consistent`). (3) When UA claims bot/library but JA3/JA4 is in the known-browser set, we add +3 bot (`tls-ua-inconsistent`). (4) We only apply (1) when the fingerprint is in the library set and *not* in the browser set—the same JA4 can appear in both ja4db categories (e.g. real Chrome), in which case we do not penalize. JA3 maps are static in `internal/fingerprint/tls_client_map.go`; JA4 set is loaded from file (default `internal/fingerprint/data/ja4db.json`, download from ja4db.com on first start if missing). Env: `JA4DB_PATH`, `JA4DB_SKIP_DOWNLOAD` (tests). Extend from ja3.me, JA3.ZONE, ja4db.com.
 - **Done**: HTTP/1.1 without H2 — we add +1 bot only when TLS was available (the client could have negotiated H2). For raw HTTP pipelines (no TLS, e.g. direct to app without nginx), we do not penalize HTTP/1.1.
-- **Done**: Bot User-Agent and TLS/JA4H browser points — when the User-Agent is already classified as bot (e.g. curl, Python), we do not award browser points for TLS (modern-tls, high-ciphers, session-ticket, multi-groups, tls-ext≥10) or for ja4h-consistent. Primitive CLI clients have modern TLS stacks too; without this, curl would receive 6–7 browser points and the net score would be only slightly negative.  
+- **Done**: Bot User-Agent and TLS/JA4H browser points — when the User-Agent is already classified as bot (e.g. curl, Python), we do not award browser points for TLS (modern-tls, high-ciphers, session-ticket, multi-groups, tls-ext≥10) or for ja4h-consistent. Primitive CLI clients have modern TLS stacks too; without this, curl would receive 6–7 browser points and the net score would be only slightly negative.
 - **Done**: H2 vs JA4 — when JA4 is present, we parse ALPN from Part A (h2/h1/h3). If JA4 says h2 but the request is not HTTP/2 (or says h1 but it is HTTP/2), we add +2 bot (`h2-ja4-inconsistent`). See `JA4ALPN()` in `tls_client_map.go`.
 - **Done**: TLS/HTTP version mismatch — with direct TLS (not from proxy), we require ALPN to match the observed HTTP version: ALPN `h2` ↔ `HTTP/2.0`, ALPN `http/1.1` ↔ non‑HTTP/2. Mismatch → +2 bot (`tls-alpn-http-inconsistent`). When TLS is from proxy, ALPN reflects client↔proxy; the request to the backend may be HTTP/1.1, so we do not apply this check.
 - **Done**: Obsolete TLS (X-FP-TLS-Version) — when version is TLS 1.0 or TLS 1.1 we add +3 bot (`obsolete-tls(+3)`). Source: proxy header `X-FP-TLS-Version` or direct TLS; signal `TLSObsolete`. Smoking gun; outdated clients are often automation or legacy stacks.
@@ -1643,28 +1643,28 @@ This appendix summarizes industry practices and our implementation choices for u
 
 ### Best practices (2025–2026)
 
-1. **Prefer X-FP-JA3-HASH for classification**  
+1. **Prefer X-FP-JA3-HASH for classification**
    The classifier expects a 32-character MD5 for JA3 lookups (`knownLibraryJA3`, `knownBrowserJA3`). If the proxy sends only the raw JA3 string in X-FP-JA3, the backend hashes it; sending X-FP-JA3-HASH avoids ambiguity and matches phuslu’s native output. Configure nginx to set both when possible; the backend uses X-FP-JA3-HASH when present.
 
-2. **JA3 limitation behind proxy**  
+2. **JA3 limitation behind proxy**
    Behind a TLS-terminating proxy only JA3 (not JA4) is available from phuslu. Chrome’s extension-order randomization (2022+) makes JA3 unstable for the same browser (many hashes). Prefer JA4 when feasible (e.g. foxio-llc/ja4-nginx or Fingerproxy) and pass it as X-FP-JA4; the backend already consumes it for consistency and known-client checks.
 
-3. **Multi-layer detection**  
+3. **Multi-layer detection**
    Combine TLS (JA3/JA4), HTTP/2 fingerprint, and JA4H with consistency checks (TLS vs User-Agent, H2 vs UA, H2 vs JA4 ALPN). Single-signal spoofing is insufficient; spatial consistency is implemented (Appendix G). Temporal inconsistency (same client, changing fingerprints) is planned.
 
-4. **GREASE as a soft signal**  
+4. **GREASE as a soft signal**
    Real browsers typically send GREASE; many automation stacks do not or do so inconsistently. We use non-empty X-FP-SSL-GREASED with modern TLS as a +1 browser signal when the User-Agent is not already classified as bot. The exact format of the header value is module-dependent (e.g. phuslu).
 
-5. **Obsolete TLS**  
+5. **Obsolete TLS**
    TLS 1.0 and 1.1 are deprecated and often associated with legacy or automated clients. We add +3 bot (smoking gun) when X-FP-TLS-Version indicates TLS 1.0 or 1.1.
 
-6. **Exotic ALPN**  
+6. **Exotic ALPN**
    Negotiated ALPN values such as http/0.9, http/1.0, spdy/*, h2c, hq are typical of scanners or legacy stacks; real browsers use h2 or http/1.1. We add +3 bot (smoking gun) when ALPN is one of these. The server (direct TLS) accepts them in NextProtos so the handshake succeeds and we can score the request.
 
-7. **Trust and stripping**  
+7. **Trust and stripping**
    X-FP-* and X-Internal-Proxy must only be trusted when the request comes from a controlled proxy (e.g. internal network). Strip or ignore these headers from untrusted/external traffic to prevent spoofing.
 
-8. **Blind probe (path/method)**  
+8. **Blind probe (path/method)**
    Requests to non-existent paths or with non-GET method (we return 404 for these) are treated as a smoking-gun bot signal (`blind-probe` +3). Allowed paths are `/` and `/debug` (match server mux); `/health` is not scored (no classifier). Bots often probe blindly (e.g. GET /actuator/gateway/routes, POST /cgi-bin/...).
 
 ### Scoring summary (proxy path)
@@ -1873,16 +1873,16 @@ This appendix describes how we collect and aggregate statistics from request log
 
 ### Aggregation design
 
-1. **Global summary**  
+1. **Global summary**
    Total requests (after filters), unique IPs, unique URLs (paths), bot/browser counts and percentages, score percentiles (median, P50, P95) and header-count percentiles, prevalence of boolean signals (e.g. `ua_is_bot`, `has_sec_fetch_headers`, `has_accept_language`, `sec_ch_ua_modern_order`), HTTP/2 ratio, and share of requests with TLS from proxy.
 
-2. **Top-N by dimension**  
+2. **Top-N by dimension**
    For each of path, method, remote_addr (IP), user_agent (normalised family), user_agent_raw, accept, accept_lang_category, ja3_hash, ja4_hash, ja4h_hash, http_version, alpn, header_count_bucket, sec_ch_ua_prefix, and boolean signals (sec_ch_ua_present, has_sec_fetch, is_http2), we output the top-N values by total count (or by discriminativity |bot − browser|). Each row gives total, bot count, browser count, and bot%. For JA3/JA4/JA4H we also report distinct user-agents, paths, and IPs per fingerprint value (Signals Intelligence style). For *non-empty* fingerprint values only, we add per-hash lists with request counts: **top_user_agents** (raw User-Agent strings), **top_paths** (URL paths), **top_ips** (remote_addr); each list is `[{ "value": "...", "count": N }, ...]` sorted by count descending. The `(empty)` fingerprint value does not receive these breakdowns.
 
-3. **Scoring-signal prevalence**  
+3. **Scoring-signal prevalence**
    For every signal ID present in the scoring config (browser and bot, including zero-point signals), we parse the per-request `signals.score_breakdown` string and count how many requests had that signal in their breakdown. We output total, bot, browser, and bot%/browser% per signal.
 
-4. **Statistical significance (optional)**  
+4. **Statistical significance (optional)**
    To avoid over-interpreting rare categories, we optionally apply a per-block significance filter: within each grouping (e.g. method, path, user_agent), we set N = max total among values in that block, excluding the value `(empty)`. We then keep only rows with total ≥ √N. This threshold can be disabled via `--no-significance-filter` for full enumeration.
 
 **Output**: Text (default) or JSON (`--format json`). Progress bars: *Reading* (counting lines across files), *Processing* (parsing JSONL and aggregating). A reference JSON report is produced under `tests/testdata/report.json` (see [Brief interpretation](#brief-interpretation-of-a-sample-run) below).
@@ -1949,31 +1949,31 @@ This appendix specifies a **behavioural classifier** that uses HTTP Client Hints
 
 ### Flow
 
-1. **First request (no `__ch_nonce` cookie, or cookie value unknown to the server)**  
-   The server computes the **nonce** from the request’s JA4H hash: nonce = **C_D** (parts 3 and 4 — the cookie hash). Example: `ge11cn25ruru_30e4f3a786b6_68abb940d098_7b022c4b1588` → nonce = `68abb940d098_7b022c4b1588`. Two different clients with the same cookies (same C,D) thus share one nonce; the second fails (no cookie or UA mismatch).  
-   - **Empty nonce**: If parts C and D are all zeros (no cookies present, e.g. `000000000000_000000000000`), the server **does not** store the nonce, **does not** send Set-Cookie, and **does not** apply the challenge; classification proceeds using existing fingerprint and scoring signals only.  
-   - **Nonce already in store, but no cookie in request**: If the computed nonce is already in the server’s store (from a prior response) and the request does not contain the `__ch_nonce` cookie, the client is treated as having failed the challenge (impersonator that does not send back the cookie).  
-   - **Same nonce, different clients:** For any same non-zero JA4H (same nonce), the challenge must fire: the first request gets the cookie; any subsequent request with that nonce either has no cookie (→ fail) or has the cookie but a different User-Agent or wrong hints (→ fail). Only the same client returning with the same UA and correct hints passes.  
+1. **First request (no `__ch_nonce` cookie, or cookie value unknown to the server)**
+   The server computes the **nonce** from the request’s JA4H hash: nonce = **C_D** (parts 3 and 4 — the cookie hash). Example: `ge11cn25ruru_30e4f3a786b6_68abb940d098_7b022c4b1588` → nonce = `68abb940d098_7b022c4b1588`. Two different clients with the same cookies (same C,D) thus share one nonce; the second fails (no cookie or UA mismatch).
+   - **Empty nonce**: If parts C and D are all zeros (no cookies present, e.g. `000000000000_000000000000`), the server **does not** store the nonce, **does not** send Set-Cookie, and **does not** apply the challenge; classification proceeds using existing fingerprint and scoring signals only.
+   - **Nonce already in store, but no cookie in request**: If the computed nonce is already in the server’s store (from a prior response) and the request does not contain the `__ch_nonce` cookie, the client is treated as having failed the challenge (impersonator that does not send back the cookie).
+   - **Same nonce, different clients:** For any same non-zero JA4H (same nonce), the challenge must fire: the first request gets the cookie; any subsequent request with that nonce either has no cookie (→ fail) or has the cookie but a different User-Agent or wrong hints (→ fail). Only the same client returning with the same UA and correct hints passes.
    - **Otherwise**: The server stores `nonce → raw User-Agent` with a TTL (e.g. 60–120 s), and responds with:
      - `Accept-CH: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
      - `Critical-CH: Sec-CH-UA-Full-Version-List` (and optionally both hints; each must also appear in Vary)
      - `Vary: Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version`
      - `Set-Cookie: __ch_nonce=<nonce>; Max-Age=<challenge_ttl_sec>; Secure; HttpOnly; SameSite=Lax` — cookie lifetime is **synchronized** with the challenge store TTL and with the behavioural metrics window for this nonce (Appendix L), so the client sends the nonce for the same period the server retains it.
 
-2. **Second request (Cookie: `__ch_nonce=<nonce>` and nonce known in store)**  
+2. **Second request (Cookie: `__ch_nonce=<nonce>` and nonce known in store)**
    The server retrieves the stored User-Agent for that nonce. It then checks: (1) the request’s User-Agent matches the stored value; (2) the request includes the requested Client Hint headers (e.g. `Sec-CH-UA-Full-Version-List`, `Sec-CH-UA-Platform-Version`); (3) when the stored User-Agent identifies a Chrome-, Chromium-, or Edg-based browser, the `Sec-CH-UA-Full-Version-List` header must contain the same version as in that User-Agent: exact match (e.g. `v="120.0.0.0"`) or, when the UA has a simplified major (e.g. `Chrome/145.0.0.0`), any full version with the same major (e.g. `v="145.0.7632.75"`); a different or generic version fails the check. For non–Chrome/Chromium/Edg User-Agents, the version check is skipped. If all applicable checks hold, the challenge is **passed**; otherwise (wrong UA, missing hints, version mismatch, or nonce not in store / expired) the challenge is **failed** and the result is used as a bot signal in scoring.
 
 ### Signals and scoring
 
-- **challenge-passed**: Second request with matching UA, required Sec-CH-* headers present, and (for Chrome/Chromium/Edg UAs) the full-version list containing the same version as in the stored User-Agent; may contribute a small positive (browser) weight.  
+- **challenge-passed**: Second request with matching UA, required Sec-CH-* headers present, and (for Chrome/Chromium/Edg UAs) the full-version list containing the same version as in the stored User-Agent; may contribute a small positive (browser) weight.
 - **challenge-failed**: Second request with mismatched UA, missing hints, or version mismatch in `Sec-CH-UA-Full-Version-List`; or first-request path with nonce already in store but no cookie sent; or second request with unknown/expired nonce. **+3 bot** (smoking gun); same weight as obsolete-tls, exotic-alpn, blind-probe, bot-ua, no-ua, ua-browser-no-grease.
 
 Classification and logging remain unchanged except for the addition of these challenge signals and the corresponding response headers when the challenge is applied.
 
 ### Impersonator patterns detected
 
-- **Shared cookie jar**: One cookie jar (same `__ch_nonce` value) used for many different clients. The store maps nonce → one User-Agent; when another request arrives with the same nonce but a different User-Agent, the mismatch is detected and the challenge fails.  
-- **One jar reused for all traffic**: A single jar reused across many requests or identities; again, the same nonce may appear with different User-Agents or without the cookie on a “repeat” visit, both of which are flagged.  
+- **Shared cookie jar**: One cookie jar (same `__ch_nonce` value) used for many different clients. The store maps nonce → one User-Agent; when another request arrives with the same nonce but a different User-Agent, the mismatch is detected and the challenge fails.
+- **One jar reused for all traffic**: A single jar reused across many requests or identities; again, the same nonce may appear with different User-Agents or without the cookie on a “repeat” visit, both of which are flagged.
 - **Wrong or generic version in Client Hints**: An impersonator may send a fixed or arbitrary `Sec-CH-UA-Full-Version-List` (e.g. a single common version). The server requires the version in that header to match the stored User-Agent: exact match or, when UA has simplified major (e.g. 145.0.0.0), same major in the hint (e.g. v="145.0.7632.75"). A mismatch fails the challenge. These behaviours are common in scripts and proxies; binding the nonce to the stored User-Agent and to the declared version exposes them.
 
 ### References (Appendix K)
@@ -2145,33 +2145,33 @@ The tool **request_log_stats_by_class.py** (see [tools/python/request_log_stats_
 **Calculation methodology.**
 
 - **Labels and contingency.** BOT/BROWSER labels are taken from the log classification (pre-behavioural). For each signal, the same edge condition as in the classifier is applied per record (e.g. `request_rate_per_min > E_rate` for req_per_min). Contingency counts:
-  - **TP** = records with signal=1 in BOT cohort  
-  - **FP** = records with signal=1 in BROWSER cohort  
-  - **FN** = records with signal=0 in BOT cohort  
-  - **TN** = records with signal=0 in BROWSER cohort  
+  - **TP** = records with signal=1 in BOT cohort
+  - **FP** = records with signal=1 in BROWSER cohort
+  - **FN** = records with signal=0 in BOT cohort
+  - **TN** = records with signal=0 in BROWSER cohort
 
 - **Priors** (empirical from cohort sizes):
 
-  *P*(bot) = *n*<sub>bot</sub> / *n*<sub>total</sub>  
-  *P*(browser) = *n*<sub>browser</sub> / *n*<sub>total</sub>  
+  *P*(bot) = *n*<sub>bot</sub> / *n*<sub>total</sub>
+  *P*(browser) = *n*<sub>browser</sub> / *n*<sub>total</sub>
 
 - **Likelihoods** (fractions of each cohort that trigger or do not trigger the signal):
 
-  *P*(signal=1 | bot) = TP / *n*<sub>bot</sub>  
-  *P*(signal=1 | browser) = FP / *n*<sub>browser</sub>  
-  *P*(signal=0 | bot) = FN / *n*<sub>bot</sub>  
-  *P*(signal=0 | browser) = TN / *n*<sub>browser</sub>  
+  *P*(signal=1 | bot) = TP / *n*<sub>bot</sub>
+  *P*(signal=1 | browser) = FP / *n*<sub>browser</sub>
+  *P*(signal=0 | bot) = FN / *n*<sub>bot</sub>
+  *P*(signal=0 | browser) = TN / *n*<sub>browser</sub>
 
 - **Marginal** (total probability of signal state):
 
-  *P*(signal=1) = *P*(signal=1|bot)·*P*(bot) + *P*(signal=1|browser)·*P*(browser)  
-  *P*(signal=0) = 1 − *P*(signal=1)  
+  *P*(signal=1) = *P*(signal=1|bot)·*P*(bot) + *P*(signal=1|browser)·*P*(browser)
+  *P*(signal=0) = 1 − *P*(signal=1)
 
 - **Posteriors** (Bayes’ rule):
 
-  *P*(bot | signal=1) = *P*(signal=1|bot)·*P*(bot) / *P*(signal=1)  
-  *P*(browser | signal=1) = *P*(signal=1|browser)·*P*(browser) / *P*(signal=1)  
-  *P*(bot | signal=0) = *P*(signal=0|bot)·*P*(bot) / *P*(signal=0)  
+  *P*(bot | signal=1) = *P*(signal=1|bot)·*P*(bot) / *P*(signal=1)
+  *P*(browser | signal=1) = *P*(signal=1|browser)·*P*(browser) / *P*(signal=1)
+  *P*(bot | signal=0) = *P*(signal=0|bot)·*P*(bot) / *P*(signal=0)
   *P*(browser | signal=0) = *P*(signal=0|browser)·*P*(browser) / *P*(signal=0)
 
 **Using the results for edge refinement.** The posteriors support data-driven tuning of the four edge parameters (E_rate, E_median, E_var, E_ratio) in `behavioral_edges` (see [Appendix M](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring) and config):

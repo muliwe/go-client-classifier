@@ -31,9 +31,9 @@ function Test-Endpoint {
         [string]$ExpectedStatus,
         [string]$ExpectedContent
     )
-    
+
     Write-Host -NoNewline "Testing $Name... "
-    
+
     try {
         # Use curl for HTTPS with self-signed certs
         if ($script:SkipCertCheck) {
@@ -46,20 +46,20 @@ function Test-Endpoint {
             $statusCode = $response.StatusCode
             $body = $response.Content
         }
-        
+
         if ($statusCode -ne $ExpectedStatus) {
             Write-Host "FAILED" -ForegroundColor Red
             Write-Host "  Expected status: $ExpectedStatus, got: $statusCode" -ForegroundColor Yellow
             return $false
         }
-        
+
         if ($ExpectedContent -and ($body -notlike "*$ExpectedContent*")) {
             Write-Host "FAILED" -ForegroundColor Red
             Write-Host "  Expected content to contain: $ExpectedContent" -ForegroundColor Yellow
             Write-Host "  Got: $body" -ForegroundColor Yellow
             return $false
         }
-        
+
         Write-Host "PASSED" -ForegroundColor Green
         return $true
     }
@@ -76,9 +76,9 @@ function Test-CurlEndpoint {
         [string]$Url,
         [string]$ExpectedContent
     )
-    
+
     Write-Host -NoNewline "Testing $Name (curl)... "
-    
+
     try {
         if ($script:SkipCertCheck) {
             $curlOutput = curl.exe -s -k -w "`n%{http_code}" $Url 2>$null
@@ -88,20 +88,20 @@ function Test-CurlEndpoint {
         $lines = $curlOutput -split "`n"
         $statusCode = $lines[-1]
         $body = ($lines[0..($lines.Length - 2)]) -join "`n"
-        
+
         if ($statusCode -ne "200") {
             Write-Host "FAILED" -ForegroundColor Red
             Write-Host "  Expected status: 200, got: $statusCode" -ForegroundColor Yellow
             return $false
         }
-        
+
         if ($ExpectedContent -and ($body -notlike "*$ExpectedContent*")) {
             Write-Host "FAILED" -ForegroundColor Red
             Write-Host "  Expected content to contain: $ExpectedContent" -ForegroundColor Yellow
             Write-Host "  Got: $body" -ForegroundColor Yellow
             return $false
         }
-        
+
         Write-Host "PASSED" -ForegroundColor Green
         return $true
     }

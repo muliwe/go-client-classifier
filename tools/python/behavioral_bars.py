@@ -22,8 +22,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
-
 # Reuse loading and extraction from request_log_stats_by_class
 from request_log_stats_by_class import (
     EDGE_INTER_ARRIVAL_MEDIAN_SEC,
@@ -31,7 +29,6 @@ from request_log_stats_by_class import (
     EDGE_MEAN_MEDIAN_RATIO,
     EDGE_REQUEST_RATE_PER_MIN,
     _percentile,
-    extract_record,
     iter_files_by_globs,
     load_all_records,
 )
@@ -101,11 +98,11 @@ def compute_bars(
     param: str,
     p_from: int = 1,
     p_to: int = 99,
-) -> tuple[list[dict[str, Any]], list[float], float | None]:
+) -> tuple[list[dict[str, Any]], list[float], float | None, int, int]:
     """
     Build percentile bars for one parameter.
     Always uses 99 percentile bins (p01–p99); returns bars from percentile p_from to p_to (1-based).
-    Returns (list of bar stats, bin_edges for plotting, edge value or None).
+    Returns (list of bar stats, bin_edges for plotting, edge value or None, bar_offset, num_bars_displayed).
     """
     values: list[tuple[float, str]] = []  # (value, classification)
     for r in records:
@@ -126,8 +123,7 @@ def compute_bars(
     # Assign each (value, classification) to one of 99 bars (0..98)
     n_total_bars = NUM_PERCENTILE_BARS
     bars_full: list[dict[str, int]] = [
-        {"total": 0, "browser": 0, "bot": 0}
-        for _ in range(n_total_bars)
+        {"total": 0, "browser": 0, "bot": 0} for _ in range(n_total_bars)
     ]
     for val, cl in values:
         i = 0
@@ -160,17 +156,19 @@ def compute_bars(
         ratio = (bot_minus_browser / sum_bot_browser) if sum_bot_browser else 0.0
         p_lo_val = bin_edges[idx]
         p_hi_val = bin_edges[idx + 1]
-        out.append({
-            "bar": len(out) + 1,
-            "p_lo": p_lo_val,
-            "p_hi": p_hi_val,
-            "value": p_hi_val,
-            "total": total,
-            "browser": browser,
-            "bot": bot,
-            "bot_minus_browser": bot_minus_browser,
-            "bot_minus_browser_over_sum": round(ratio, 4),
-        })
+        out.append(
+            {
+                "bar": len(out) + 1,
+                "p_lo": p_lo_val,
+                "p_hi": p_hi_val,
+                "value": p_hi_val,
+                "total": total,
+                "browser": browser,
+                "bot": bot,
+                "bot_minus_browser": bot_minus_browser,
+                "bot_minus_browser_over_sum": round(ratio, 4),
+            }
+        )
     return out, bin_edges, edge_val, bar_offset, len(out)
 
 
@@ -203,6 +201,7 @@ def generate_charts(
     """Save one chart per parameter: bar metrics + vertical line at edge."""
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError as e:
@@ -216,7 +215,7 @@ def generate_charts(
         if not block or not block.get("bars"):
             continue
         bars_list = block["bars"]
-        bin_edges = block.get("bin_edges") or []
+        block.get("bin_edges") or []
         edge_val = block.get("edge_value")
 
         # x-axis = metric values (center of each bar), width = interval length
@@ -232,7 +231,7 @@ def generate_charts(
             if w <= 0:
                 w = x_range * 0.01
             widths.append(w)
-        total = [b["total"] for b in bars_list]
+        [b["total"] for b in bars_list]
         browser = [b["browser"] for b in bars_list]
         bot = [b["bot"] for b in bars_list]
         bot_minus_browser = [b["bot_minus_browser"] for b in bars_list]
@@ -249,16 +248,42 @@ def generate_charts(
             ax.set_xlim(x_min, x_max)
 
         ax1 = axes[0]
-        ax1.bar(x_centers, browser, width=widths, align="center", label="browser", color="steelblue", alpha=0.8)
-        ax1.bar(x_centers, bot, width=widths, align="center", bottom=browser, label="bot", color="coral", alpha=0.8)
+        ax1.bar(
+            x_centers,
+            browser,
+            width=widths,
+            align="center",
+            label="browser",
+            color="steelblue",
+            alpha=0.8,
+        )
+        ax1.bar(
+            x_centers,
+            bot,
+            width=widths,
+            align="center",
+            bottom=browser,
+            label="bot",
+            color="coral",
+            alpha=0.8,
+        )
         ax1.set_ylabel("count")
         ax1.legend(loc="upper right")
         ax1.set_title("Total / Browser / Bot per bar")
         if edge_val_x is not None:
-            ax1.axvline(x=edge_val_x, color="red", linestyle="--", linewidth=1.5, label="edge")
+            ax1.axvline(
+                x=edge_val_x, color="red", linestyle="--", linewidth=1.5, label="edge"
+            )
 
         ax2 = axes[1]
-        ax2.bar(x_centers, bot_minus_browser, width=widths, align="center", color="purple", alpha=0.7)
+        ax2.bar(
+            x_centers,
+            bot_minus_browser,
+            width=widths,
+            align="center",
+            color="purple",
+            alpha=0.7,
+        )
         ax2.axhline(y=0, color="gray", linestyle="-", linewidth=0.5)
         ax2.set_ylabel("bot − browser")
         ax2.set_title("Bot minus browser per bar")
@@ -266,7 +291,9 @@ def generate_charts(
             ax2.axvline(x=edge_val_x, color="red", linestyle="--", linewidth=1.5)
 
         ax3 = axes[2]
-        ax3.bar(x_centers, ratio, width=widths, align="center", color="green", alpha=0.6)
+        ax3.bar(
+            x_centers, ratio, width=widths, align="center", color="green", alpha=0.6
+        )
         ax3.axhline(y=0, color="gray", linestyle="-", linewidth=0.5)
         ax3.set_ylabel("(bot−browser)/(bot+browser)")
         ax3.set_xlabel(param)
@@ -291,7 +318,8 @@ def main() -> int:
         help="Glob mask(s) for JSON or JSONL files",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=Path,
         default=None,
         help="Output JSON file (default: stdout)",
@@ -326,28 +354,32 @@ def main() -> int:
         type=float,
         default=None,
         metavar="V",
-        help="Edge for request_rate_per_min (default: %.2f)" % EDGE_REQUEST_RATE_PER_MIN,
+        help="Edge for request_rate_per_min (default: %.2f)"
+        % EDGE_REQUEST_RATE_PER_MIN,
     )
     parser.add_argument(
         "--gap-median-sec",
         type=float,
         default=None,
         metavar="V",
-        help="Edge for inter_arrival_median_sec (default: %.2f)" % EDGE_INTER_ARRIVAL_MEDIAN_SEC,
+        help="Edge for inter_arrival_median_sec (default: %.2f)"
+        % EDGE_INTER_ARRIVAL_MEDIAN_SEC,
     )
     parser.add_argument(
         "--gap-std-mean",
         type=float,
         default=None,
         metavar="V",
-        help="Edge for inter_arrival_std_per_mean (default: %.2f)" % EDGE_INTER_ARRIVAL_STD_PER_MEAN,
+        help="Edge for inter_arrival_std_per_mean (default: %.2f)"
+        % EDGE_INTER_ARRIVAL_STD_PER_MEAN,
     )
     parser.add_argument(
         "--gap-mean-median",
         type=float,
         default=None,
         metavar="V",
-        help="Edge for inter_arrival_mean_median_ratio (default: %.2f)" % EDGE_MEAN_MEDIAN_RATIO,
+        help="Edge for inter_arrival_mean_median_ratio (default: %.2f)"
+        % EDGE_MEAN_MEDIAN_RATIO,
     )
     args = parser.parse_args()
 

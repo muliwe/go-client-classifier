@@ -44,7 +44,6 @@ import json
 import math
 import re
 import sys
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
 
@@ -52,21 +51,71 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-
 # All signal IDs from scoring config (browser_scores + bot_scores), including 0-point ones, for stats.
 # Must match internal/config/scoring.go defaultBrowserScores + defaultBotScores.
-ALL_SCORING_SIGNAL_IDS: list[str] = sorted({
-    "http2", "h2-fp", "h2-init-window", "h2-priority", "h2-window-update", "h2-max-frame", "h2-pseudo-headers",
-    "sec-fetch", "browser-ua", "sec-ch-ua", "header-order", "cache-control", "cookies", "modern-tls", "ssl-greased",
-    "high-ciphers", "session-ticket", "multi-groups", "tls-ext>=10", "ja4h-headers>=10", "ja4h-referer", "ja4h-consistent",
-    "tls-ua-consistent", "accept-lang-rich", "sec-purpose", "accept-language", "browser-headers", "sec-ch-ua-modern",
-    "high-header-count", "no-bot-red-flags",
-    "obsolete-tls", "exotic-alpn", "blind-probe", "bot-ua", "ai-crawler", "low-headers", "missing-typical", "no-ua",
-    "http1.1", "accept-*/*", "no-accept-lang", "low-ciphers", "few-tls-ext", "no-session", "ja4h-no-lang",
-    "ja4h-low-headers", "ja4h-inconsistent", "ja4h-no-cookies", "header-order-late", "h2-ua-inconsistent",
-    "tls-ua-inconsistent", "ua-browser-no-grease", "h2-ja4-inconsistent", "tls-alpn-http-inconsistent", "no-sni", "no-alpn",
-    "accept-lang-simple", "sec-purpose-invalid", "sec-purpose-no-sec-fetch",
-})
+ALL_SCORING_SIGNAL_IDS: list[str] = sorted(
+    {
+        "http2",
+        "h2-fp",
+        "h2-init-window",
+        "h2-priority",
+        "h2-window-update",
+        "h2-max-frame",
+        "h2-pseudo-headers",
+        "sec-fetch",
+        "browser-ua",
+        "sec-ch-ua",
+        "header-order",
+        "cache-control",
+        "cookies",
+        "modern-tls",
+        "ssl-greased",
+        "high-ciphers",
+        "session-ticket",
+        "multi-groups",
+        "tls-ext>=10",
+        "ja4h-headers>=10",
+        "ja4h-referer",
+        "ja4h-consistent",
+        "tls-ua-consistent",
+        "accept-lang-rich",
+        "sec-purpose",
+        "accept-language",
+        "browser-headers",
+        "sec-ch-ua-modern",
+        "high-header-count",
+        "no-bot-red-flags",
+        "obsolete-tls",
+        "exotic-alpn",
+        "blind-probe",
+        "bot-ua",
+        "ai-crawler",
+        "low-headers",
+        "missing-typical",
+        "no-ua",
+        "http1.1",
+        "accept-*/*",
+        "no-accept-lang",
+        "low-ciphers",
+        "few-tls-ext",
+        "no-session",
+        "ja4h-no-lang",
+        "ja4h-low-headers",
+        "ja4h-inconsistent",
+        "ja4h-no-cookies",
+        "header-order-late",
+        "h2-ua-inconsistent",
+        "tls-ua-inconsistent",
+        "ua-browser-no-grease",
+        "h2-ja4-inconsistent",
+        "tls-alpn-http-inconsistent",
+        "no-sni",
+        "no-alpn",
+        "accept-lang-simple",
+        "sec-purpose-invalid",
+        "sec-purpose-no-sec-fetch",
+    }
+)
 
 
 def _parse_score_breakdown(breakdown: str) -> set[str]:
@@ -76,12 +125,14 @@ def _parse_score_breakdown(breakdown: str) -> set[str]:
     out: set[str] = set()
     # Match tokens like "http2(+2)" or "bot-ua(+3)" inside brackets
     import re
+
     for m in re.finditer(r"([a-z0-9\-*/><=]+)\(\+\d+\)", breakdown):
         out.add(m.group(1))
     return out
 
 
 # --- Normalization ---
+
 
 def _normalize_user_agent(ua: str) -> str:
     """Normalize User-Agent to family: curl, python, Chrome, Safari, Firefox, go-http-client, other."""
@@ -212,12 +263,19 @@ def extract_record(rec: dict[str, Any]) -> dict[str, Any] | None:
     if remote_addr and re.match(r".*:\d+$", remote_addr):
         remote_addr = re.sub(r":\d+$", "", remote_addr)
     # Normalise localhost to (empty): IPv4 and IPv6
-    if not remote_addr or remote_addr == "127.0.0.1" or remote_addr == "::1" or remote_addr == "[::1]":
+    if (
+        not remote_addr
+        or remote_addr == "127.0.0.1"
+        or remote_addr == "::1"
+        or remote_addr == "[::1]"
+    ):
         remote_addr = "(empty)"
     score_signal_ids = _parse_score_breakdown((sig.get("score_breakdown") or ""))
 
     # Raw User-Agent for separate stats (truncate to limit cardinality in aggregation)
-    user_agent_raw = (user_agent[:200] + "…") if len(user_agent) > 200 else (user_agent or "(empty)")
+    user_agent_raw = (
+        (user_agent[:200] + "…") if len(user_agent) > 200 else (user_agent or "(empty)")
+    )
 
     return {
         "classification": classification,
@@ -288,7 +346,8 @@ def read_jsonl_stream(
     progress_callback: Callable[[int, Path | None], None] | None = None,
 ):
     """Yield parsed records (dict) from JSONL files or stdin (if file_paths is None); skip invalid lines.
-    If progress_callback is set, call it every PROGRESS_UPDATE_EVERY lines as (delta, current_path)."""
+    If progress_callback is set, call it every PROGRESS_UPDATE_EVERY lines as (delta, current_path).
+    """
     total_skipped = 0
     lines_done = 0
     pending_update = 0
@@ -393,11 +452,17 @@ def aggregate(
     score_bot = np.array(df.loc[bot, "score"].dropna(), dtype=float)
     score_browser = np.array(df.loc[browser, "score"].dropna(), dtype=float)
     median_score_bot = float(np.median(score_bot)) if score_bot.size else None
-    median_score_browser = float(np.median(score_browser)) if score_browser.size else None
+    median_score_browser = (
+        float(np.median(score_browser)) if score_browser.size else None
+    )
     p50_score_bot = float(np.percentile(score_bot, 50)) if score_bot.size else None
-    p50_score_browser = float(np.percentile(score_browser, 50)) if score_browser.size else None
+    p50_score_browser = (
+        float(np.percentile(score_browser, 50)) if score_browser.size else None
+    )
     p95_score_bot = float(np.percentile(score_bot, 95)) if score_bot.size else None
-    p95_score_browser = float(np.percentile(score_browser, 95)) if score_browser.size else None
+    p95_score_browser = (
+        float(np.percentile(score_browser, 95)) if score_browser.size else None
+    )
 
     hc_bot = np.array(df.loc[bot, "header_count"].dropna(), dtype=float)
     hc_browser = np.array(df.loc[browser, "header_count"].dropna(), dtype=float)
@@ -412,20 +477,42 @@ def aggregate(
         "browser_count": browser_count,
         "bot_pct": round(bot_pct, 2),
         "browser_pct": round(browser_pct, 2),
-        "median_score_bot": round(median_score_bot, 2) if median_score_bot is not None else None,
-        "median_score_browser": round(median_score_browser, 2) if median_score_browser is not None else None,
+        "median_score_bot": (
+            round(median_score_bot, 2) if median_score_bot is not None else None
+        ),
+        "median_score_browser": (
+            round(median_score_browser, 2) if median_score_browser is not None else None
+        ),
         "p50_score_bot": round(p50_score_bot, 2) if p50_score_bot is not None else None,
-        "p50_score_browser": round(p50_score_browser, 2) if p50_score_browser is not None else None,
+        "p50_score_browser": (
+            round(p50_score_browser, 2) if p50_score_browser is not None else None
+        ),
         "p95_score_bot": round(p95_score_bot, 2) if p95_score_bot is not None else None,
-        "p95_score_browser": round(p95_score_browser, 2) if p95_score_browser is not None else None,
-        "p50_header_count_bot": round(p50_hc_bot, 2) if p50_hc_bot is not None else None,
-        "p50_header_count_browser": round(p50_hc_browser, 2) if p50_hc_browser is not None else None,
-        "p95_header_count_bot": round(p95_hc_bot, 2) if p95_hc_bot is not None else None,
-        "p95_header_count_browser": round(p95_hc_browser, 2) if p95_hc_browser is not None else None,
+        "p95_score_browser": (
+            round(p95_score_browser, 2) if p95_score_browser is not None else None
+        ),
+        "p50_header_count_bot": (
+            round(p50_hc_bot, 2) if p50_hc_bot is not None else None
+        ),
+        "p50_header_count_browser": (
+            round(p50_hc_browser, 2) if p50_hc_browser is not None else None
+        ),
+        "p95_header_count_bot": (
+            round(p95_hc_bot, 2) if p95_hc_bot is not None else None
+        ),
+        "p95_header_count_browser": (
+            round(p95_hc_browser, 2) if p95_hc_browser is not None else None
+        ),
         "ua_is_bot_pct": round(100.0 * df["ua_is_bot"].sum() / total, 2),
-        "has_sec_fetch_headers_pct": round(100.0 * df["has_sec_fetch_headers"].sum() / total, 2),
-        "has_accept_language_pct": round(100.0 * df["has_accept_language"].sum() / total, 2),
-        "sec_ch_ua_modern_order_pct": round(100.0 * df["sec_ch_ua_modern_order"].sum() / total, 2),
+        "has_sec_fetch_headers_pct": round(
+            100.0 * df["has_sec_fetch_headers"].sum() / total, 2
+        ),
+        "has_accept_language_pct": round(
+            100.0 * df["has_accept_language"].sum() / total, 2
+        ),
+        "sec_ch_ua_modern_order_pct": round(
+            100.0 * df["sec_ch_ua_modern_order"].sum() / total, 2
+        ),
         "h2_ratio": round(100.0 * df["is_http2"].sum() / total, 2),
         "tls_from_proxy_pct": round(100.0 * df["tls_from_proxy"].sum() / total, 2),
         "unique_ips": int(df["remote_addr"].nunique()),
@@ -468,10 +555,15 @@ def aggregate(
         return pd.Series(out)
 
     for field in categorical_fields + bool_fields:
-        work = df.assign(**{field: df[field].astype(str)}) if field in bool_fields else df
+        work = (
+            df.assign(**{field: df[field].astype(str)}) if field in bool_fields else df
+        )
         counts = (
             work.groupby(field, dropna=False)
-            .apply(lambda g: _count_classification(g, field in fingerprint_fields), include_groups=False)
+            .apply(
+                lambda g: _count_classification(g, field in fingerprint_fields),
+                include_groups=False,  # type: ignore[call-overload]
+            )
             .reset_index()
         )
         counts = counts.rename(columns={field: "value"})
@@ -479,12 +571,16 @@ def aggregate(
         counts["browser_ratio"] = (100.0 * counts["browser"] / counts["total"]).round(2)
         if sort_by == "discriminative":
             counts["_discriminative"] = (counts["bot"] - counts["browser"]).abs()
-            counts = counts.sort_values("_discriminative", ascending=False).drop(columns=["_discriminative"])
+            counts = counts.sort_values("_discriminative", ascending=False).drop(
+                columns=["_discriminative"]
+            )
         else:
             counts = counts.sort_values("total", ascending=False)
         rows = counts.to_dict("records")
         if filter_significance:
-            non_empty = [r for r in rows if str(r.get("value", "")).strip() != "(empty)"]
+            non_empty = [
+                r for r in rows if str(r.get("value", "")).strip() != "(empty)"
+            ]
             N = max((r["total"] for r in non_empty), default=0)
             threshold = math.sqrt(N)
             rows = [r for r in rows if r["total"] >= threshold]
@@ -503,9 +599,15 @@ def aggregate(
             ua_counts = g["user_agent_raw"].value_counts()
             path_counts = g["path"].value_counts()
             ip_counts = g["remote_addr"].value_counts()
-            row["top_user_agents"] = [{"value": v, "count": int(c)} for v, c in ua_counts.items()]
-            row["top_paths"] = [{"value": v, "count": int(c)} for v, c in path_counts.items()]
-            row["top_ips"] = [{"value": v, "count": int(c)} for v, c in ip_counts.items()]
+            row["top_user_agents"] = [
+                {"value": v, "count": int(c)} for v, c in ua_counts.items()
+            ]
+            row["top_paths"] = [
+                {"value": v, "count": int(c)} for v, c in path_counts.items()
+            ]
+            row["top_ips"] = [
+                {"value": v, "count": int(c)} for v, c in ip_counts.items()
+            ]
 
     # Per-signal stats (from score_breakdown): for each config signal ID, count records where it fired
     scoring_signals: list[dict[str, Any]] = []
@@ -528,21 +630,27 @@ def aggregate(
                 browser_s += 1
         bot_pct_s = round(100.0 * bot_s / total_s, 2) if total_s else 0.0
         browser_pct_s = round(100.0 * browser_s / total_s, 2) if total_s else 0.0
-        scoring_signals.append({
-            "signal_id": signal_id,
-            "total": total_s,
-            "bot": bot_s,
-            "browser": browser_s,
-            "bot_pct": bot_pct_s,
-            "browser_pct": browser_pct_s,
-        })
+        scoring_signals.append(
+            {
+                "signal_id": signal_id,
+                "total": total_s,
+                "bot": bot_s,
+                "browser": browser_s,
+                "bot_pct": bot_pct_s,
+                "browser_pct": browser_pct_s,
+            }
+        )
 
     if filter_significance and scoring_signals:
         N_sig = max(r["total"] for r in scoring_signals)
         threshold_sig = math.sqrt(N_sig)
         scoring_signals = [r for r in scoring_signals if r["total"] >= threshold_sig]
 
-    return {"summary": summary, "top_values": top_values, "scoring_signals": scoring_signals}
+    return {
+        "summary": summary,
+        "top_values": top_values,
+        "scoring_signals": scoring_signals,
+    }
 
 
 def format_text(stats: dict[str, Any], top_n: int) -> str:
@@ -551,12 +659,20 @@ def format_text(stats: dict[str, Any], top_n: int) -> str:
     s = stats["summary"]
     lines.append("=== Summary ===")
     lines.append(f"Total requests (after filters): {s['total']}")
-    lines.append(f"Unique IPs: {s.get('unique_ips', '—')}  Unique URLs (paths): {s.get('unique_urls', '—')}")
+    lines.append(
+        f"Unique IPs: {s.get('unique_ips', '—')}  Unique URLs (paths): {s.get('unique_urls', '—')}"
+    )
     lines.append(f"Bot: {s['bot_count']} ({s['bot_pct']}%)")
     lines.append(f"Browser: {s['browser_count']} ({s['browser_pct']}%)")
-    lines.append(f"Score: median bot={s['median_score_bot']} browser={s['median_score_browser']} | P50 bot={s.get('p50_score_bot')} browser={s.get('p50_score_browser')} | P95 bot={s.get('p95_score_bot')} browser={s.get('p95_score_browser')}")
-    lines.append(f"Header count: P50 bot={s['p50_header_count_bot']} browser={s['p50_header_count_browser']} | P95 bot={s.get('p95_header_count_bot')} browser={s.get('p95_header_count_browser')}")
-    lines.append(f"Prevalence: ua_is_bot={s['ua_is_bot_pct']}%, has_sec_fetch_headers={s['has_sec_fetch_headers_pct']}%, has_accept_language={s['has_accept_language_pct']}%, sec_ch_ua_modern_order={s.get('sec_ch_ua_modern_order_pct', 0)}%")
+    lines.append(
+        f"Score: median bot={s['median_score_bot']} browser={s['median_score_browser']} | P50 bot={s.get('p50_score_bot')} browser={s.get('p50_score_browser')} | P95 bot={s.get('p95_score_bot')} browser={s.get('p95_score_browser')}"
+    )
+    lines.append(
+        f"Header count: P50 bot={s['p50_header_count_bot']} browser={s['p50_header_count_browser']} | P95 bot={s.get('p95_header_count_bot')} browser={s.get('p95_header_count_browser')}"
+    )
+    lines.append(
+        f"Prevalence: ua_is_bot={s['ua_is_bot_pct']}%, has_sec_fetch_headers={s['has_sec_fetch_headers_pct']}%, has_accept_language={s['has_accept_language_pct']}%, sec_ch_ua_modern_order={s.get('sec_ch_ua_modern_order_pct', 0)}%"
+    )
     lines.append(f"HTTP/2 ratio (h2_ratio): {s.get('h2_ratio', 0)}%")
     lines.append(f"TLS from trusted proxy (X-FP-*): {s.get('tls_from_proxy_pct', 0)}%")
     lines.append("")
@@ -576,7 +692,9 @@ def format_text(stats: dict[str, Any], top_n: int) -> str:
 
     lines.append("=== Scoring signals (from score_breakdown) ===")
     for row in stats.get("scoring_signals") or []:
-        lines.append(f"  {row['signal_id']}: total={row['total']}  bot={row['bot']}  browser={row['browser']}  bot%={row['bot_pct']}  browser%={row['browser_pct']}")
+        lines.append(
+            f"  {row['signal_id']}: total={row['total']}  bot={row['bot']}  browser={row['browser']}  bot%={row['bot_pct']}  browser%={row['browser_pct']}"
+        )
     lines.append("")
 
     return "\n".join(lines)
@@ -587,8 +705,7 @@ def format_json(stats: dict[str, Any], top_n: int) -> str:
     out = {
         "summary": stats["summary"],
         "top_values": {
-            field: rows[:top_n]
-            for field, rows in stats["top_values"].items()
+            field: rows[:top_n] for field, rows in stats["top_values"].items()
         },
         "scoring_signals": stats.get("scoring_signals") or [],
     }
@@ -605,14 +722,16 @@ def main() -> int:
         help="Glob mask(s) for JSONL files, e.g. logs/**/requests_*.jsonl",
     )
     parser.add_argument(
-        "-n", "--top",
+        "-n",
+        "--top",
         type=int,
         default=15,
         metavar="N",
         help="Number of top values per field (default: 15)",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=Path,
         default=None,
         help="Output file (default: stdout)",
@@ -671,7 +790,9 @@ def main() -> int:
     def on_progress(delta: int, current_path: Path | None) -> None:
         if pbar is not None:
             pbar.update(delta)
-            pbar.set_postfix_str(str(current_path.name) if current_path else "stdin", refresh=False)
+            pbar.set_postfix_str(
+                str(current_path.name) if current_path else "stdin", refresh=False
+            )
 
     records: list[dict[str, Any]] = []
     skipped_lines = 0
@@ -689,9 +810,14 @@ def main() -> int:
     if pbar is not None:
         pbar.close()
     if skipped_lines:
-        print(f"Warning: skipped {skipped_lines} invalid JSON line(s).", file=sys.stderr)
+        print(
+            f"Warning: skipped {skipped_lines} invalid JSON line(s).", file=sys.stderr
+        )
     if skipped_class:
-        print(f"Warning: skipped {skipped_class} record(s) with classification not bot/browser.", file=sys.stderr)
+        print(
+            f"Warning: skipped {skipped_class} record(s) with classification not bot/browser.",
+            file=sys.stderr,
+        )
 
     STRESS_PATHS = ("/", "/health", "/debug")
 
@@ -700,7 +826,10 @@ def main() -> int:
         records = [
             r
             for r in records
-            if not (r.get("user_agent") == "go-http-client" and r.get("path") in STRESS_PATHS)
+            if not (
+                r.get("user_agent") == "go-http-client"
+                and r.get("path") in STRESS_PATHS
+            )
         ]
         excluded = before - len(records)
         if excluded:

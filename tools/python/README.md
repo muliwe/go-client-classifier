@@ -41,6 +41,17 @@ poetry shell
 python antibot_test.py
 ```
 
+## Linters (pre-commit)
+
+From `tools/python` you can run the same checks as pre-commit (task check, trailing whitespace, end-of-file-fixer, check-yaml, check-added-large-files, black, isort, mypy, autoflake, ruff) over the whole repo:
+
+```bash
+cd tools/python
+poetry run lint
+```
+
+This runs pre-commit from the repo root, so the result is identical to `pre-commit run --all-files` in the root. Config for black and isort: repo root `pyproject.toml` and `tools/python/pyproject.toml` (shared `line_length` and isort `profile = "black"` so they don’t conflict).
+
 ## Contents
 
 - **antibot_test.py** — antibot detection bypass check via [curl_cffi](https://github.com/yifeikong/curl_cffi) (TLS/HTTP2 fingerprint as Chrome/Safari). Dependency: `curl-cffi`.

@@ -32,26 +32,26 @@ test_endpoint() {
     local url="$2"
     local expected_status="$3"
     local expected_content="$4"
-    
+
     printf "Testing %s... " "$name"
-    
+
     response=$(curl $CURL_FLAGS -w "\n%{http_code}" "$url" 2>/dev/null)
     status_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
-    
+
     if [ "$status_code" != "$expected_status" ]; then
         echo -e "${RED}FAILED${NC}"
         echo -e "  ${YELLOW}Expected status: $expected_status, got: $status_code${NC}"
         return 1
     fi
-    
+
     if [ -n "$expected_content" ] && ! echo "$body" | grep -q "$expected_content"; then
         echo -e "${RED}FAILED${NC}"
         echo -e "  ${YELLOW}Expected content to contain: $expected_content${NC}"
         echo -e "  ${YELLOW}Got: $body${NC}"
         return 1
     fi
-    
+
     echo -e "${GREEN}PASSED${NC}"
     return 0
 }

@@ -1,0 +1,10 @@
+# Shared config for pre-commit (black, isort) so they use the same rules and don't conflict.
+# See tools/python/pyproject.toml for Poetry and package config.
+
+[tool.black]
+line_length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88

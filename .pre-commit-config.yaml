@@ -1,0 +1,71 @@
+# See https://pre-commit.com for more information
+repos:
+  - repo: local
+    hooks:
+      - id: task-check
+        name: task check
+        entry: task check
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(tests/|migrations/|.*\.svg$)
+      - id: end-of-file-fixer
+        exclude: ^(tests/|migrations/|.*\.svg$)
+      - id: check-yaml
+        exclude: ^(migrations/)
+      - id: check-added-large-files
+        exclude: ^(migrations/)
+
+  - repo: https://github.com/psf/black
+    rev: 25.12.0
+    hooks:
+      - id: black
+        exclude: ^(tests/|migrations/)
+
+  - repo: https://github.com/pycqa/isort
+    rev: 7.0.0
+    hooks:
+      - id: isort
+        exclude: ^(tests/|migrations/)
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        exclude: ^(tests/|migrations/)
+        args:
+          - --no-incremental
+        additional_dependencies:
+          - types-requests
+          - types-python-dateutil
+          - types-PyYAML
+          - types-setuptools
+          - types-urllib3
+          - types-pytz
+          - types-six
+          - types-tqdm
+          - pandas-stubs
+          - numpy
+          - matplotlib
+          - curl-cffi
+
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.3.1
+    hooks:
+      - id: autoflake
+        args: [--remove-all-unused-imports, --remove-unused-variables, --in-place, --quiet]
+        exclude: ^(tests/|migrations/)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.2
+    hooks:
+      - id: ruff
+        name: ruff (no inner imports)
+        args:
+          - --select=E402
+          - --exit-non-zero-on-fix
+        exclude: ^(tests/|migrations/)/
