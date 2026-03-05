@@ -2,7 +2,7 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
-**Version**: 1.3.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 1.4.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -60,7 +60,8 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 ### Tech Stack
 
 - **Core**: Go (HTTP/2 server, TLS fingerprinting, classification)
-- **Analytics**: Python (log analysis, pattern extraction). **Request log statistics** — [tools/python/request_log_stats.py](tools/python/request_log_stats.py) aggregates JSONL logs: top-N by path, method, IP, user agent, JA3/JA4/JA4H, headers; bot/browser breakdown; scoring-signal prevalence; optional significance filter (√N). See [tools/python/README.md](tools/python/README.md) and [Methodology Appendix J](docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology).
+- **Analytics**: Python (log analysis, pattern extraction). **Request log statistics** — [tools/python/request_log_stats.py](tools/python/request_log_stats.py) aggregates JSONL logs: top-N by path, method, IP, user agent, JA3/JA4/JA4H, headers; bot/browser breakdown; scoring-signal prevalence; optional significance filter (√N). **Dashboard payload** — [tools/python/build_dashboard_payload.py](tools/python/build_dashboard_payload.py) builds the JSON for the web dashboard (windows, timeline, transport + behavioural signals). See [tools/python/README.md](tools/python/README.md) and [Methodology Appendix J](docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology).
+- **Dashboard**: React (Vite, TypeScript) in [tools/ts/dashboard](tools/ts/dashboard) — terminal-style UI: time windows, timeline (60 bars, auto-clustering by 10 s / 1 min / 10 min), signal activation table (sortable), auto-refresh. Consumes JSON produced by `build_dashboard_payload.py`. See [tools/ts/dashboard/README.md](tools/ts/dashboard/README.md) and [Methodology Appendix N](docs/METHODOLOGY.md#appendix-n-dashboard-functionality).
 - **Logging**: Structured JSON logs per day (`logs/requests_YYYYMMDD.jsonl`) for research analysis
 
 ## Project Structure
@@ -83,7 +84,9 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 │   └── testdata/        # Test stubs (e.g. ja4db_fixture.json, reference_*.json)
 ├── tools/
 │   ├── benchmark/       # HTTP benchmark tool
-│   ├── python/          # Analytics tools
+│   ├── python/          # Analytics tools (request_log_stats, build_dashboard_payload, behavioral_bars, …)
+│   ├── ts/
+│   │   └── dashboard/   # React dashboard (time windows, timeline, signals; consumes dashboard.json)
 │   └── shell/           # Integration test scripts
 ├── internal/fingerprint/data/  # JA4 DB path (ja4db.json downloaded on first start if missing)
 ├── logs/                # JSON traffic logs (requests_YYYYMMDD.jsonl per day)
@@ -113,8 +116,9 @@ See [docs/nginx.md](docs/nginx.md) and Methodology Appendix F.
 1. **Collect**: Run server, generate traffic (curl, browsers, LLM tools)
 2. **Log**: All requests logged as structured JSON to daily files (`logs/requests_YYYYMMDD.jsonl`)
 3. **Analyze**: Run [request_log_stats.py](tools/python/request_log_stats.py) on JSONL logs for top-N by path/method/IP/fingerprint and scoring-signal prevalence; see [Methodology Appendix J](docs/METHODOLOGY.md#appendix-j-request-log-statistics-and-collection-methodology)
-4. **Iterate**: Update classification heuristics based on findings
-5. **Test**: Automated integration tests validate behavior
+4. **Dashboard** (optional): Build dashboard JSON with [build_dashboard_payload.py](tools/python/build_dashboard_payload.py) and serve the React dashboard ([tools/ts/dashboard](tools/ts/dashboard)) for live views of windows, timeline, and signal activation
+5. **Iterate**: Update classification heuristics based on findings
+6. **Test**: Automated integration tests validate behavior
 
 ## Getting Started
 
@@ -341,7 +345,7 @@ Tests verify:
   "message": "You appear to be using a browser",
   "request_id": "uuid",
   "timestamp": "2026-02-18T12:00:00Z",
-  "version": "0.10.0"
+  "version": "1.4.0"
 }
 ```
 
@@ -509,6 +513,23 @@ If only `TLS_CERT` and `TLS_KEY` are set (no `TLS_PORT`), the service runs in HT
 
 **Scoring config** — All scoring points, thresholds, classifier weight and confidence parameters are read from a single JSON file at startup. Path: `SCORING_CONFIG` or default `config/scoring.json`. If the file is missing or invalid, built-in defaults are used. Tuning (e.g. reducing false bots for incognito) is done via the config without code changes. See [config/README.md](config/README.md) for the schema, smoking guns (+3), strong/weak bot signals, and zero-point (easily spoofable) signals; `config/scoring.default.json` is the reference default.
 
+**Dashboard deployment** — To use the [web dashboard](tools/ts/dashboard) in production:
+
+1. **Build the frontend**: From `tools/ts/dashboard`, run `npm run build`. Serve the contents of `dist/` as static files (e.g. under `/dashboard/` or a dedicated subdomain).
+2. **Expose the payload in nginx**: Configure nginx so the dashboard can load the JSON, e.g.:
+   - Alias a location (e.g. `/dashboard.json` or `/data/dashboard.json`) to the path where the payload is written (e.g. `/var/www/dashboard/dashboard.json`).
+   - Or proxy that path to an upstream that serves the file.
+   - The dashboard uses `/dashboard.json` by default, or the URL set at build time via `VITE_DASHBOARD_JSON_URL`.
+3. **Cron for statistics**: Run [build_dashboard_payload.py](tools/python/build_dashboard_payload.py) on a schedule so the JSON is updated (e.g. every 1–5 minutes). Example:
+
+   ```bash
+   */5 * * * * cd /opt/go-client-classifier && python3 tools/python/build_dashboard_payload.py --log-glob "logs/requests_*.jsonl" --out /var/www/dashboard/dashboard.json
+   ```
+
+   Adjust `--log-glob`, `--out`, and the config path (e.g. `--config config/scoring.json`) to match your layout. See [tools/python/README.md](tools/python/README.md) for all options.
+
+Without (1)–(3), the dashboard UI may load but show stale or missing data; nginx (or equivalent) must serve both the built frontend and the payload URL, and cron (or another scheduler) must keep the payload up to date. Dashboard functionality and JSON contract are described in [Methodology Appendix N](docs/METHODOLOGY.md#appendix-n-dashboard-functionality).
+
 ## Research Questions
 
 1. Can transport-level signals reliably distinguish browsers from automation?
@@ -529,9 +550,10 @@ Hooks are automatically run before each commit.
 
 - [CHANGELOG.md](CHANGELOG.md) — version history and release notes
 - [config/README.md](config/README.md) — scoring config schema, smoking guns, weak/zero signals, thresholds
-- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references; **Appendix J** — request log statistics and collection methodology
+- [docs/METHODOLOGY.md](docs/METHODOLOGY.md) — research methodology, signals, scoring algorithm, references; **Appendix J** — request log statistics; **Appendix N** — dashboard functionality
 - [docs/nginx.md](docs/nginx.md) — nginx setup for TLS termination, HTTP/2 fingerprint (X-FP-H2), JA3 (X-FP-JA3); Go consumes headers and uses H2/JA3 in cross-validation (Appendix G)
-- [tools/python/README.md](tools/python/README.md) — Python tools: request_log_stats (aggregate JSONL), antibot_test
+- [tools/python/README.md](tools/python/README.md) — Python tools: build_dashboard_payload, request_log_stats, request_log_stats_by_class, behavioral_bars, antibot_test
+- [tools/ts/dashboard/README.md](tools/ts/dashboard/README.md) — React dashboard: setup, JSON contract, auto-refresh, sortable signals table
 
 ## License
 

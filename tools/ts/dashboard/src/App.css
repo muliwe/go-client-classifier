@@ -1,0 +1,405 @@
+/* Terminal-style dashboard overrides and layout (base: terminal.css) */
+
+:root {
+  --dashboard-bg: #0d1117;
+  --dashboard-text: #c9d1d9;
+  --dashboard-green: #3fb950;
+  --dashboard-red: #f85149;
+}
+
+.dashboard-root {
+  min-height: 100vh;
+  background: var(--dashboard-bg);
+  color: var(--dashboard-text);
+  font-size: 14px;
+}
+
+.dashboard-header {
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-header h1,
+.dashboard-header-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  width: 100%;
+}
+
+.dashboard-header-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.dashboard-header-cursor {
+  display: inline-block;
+  animation: dashboard-cursor-blink 1s step-end infinite;
+}
+
+@keyframes dashboard-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.dashboard-main {
+  padding: 0;
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-message {
+  padding: 0;
+  text-align: center;
+}
+
+.dashboard-message--loading {
+  color: var(--dashboard-green);
+}
+
+.dashboard-message--error {
+  color: var(--dashboard-red);
+}
+
+/* Sections */
+.dashboard-section {
+  margin: 0;
+  width: 100%;
+}
+
+.dashboard-section-title {
+  display: block;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--dashboard-text);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Stretchable frame: line fills remaining width */
+.dashboard-section-frame {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-section-frame-start,
+.dashboard-section-frame-end {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dashboard-section-frame-line {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.dashboard-section-frame-char-ruler {
+  position: absolute;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.dashboard-section-frame-dashes {
+  display: block;
+  overflow: hidden;
+}
+
+.dashboard-section-bottom {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+  width: 100%;
+}
+
+.dashboard-empty {
+  padding: 0;
+  opacity: 0.85;
+}
+
+/* Block with vertical pipe borders (│ left and right) */
+.dashboard-block-with-pipes {
+  display: grid;
+  grid-template-columns: 1ch 1fr 1ch;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-block-pipe {
+  overflow: hidden;
+  line-height: inherit;
+  position: relative;
+  min-height: 0;
+}
+
+.dashboard-block-pipe-ruler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: block;
+  line-height: inherit;
+}
+
+.dashboard-block-pipe-text {
+  white-space: pre;
+  display: block;
+}
+
+.dashboard-block-content {
+  min-width: 0;
+}
+
+/* Summary cards */
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0;
+}
+
+.summary-card {
+  padding: 0;
+}
+
+.summary-card-title {
+  padding: 0;
+  font-size: 0.9rem;
+  color: #ffffff;
+}
+
+.summary-card-inner {
+  min-width: 0;
+}
+
+.summary-card-body {
+  padding: 0;
+}
+
+.summary-card-footer {
+  padding: 0;
+  font-size: 0.8rem;
+  position: relative;
+}
+
+.summary-card-footer-ruler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.summary-row:last-child {
+  margin: 0;
+}
+
+.summary-label {
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.summary-value--bot {
+  color: var(--dashboard-red);
+}
+
+.summary-value--browser {
+  color: var(--dashboard-green);
+}
+
+/* Timeline: monospace pseudographics only (block chars + text color) */
+.timeline-chart {
+  padding: 0;
+  position: relative;
+}
+
+.timeline-chart-ruler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.timeline-legend {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.timeline-legend-item--bot {
+  color: var(--dashboard-red);
+  margin: 0;
+}
+
+.timeline-legend-item--browser {
+  color: var(--dashboard-green);
+}
+
+.timeline-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: 1em;
+  line-height: 1.2;
+}
+
+.timeline-bar-row {
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.timeline-bar-time {
+  display: inline-block;
+  width: 8ch;
+  margin-right: 2ch;
+  flex-shrink: 0;
+}
+
+.timeline-bar-legend {
+  flex-shrink: 0;
+}
+
+.timeline-char--bot {
+  color: var(--dashboard-red);
+}
+
+.timeline-char--browser {
+  color: var(--dashboard-green);
+}
+
+.timeline-bar-empty {
+  display: inline-block;
+  min-width: 1ch;
+  height: 1em;
+  background: #21262d;
+  vertical-align: middle;
+}
+
+.timeline-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+/* Signals table */
+.signals-table-wrap {
+  overflow-x: auto;
+  color: var(--dashboard-text);
+}
+
+.signals-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  table-layout: fixed;
+  color: var(--dashboard-text);
+}
+
+.signals-table th,
+.signals-table td {
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  overflow: visible;
+  color: var(--dashboard-text);
+}
+
+.signals-table th {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.signals-table-th--sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.signals-table-th-sort {
+  opacity: 0.9;
+}
+
+/* First column: signal_id — double width, ellipsis on overflow */
+.signals-table th:first-child,
+.signals-table-cell--id {
+  width: 28ch;
+  min-width: 28ch;
+  max-width: 56ch;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.signals-table th:first-child {
+  overflow: visible;
+}
+
+.signals-table-cell--id {
+  color: var(--dashboard-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signals-table td.signals-table-cell--bot {
+  color: var(--dashboard-red);
+}
+
+.signals-table td.signals-table-cell--browser {
+  color: var(--dashboard-green);
+}
+
+.signals-table-row--behavioral td {
+  color: #ffffff;
+}
+
+/* Behavioral edges (METHODOLOGY Appendix M) */
+.behavioral-edges-wrap {
+  font-size: 0.9rem;
+  color: var(--dashboard-text);
+}
+
+.behavioral-edges-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.15rem 0;
+}
+
+.behavioral-edges-label {
+  min-width: 28ch;
+  color: var(--dashboard-text);
+}
+
+.behavioral-edges-op {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.behavioral-edges-value {
+  color: var(--dashboard-green);
+}

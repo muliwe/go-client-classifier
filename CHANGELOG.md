@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.4.0 (2026-03-05)
+
+### Dashboard (React + payload script)
+
+- **Web dashboard** [tools/ts/dashboard](tools/ts/dashboard): React (Vite, TypeScript) terminal-style UI for live view of request-log statistics. **Time windows**: summary cards (hour, day, week, month, all) with total / bot / browser counts and percentages. **Timeline**: 60 bars, granularity auto-chosen (10 s / 1 min / 10 min) from data density; section title shows window and bucket (e.g. “last 10 minutes, by 10 sec”). **Signals table**: sortable by column (signal_id, total, bot, browser, bot_pct, browser_pct); includes transport and behavioural signals. **Behavioural edges block**: displays the four edge thresholds from the payload (rate, median, std/mean, mean/median ratio) when present. **Auto-refresh**: next fetch at half the timeline bucket length (e.g. 5 s for 10 s buckets); header shows “Auto-refresh every X sec/min”. Consumes a single JSON payload; see [tools/ts/dashboard/README.md](tools/ts/dashboard/README.md) for contract and `VITE_DASHBOARD_JSON_URL`.
+- **build_dashboard_payload.py** [tools/python/build_dashboard_payload.py](tools/python/build_dashboard_payload.py): Script that reads JSONL request logs (glob), loads behavioural edges from config (e.g. `config/scoring.json`), and outputs the dashboard JSON: `windows`, `timeline` (60 points), `timeline_bucket_sec`, `timeline_window_sec`, `signals` (transport + behavioural), optional `behavioral_edges`. Options: `--log-glob`, `--out`, `--config`; intended to be run periodically (e.g. cron every 1–5 min). See [tools/python/README.md](tools/python/README.md).
+
+### METHODOLOGY Appendix N and README
+
+- **Appendix N**: New [METHODOLOGY.md Appendix N](docs/METHODOLOGY.md#appendix-n-dashboard-functionality) documents dashboard functionality (purpose, data source, JSON contract, UI behaviour). Deployment (nginx, cron) is in the main README only.
+- **README**: **Dashboard deployment** block (build frontend, nginx for static + payload URL, cron for build_dashboard_payload.py) and cross-references to Appendix N in Tech Stack and Documentation.
+
+- **Dashboard deployment**: README now includes a **Dashboard deployment** block (build frontend, expose payload in nginx, cron for [build_dashboard_payload.py](tools/python/build_dashboard_payload.py)) with a minimal cron example and links to [tools/python/README.md](tools/python/README.md) and Appendix N.
+- **Cross-references**: Tech Stack (Dashboard) and Documentation section link to Methodology Appendix N. Appendix J in METHODOLOGY links to Appendix N for operational dashboards.
+
 ## v1.3.0 (2026-03-04)
 
 ### behavioral_bars.py: percentile-bar analysis for behavioural metrics

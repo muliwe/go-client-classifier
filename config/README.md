@@ -75,7 +75,7 @@ Strong automation indicators; a single such signal already strongly pulls toward
 
 When **Redis** is configured and scoring config includes **`behavioral_edges`** and the corresponding **`bot_scores`** keys, the classifier applies request-metrics-based signals before the Client Hints challenge. Both the main classify endpoint and **`/debug`** record the request and apply behavioural signals, so `request_metrics` accumulate for `/debug` traffic and the debug response shows the same score (including behavioural bot points). See [METHODOLOGY.md Appendix M](../docs/METHODOLOGY.md#appendix-m-behavioural-metrics-edge-values-for-bot-scoring).
 
-**Current defaults (v1.3.0):** Edge thresholds were calibrated on an extended cohort; **high-request-rate** and **mean-above-median** add **2** points each, **low-inter-arrival-median** and **high-inter-arrival-variance** add **1** point each (weak signals). You can override in `config/scoring.json`.
+**Current defaults (v1.4.0):** Edge thresholds were calibrated on an extended cohort; **high-request-rate** and **mean-above-median** add **2** points each, **low-inter-arrival-median** and **high-inter-arrival-variance** add **1** point each (weak signals). You can override in `config/scoring.json`.
 
 | Config key / bot_scores key | Default | Description |
 |-----------------------------|---------|-------------|

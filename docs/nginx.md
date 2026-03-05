@@ -295,6 +295,35 @@ sudo ln -s /etc/nginx/sites-available/your.domain.tld /etc/nginx/sites-enabled/
 sudo nginx -t && sudo nginx -s reload
 ```
 
+### Serving the dashboard under the same domain (`/dashboard/`)
+
+To expose the [web dashboard](../tools/ts/dashboard) and its JSON payload on the **same** domain as the classifier (e.g. `https://your.domain.tld/dashboard/`), add two `location` blocks inside the same `server { }` (e.g. before `location /`):
+
+1. **Static build** — serve the dashboard app from a directory under `/dashboard/`:
+2. **Payload** — serve the JSON that the dashboard fetches (by default from `/dashboard.json`).
+
+Example (adjust paths to your deploy):
+
+```nginx
+    # Dashboard: static build (React app)
+    location /dashboard/ {
+        alias /var/www/dashboard/;   # or /opt/go-client-classifier/tools/ts/dashboard/dist/
+        index index.html;
+        try_files $uri $uri/ /dashboard/index.html;
+    }
+
+    # Dashboard: JSON payload (produced by build_dashboard_payload.py, e.g. via cron)
+    location = /dashboard.json {
+        alias /var/www/dashboard/dashboard.json;
+        add_header Cache-Control "no-cache";
+    }
+```
+
+- Build the frontend: `cd tools/ts/dashboard && npm run build`; copy contents of `dist/` to `/var/www/dashboard/` (so that `index.html` is at `/var/www/dashboard/index.html` and assets in `/var/www/dashboard/assets/`).
+- Write the payload to `/var/www/dashboard/dashboard.json` (e.g. cron runs `build_dashboard_payload.py --out /var/www/dashboard/dashboard.json`). See main [README — Dashboard deployment](../README.md#production-deploy) and [tools/python/README.md](../tools/python/README.md).
+
+If you serve the JSON from another path (e.g. `/dashboard/data.json`), build the app with `VITE_DASHBOARD_JSON_URL=https://your.domain.tld/dashboard/data.json` so the dashboard requests that URL.
+
 ---
 
 # TLS passthrough configuration

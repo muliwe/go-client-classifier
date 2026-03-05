@@ -26,6 +26,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix K: Client Hints behavioural challenge](#appendix-k-client-hints-behavioural-challenge)
 - [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring)
 - [Appendix M: Behavioural-metrics edge values for bot scoring](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring)
+- [Appendix N: Dashboard functionality](#appendix-n-dashboard-functionality)
 
 ---
 
@@ -1917,7 +1918,7 @@ The following is a short reading of the reference run in `tests/testdata/report.
 - **Fingerprint breakdown (JA3/JA4/JA4H)**: For each non-empty hash, the report includes `top_user_agents`, `top_paths`, and `top_ips` with request counts, so one can see which raw clients, URLs, and IPs contributed to that fingerprint (e.g. for a given JA3 hash, the list of User-Agent strings and their counts).
 - **Scoring signals**: High-prevalence browser signals (e.g. `ja4h-headers>=10`, `browser-headers`) and bot signals (`no-accept-lang`, `ja4h-no-lang`, `low-headers`, `ja4h-low-headers`, `missing-typical`, `ja4h-inconsistent`) match the rule set; per-signal bot%/browser% helps prioritise which signals to tune or monitor.
 
-This kind of output supports methodology review (e.g. Appendix I signals), scoring calibration, and operational dashboards (top paths/methods/IPs, TLS-from-proxy share, HTTP/2 ratio).
+This kind of output supports methodology review (e.g. Appendix I signals), scoring calibration, and operational dashboards (top paths/methods/IPs, TLS-from-proxy share, HTTP/2 ratio). For a live view of time-window aggregates, timeline, and signal activation, see the web dashboard and its payload generator described in [Appendix N](#appendix-n-dashboard-functionality).
 
 ### References (Appendix J)
 
@@ -2256,6 +2257,36 @@ A **percentile-bar report** (produced by **behavioral_bars.py** in `tools/python
 - Imperva, “Bad Bot Report,” 2025. <https://www.imperva.com/resources/reports/2025-Bad-Bot-Report.pdf>.
 - Human Security, “Bot Detection Guide,” 2025. <https://humansecurity.com/learn/topics/what-is-bot-detection>.
 - Data-driven human and bot recognition from web activity logs (hybrid learning), ScienceDirect, 2023. <https://www.sciencedirect.com/science/article/pii/S2352864823000330>.
+
+---
+
+## Appendix N: Dashboard functionality
+
+*Added: 2026-03*
+
+### Purpose
+
+The **web dashboard** provides a live, terminal-style view of request-log statistics: time-window aggregates (hour, day, week, month, all), a fixed 60-bar timeline with auto-chosen granularity, transport and behavioural signal activation counts, and the behavioural edge thresholds used for scoring. It is intended for operators and researchers who want to monitor classification volume and signal prevalence without running CLI tools.
+
+### Data source and payload
+
+The dashboard consumes a **single JSON payload** produced by **[tools/python/build_dashboard_payload.py](../tools/python/build_dashboard_payload.py)**. That script:
+
+- Reads request logs from JSONL files (e.g. `logs/requests_*.jsonl` or a configurable glob).
+- Loads **behavioural edge** values from the same config used by the classifier (e.g. `config/scoring.json` → `behavioral_edges`); these are the same thresholds as in [Appendix M](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring).
+- Outputs one JSON object with: **windows**, **timeline**, **timeline_bucket_sec**, **timeline_window_sec**, **signals**, and optionally **behavioral_edges**.
+
+The dashboard does not read logs or config itself; it only displays the precomputed JSON. All logic for windows, timeline buckets, and signal counts lives in the Python script.
+
+### Main UI behaviour
+
+- **Time windows**: Summary cards show total / bot / browser counts and percentages for hour, day, week, month, and all time.
+- **Timeline**: 60 bars; section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as dark bars. Granularity (10 s / 1 min / 10 min) is chosen by the payload script.
+- **Signals table**: Sortable by column (signal_id, total, bot, browser, bot_pct, browser_pct); includes both transport and behavioural signal IDs.
+- **Behavioural edges block**: If `behavioral_edges` is present in the payload, the UI shows the four edge values (rate, median, std/mean, mean/median ratio) used for behavioural scoring (Appendix M).
+- **Auto-refresh**: After each successful fetch, the next load is scheduled at half the timeline bucket length (e.g. 5 s for 10 s buckets); the header shows “Auto-refresh every X sec/min”.
+
+Deployment (building the frontend, exposing it and the payload in nginx, and running the statistics script in cron) is described in the main [README](../README.md) under **Dashboard deployment**.
 
 ---
 

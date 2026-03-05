@@ -78,3 +78,4 @@ logs/logs/
 logs/logs.zip
 logs/charts/
 tools/python/charts/
+tools/ts/dashboard/package-lock.json

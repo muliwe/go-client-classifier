@@ -45,6 +45,17 @@ python antibot_test.py
 
 - **antibot_test.py** — antibot detection bypass check via [curl_cffi](https://github.com/yifeikong/curl_cffi) (TLS/HTTP2 fingerprint as Chrome/Safari). Dependency: `curl-cffi`.
 
+- **build_dashboard_payload.py** — builds the **dashboard JSON** consumed by the TS dashboard (`tools/ts/dashboard`). Reads JSONL request logs (same format as `request_log_stats.py`: `classification`, `timestamp`, `signals.score_breakdown`, optional `request_metrics` for behavioural signals). Output: `windows` (hour, day, week, month, all), `timeline` (fixed 60 bars; granularity 10 s → 10 min, 1 min → 1 h, 10 min → 10 h when many empty bars), `signals` (transport signals from score_breakdown + behavioural: `req_per_min`, `gap_median`, `gap_std_mean`, `gap_mean_median`), plus `timeline_bucket_sec` and `timeline_window_sec` for the UI. Records without `timestamp` are skipped.
+
+  ```bash
+  poetry run python build_dashboard_payload.py "logs/**/requests_*.jsonl"
+  poetry run python build_dashboard_payload.py -o dashboard.json "logs/**/*.jsonl"
+  poetry run python build_dashboard_payload.py --timeline-minutes 10 "logs/**/requests_*.jsonl"
+  poetry run python build_dashboard_payload.py --progress "logs/**/requests_*.jsonl"
+  ```
+
+  Options: `-o` / `--output` — output file (default: stdout); `--timeline-minutes` — timeline window in minutes for the initial 10 s granularity (default: 10); `--progress` — show tqdm progress bar (default: simple stderr log “Reading N file(s)…” / “Read M records.”).
+
 - **request_log_stats.py** — statistics over request logs (JSONL) for bot detection methodology: top-N by fields (path, method, IP, user_agent, accept, JA3/JA4/JA4H, headers), bot/browser split, scoring signal prevalence, global summary (unique IPs/URLs). Metrics in the spirit of [Cloudflare Signals Intelligence](https://developers.cloudflare.com/bots/concepts/signals-intelligence/); optional significance filter (√N). Accounts for delivery channels (**docs/nginx.md**); unified interpretation behind proxy (signals.is_http2, fingerprint.tls). Details: **docs/METHODOLOGY.md**, Appendix J (Request log statistics and collection methodology).
 
   Run (from `tools/python` or repo root):
@@ -78,6 +89,15 @@ python antibot_test.py
   ```
 
   Options: `-o` — output JSON (default: stdout); `--charts-dir` — directory for PNG charts; `--p-from`, `--p-to` — percentile bar range, 1-based (default: 1 and 99, i.e. p01–p99); `--no-progress`; `--req-per-min`, `--gap-median-sec`, `--gap-std-mean`, `--gap-mean-median` — edge thresholds for display on charts.
+
+## Dashboard payload (build_dashboard_payload.py)
+
+The script is the recommended way to produce `dashboard.json` for the TS dashboard. Place the output in `tools/ts/dashboard/public/dashboard.json` for local dev, or serve it from the same origin (or set `VITE_DASHBOARD_JSON_URL` at build time). Cron example:
+
+```bash
+cd tools/python
+poetry run python build_dashboard_payload.py -o /var/www/dashboard.json "logs/**/requests_*.jsonl"
+```
 
 ## Dependencies
 
