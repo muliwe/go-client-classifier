@@ -310,15 +310,17 @@ Example (adjust paths to your deploy):
         return 301 /dashboard/;
     }
 
-    location = /dashboard/data.json {
+    location = /dashboard/dashboard.json {
         alias /var/www/dashboard/dashboard.json;
         add_header Cache-Control "no-cache";
+        add_header Access-Control-Allow-Origin https://your.domain.tld;
     }
 
     location  ^~ /dashboard/ {
         alias /opt/go-client-classifier/tools/ts/dashboard/dist/;
         index index.html;
         try_files $uri $uri/ /dashboard/index.html;
+        add_header Access-Control-Allow-Origin https://your.domain.tld;
     }
 ```
 

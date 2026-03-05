@@ -92,7 +92,7 @@ export function Timeline({
     );
   }
 
-  const sorted = [...points].sort((a, b) => toSeconds(a.t) - toSeconds(b.t));
+  const sorted = [...points].sort((a, b) => toSeconds(b.t) - toSeconds(a.t));
   const maxTotal = Math.max(1, ...sorted.map((p) => p.total || 0));
 
   return (
