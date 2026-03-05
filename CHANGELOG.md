@@ -11,11 +11,13 @@ All notable changes to this project are documented in this file.
 
 ### METHODOLOGY Appendix N and README
 
-- **Appendix N**: New [METHODOLOGY.md Appendix N](docs/METHODOLOGY.md#appendix-n-dashboard-functionality) documents dashboard functionality (purpose, data source, JSON contract, UI behaviour). Deployment (nginx, cron) is in the main README only.
+- **Appendix N**: New [METHODOLOGY.md Appendix N](docs/METHODOLOGY.md#appendix-n-dashboard-functionality) documents dashboard functionality (purpose, data source, JSON contract, UI behaviour).
 - **README**: **Dashboard deployment** block (build frontend, nginx for static + payload URL, cron for build_dashboard_payload.py) and cross-references to Appendix N in Tech Stack and Documentation.
 
-- **Dashboard deployment**: README now includes a **Dashboard deployment** block (build frontend, expose payload in nginx, cron for [build_dashboard_payload.py](tools/python/build_dashboard_payload.py)) with a minimal cron example and links to [tools/python/README.md](tools/python/README.md) and Appendix N.
-- **Cross-references**: Tech Stack (Dashboard) and Documentation section link to Methodology Appendix N. Appendix J in METHODOLOGY links to Appendix N for operational dashboards.
+### Python linters and pre-commit
+
+- **Pre-commit hooks for Python**: Black (25.12.0), isort (7.0.0), mypy (v1.19.1), autoflake (v2.3.1), ruff (v0.9.2, rule E402 only). Shared config in root [pyproject.toml](pyproject.toml): `line_length = 88`, `target-version = ["py312"]`, isort `profile = "black"`. Hooks exclude `tests/` and `migrations/`. Mypy runs with `--no-incremental` and extra stubs (types-requests, types-PyYAML, pandas-stubs, etc.). Autoflake removes unused imports/variables; ruff enforces no module-level code before imports (E402). Same checks via `task check` or `pre-commit run --all-files`; see [tools/python/README.md](tools/python/README.md).
+
 
 ## v1.3.0 (2026-03-04)
 
