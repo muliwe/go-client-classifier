@@ -55,7 +55,7 @@ tasks:
   test:short:
     desc: Run tests (short mode)
     cmds:
-      - go test ./cmd/... ./internal/... ./tests/... -short
+      - go test ./cmd/... ./internal/... ./tests/... ./tools/benchmark/... -short
 
   lint:
     desc: Run golangci-lint (excludes node_modules)

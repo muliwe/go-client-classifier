@@ -2281,7 +2281,7 @@ The dashboard does not read logs or config itself; it only displays the precompu
 ### Main UI behaviour
 
 - **Time windows**: Summary cards show total / bot / browser counts and percentages for hour, day, week, month, and all time.
-- **Timeline**: 60 bars; section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as dark bars. Granularity (10 s / 1 min / 10 min) is chosen by the payload script.
+- **Timeline**: 60 bars; section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as dark bars. **Granularity (10 s / 1 min / 10 min)** is chosen by the payload script: the script builds the timeline at 10 s buckets first; if the **median** of total (bot + browser) per bar over the 60 bars is below a threshold (default 10), it switches to 1 min buckets (1 h window) and, if the median is still below the threshold, to 10 min buckets (10 h window). This keeps typical bars visible instead of collapsing to mostly empty fine-grained bars when traffic is sparse.
 - **Signals table**: Sortable by column (signal_id, total, bot, browser, bot_pct, browser_pct); includes both transport and behavioural signal IDs.
 - **Behavioural edges block**: If `behavioral_edges` is present in the payload, the UI shows the four edge values (rate, median, std/mean, mean/median ratio) used for behavioural scoring (Appendix M).
 - **Auto-refresh**: After each successful fetch, the next load is scheduled at half the timeline bucket length (e.g. 5 s for 10 s buckets); the header shows “Auto-refresh every X sec/min”.
