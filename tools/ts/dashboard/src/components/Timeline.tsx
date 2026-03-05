@@ -86,7 +86,11 @@ export function Timeline({
     update();
     const ro = new ResizeObserver(update);
     ro.observe(chartEl);
-    return () => ro.disconnect();
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
   }, []);
 
   if (points.length === 0) {

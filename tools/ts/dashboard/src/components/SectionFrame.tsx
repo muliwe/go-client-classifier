@@ -30,7 +30,11 @@ function useFillDashes() {
     update();
     const ro = new ResizeObserver(update);
     ro.observe(lineEl);
-    return () => ro.disconnect();
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
   }, []);
 
   return { lineRef, charRef, dashCount };

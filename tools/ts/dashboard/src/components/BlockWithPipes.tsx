@@ -16,11 +16,13 @@ export function BlockWithPipes({
   children,
   className = "",
 }: BlockWithPipesProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const lineRulerRef = useRef<HTMLSpanElement>(null);
   const [pipeCount, setPipeCount] = useState(0);
 
   useLayoutEffect(() => {
+    const wrapperEl = wrapperRef.current;
     const contentEl = contentRef.current;
     const rulerEl = lineRulerRef.current;
     if (!contentEl || !rulerEl) return;
@@ -33,10 +35,31 @@ export function BlockWithPipes({
       setPipeCount(Math.max(0, n));
     };
 
+    // Run update after layout has settled (e.g. after viewport/resolution change).
+    const scheduleUpdate = () => {
+      requestAnimationFrame(() => {
+        update();
+        requestAnimationFrame(update);
+      });
+    };
+
+    let resizeTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    const onResize = () => {
+      if (resizeTimeoutId != null) clearTimeout(resizeTimeoutId);
+      scheduleUpdate();
+      resizeTimeoutId = setTimeout(update, 120);
+    };
+
     update();
-    const ro = new ResizeObserver(update);
+    const ro = new ResizeObserver(scheduleUpdate);
     ro.observe(contentEl);
-    return () => ro.disconnect();
+    if (wrapperEl) ro.observe(wrapperEl);
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (resizeTimeoutId != null) clearTimeout(resizeTimeoutId);
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
   const pipeColumn =
@@ -46,6 +69,7 @@ export function BlockWithPipes({
 
   return (
     <div
+      ref={wrapperRef}
       className={`dashboard-block-with-pipes ${className}`.trim()}
       role="presentation"
     >

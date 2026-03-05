@@ -21,6 +21,16 @@ function formatRefreshInterval(bucketSec: number): string {
 
 export default function App() {
   const [result, setResult] = useState<LoadResult | null>(null);
+  const [viewportKey, setViewportKey] = useState(
+    () => `${window.innerWidth}x${window.innerHeight}`,
+  );
+
+  useEffect(() => {
+    const onResize = () =>
+      setViewportKey(`${window.innerWidth}x${window.innerHeight}`);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +157,7 @@ export default function App() {
           <br />
         </p>
       </header>
-      <main className="dashboard-main">
+      <main className="dashboard-main" key={viewportKey}>
         <SummaryCards windows={data.windows} />
         <Timeline
           points={data.timeline}
