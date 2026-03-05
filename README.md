@@ -523,7 +523,7 @@ If only `TLS_CERT` and `TLS_KEY` are set (no `TLS_PORT`), the service runs in HT
 3. **Cron for statistics**: Run [build_dashboard_payload.py](tools/python/build_dashboard_payload.py) on a schedule so the JSON is updated (e.g. every 1–5 minutes). Example:
 
    ```bash
-   */5 * * * * cd /opt/go-client-classifier && python3 tools/python/build_dashboard_payload.py --log-glob "logs/requests_*.jsonl" --out /var/www/dashboard/dashboard.json
+   */5 * * * * cd /opt/go-client-classifier/tools/python && /home/deploy/.local/bin/poetry run python build_dashboard_payload.py "../../logs/requests_*.jsonl" --out ../../tools/ts/dashboard/dashboard.json --config ../../config/scoring.json >> /var/log/dashboard_build.log 2>&1
    ```
 
    Adjust `--log-glob`, `--out`, and the config path (e.g. `--config config/scoring.json`) to match your layout. See [tools/python/README.md](tools/python/README.md) for all options.

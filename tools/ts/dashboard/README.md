@@ -41,13 +41,16 @@ The app loads dashboard data from `/dashboard.json` by default (e.g. from `publi
 npm run build
 ```
 
-Output is written to `dist/`. Serve the contents with any static file server. The dashboard will request the JSON from `/dashboard.json` relative to the deployment origin unless overridden (see below).
+Output is written to `dist/`. Serve the contents with any static file server. The dashboard will request the JSON from `/dashboard.json` relative to the deployment origin unless overridden (see **Environment variables**).
+
+At build time Vite loads `.env` and `.env.production` (in production mode) from this directory, so you can put `VITE_BASE` and `VITE_DASHBOARD_JSON_URL` in a file instead of the command line. Variables set in the shell still override file values.
 
 ## Environment variables
 
 | Variable                  | Description                                                                                                                                                                                         |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VITE_DASHBOARD_JSON_URL` | URL from which to fetch the dashboard JSON. If unset, the app uses `/dashboard.json`. Set at **build time** (e.g. `VITE_DASHBOARD_JSON_URL=https://example.com/data/dashboard.json npm run build`). |
+| `VITE_BASE`               | Base public path when served in production. Use a subpath when the app is under a folder (e.g. `VITE_BASE=/dashboard/` or `https://example.com/dashboard/`). If unset, `/` is used. Read from `.env` / `.env.production` or set at build time. |
+| `VITE_DASHBOARD_JSON_URL` | URL from which to fetch the dashboard JSON. If unset, the app uses `/dashboard.json`. Set at **build time** (in `.env.production` or e.g. `VITE_DASHBOARD_JSON_URL=https://example.com/dashboard/data.json npm run build`). |
 
 ## Dashboard JSON contract
 
@@ -77,6 +80,8 @@ The dashboard expects a single JSON object with the following shape.
   - `browser` (number): browser count among those
   - `bot_pct` (number): percentage bot
   - `browser_pct` (number): percentage browser
+
+- **`behavioral_edges`** (optional) — Object with edge thresholds (e.g. `request_rate_per_min_above`, `inter_arrival_median_sec_below`, …). When present, the UI shows them in the behavioural edges block.
 
 Example minimal structure:
 
@@ -109,7 +114,7 @@ This JSON is intended to be produced by a generator such as **tools/python/build
 
 ## UI behaviour
 
-- **Timeline**: Section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as a dark bar with no numbers.
+- **Timeline**: Bars are ordered **newest first** (most recent bucket at the top). Section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as a dark bar with no numbers.
 - **Signals table**: Click a column header to sort. Default sort is `signal_id` ascending; other columns sort descending on first click; click again to toggle direction. Indicator ▲/▼ shows current column and direction.
 - **Auto-refresh**: After each successful load, the next fetch is scheduled in `timeline_bucket_sec / 2` seconds (e.g. 5 s for 10 s bars, 30 min for 1 h bars). The header line shows “Auto-refresh every X sec/min”.
 
