@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { SignalStat } from "../types/dashboard";
+import { formatInt } from "../utils/format";
 import { BlockWithPipes } from "./BlockWithPipes";
 import { SectionFrameTop, SectionFrameBottom } from "./SectionFrame";
 
@@ -129,12 +130,12 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                     <td className="signals-table-cell--id">
                       {String(s.signal_id ?? "")}
                     </td>
-                    <td>{s.total.toLocaleString()}</td>
+                    <td>{formatInt(s.total)}</td>
                     <td className="signals-table-cell--browser">
-                      {s.browser.toLocaleString()}
+                      {formatInt(s.browser)}
                     </td>
                     <td className="signals-table-cell--bot">
-                      {s.bot.toLocaleString()}
+                      {formatInt(s.bot)}
                     </td>
                     <td className="signals-table-cell--browser">
                       {s.browser_pct.toFixed(1)}%

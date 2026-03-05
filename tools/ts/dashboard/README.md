@@ -47,10 +47,10 @@ At build time Vite loads `.env` and `.env.production` (in production mode) from 
 
 ## Environment variables
 
-| Variable                  | Description                                                                                                                                                                                         |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable                  | Description                                                                                                                                                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_BASE`               | Base public path when served in production. Use a subpath when the app is under a folder (e.g. `VITE_BASE=/dashboard/` or `https://example.com/dashboard/`). If unset, `/` is used. Read from `.env` / `.env.production` or set at build time. |
-| `VITE_DASHBOARD_JSON_URL` | URL from which to fetch the dashboard JSON. If unset, the app uses `/dashboard.json`. Set at **build time** (in `.env.production` or e.g. `VITE_DASHBOARD_JSON_URL=https://example.com/dashboard/data.json npm run build`). |
+| `VITE_DASHBOARD_JSON_URL` | URL from which to fetch the dashboard JSON. If unset, the app uses `/dashboard.json`. Set at **build time** (in `.env.production` or e.g. `VITE_DASHBOARD_JSON_URL=https://example.com/dashboard/data.json npm run build`).                    |
 
 ## Dashboard JSON contract
 

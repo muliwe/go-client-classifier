@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { TimelinePoint } from "../types/dashboard";
+import { formatInt } from "../utils/format";
 import { BlockWithPipes } from "./BlockWithPipes";
 import { SectionFrameTop, SectionFrameBottom } from "./SectionFrame";
 
@@ -169,11 +170,11 @@ export function Timeline({
                   <span className="timeline-bar-legend">
                     {" "}
                     <span className="timeline-char timeline-char--browser">
-                      {p.browser}
+                      {formatInt(p.browser)}
                     </span>
                     /
                     <span className="timeline-char timeline-char--bot">
-                      {p.bot}
+                      {formatInt(p.bot)}
                     </span>{" "}
                     <span className="timeline-char timeline-char--browser">
                       {browserPct.toFixed(0)}%

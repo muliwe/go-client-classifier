@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { loadDashboard, type LoadResult } from "./api/loadDashboard";
 import { SectionFrameTop } from "./components/SectionFrame";
+import { formatInt } from "./utils/format";
 import { SummaryCards } from "./components/SummaryCards";
 import { Timeline } from "./components/Timeline";
 import { SignalsTable } from "./components/SignalsTable";
@@ -81,7 +82,8 @@ export default function App() {
           <SectionFrameTop title="Bot Detector Dashboard" />
         </h1>
         <p className="dashboard-header-meta">
-          &nbsp;Data loaded. Auto-refresh every {refreshLabel}.{" "}
+          &nbsp;Data loaded. Total {formatInt(data.windows.all.total)} requests.
+          Auto-refresh every {refreshLabel}.{" "}
           <span className="dashboard-header-cursor" aria-hidden="true">
             ▌
           </span>

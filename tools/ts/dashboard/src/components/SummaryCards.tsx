@@ -1,4 +1,5 @@
 import type { DashboardData, TimeWindowKey } from "../types/dashboard";
+import { formatInt } from "../utils/format";
 import { BlockWithPipes } from "./BlockWithPipes";
 import { SectionFrameTop, SectionFrameBottom } from "./SectionFrame";
 
@@ -39,19 +40,19 @@ export function SummaryCards({ windows }: SummaryCardsProps) {
                       <div className="summary-row">
                         <span className="summary-label">total</span>
                         <span className="summary-value">
-                          {w.total.toLocaleString()}
+                          {formatInt(w.total)}
                         </span>
                       </div>
                       <div className="summary-row">
                         <span className="summary-label">bot</span>
                         <span className="summary-value summary-value--bot">
-                          {w.bot.toLocaleString()} {botPct.toFixed(1)}%
+                          {formatInt(w.bot)} {botPct.toFixed(1)}%
                         </span>
                       </div>
                       <div className="summary-row">
                         <span className="summary-label">browser</span>
                         <span className="summary-value summary-value--browser">
-                          {w.browser.toLocaleString()} {browserPct.toFixed(1)}%
+                          {formatInt(w.browser)} {browserPct.toFixed(1)}%
                         </span>
                       </div>
                     </div>
