@@ -2,6 +2,8 @@
 
 Academic research project for classifying automated HTTP clients (bots, LLMs, crawlers) vs real browsers using transport-level fingerprinting.
 
+**Live:** [Dashboard](https://www.invent.sale/dashboard/) · [Bot detector](https://antibot.invent.sale/)
+
 **Version**: 1.4.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights

@@ -46,7 +46,26 @@ export default function App() {
     return (
       <div className="dashboard-root">
         <header className="dashboard-header">
-          <h1>Bot Detector Dashboard</h1>
+          <h1 className="dashboard-header-title">
+            <SectionFrameTop title="Bot Detector Dashboard" />
+          </h1>
+          <p className="dashboard-header-line">
+            <a
+              href="https://github.com/muliwe/go-client-classifier/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              GitHub
+            </a>
+            {" · "}
+            <a
+              href="https://antibot.invent.sale/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              https://antibot.invent.sale/
+            </a>
+          </p>
         </header>
         <main className="dashboard-main">
           <p className="dashboard-message dashboard-message--loading">
@@ -61,7 +80,26 @@ export default function App() {
     return (
       <div className="dashboard-root">
         <header className="dashboard-header">
-          <h1>Bot Detector Dashboard</h1>
+          <h1 className="dashboard-header-title">
+            <SectionFrameTop title="Bot Detector Dashboard" />
+          </h1>
+          <p className="dashboard-header-line">
+            <a
+              href="https://github.com/muliwe/go-client-classifier/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              GitHub
+            </a>
+            {" · "}
+            <a
+              href="https://antibot.invent.sale/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              https://antibot.invent.sale/
+            </a>
+          </p>
         </header>
         <main className="dashboard-main">
           <p className="dashboard-message dashboard-message--error">
@@ -81,12 +119,32 @@ export default function App() {
         <h1 className="dashboard-header-title">
           <SectionFrameTop title="Bot Detector Dashboard" />
         </h1>
-        <p className="dashboard-header-meta">
-          &nbsp;Data loaded. Total {formatInt(data.windows.all.total)} requests.
-          Auto-refresh every {refreshLabel}.{" "}
+        <p className="dashboard-header-line">
+          &nbsp;&nbsp;
+          <a
+            href="https://github.com/muliwe/go-client-classifier/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </a>
+          {" · "}
+          <a
+            href="https://antibot.invent.sale/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            https://antibot.invent.sale/
+          </a>
+          {" · "}
+          Data loaded {" · "} Total {formatInt(data.windows.all.total)}{" "}
+          request(s) {" · "}
+          Auto-refresh every {refreshLabel}{" "}
           <span className="dashboard-header-cursor" aria-hidden="true">
             ▌
           </span>
+          <br />
+          <br />
         </p>
       </header>
       <main className="dashboard-main">

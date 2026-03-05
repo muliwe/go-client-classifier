@@ -14,6 +14,11 @@
   font-size: 14px;
 }
 
+/* Override terminal.css: darker hover background for links */
+.dashboard-root a:hover {
+  background: #161b22;
+}
+
 .dashboard-header {
   padding: 0;
   width: 100%;
@@ -28,10 +33,19 @@
   width: 100%;
 }
 
-.dashboard-header-meta {
+.dashboard-header-line {
   margin: 0;
-  font-size: 0.85rem;
-  opacity: 0.85;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.dashboard-header-line a {
+  color: var(--dashboard-green);
+  text-decoration: none;
+}
+
+.dashboard-header-line a:hover {
+  text-decoration: underline;
 }
 
 .dashboard-header-cursor {
