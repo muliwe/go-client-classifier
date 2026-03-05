@@ -26,5 +26,7 @@ linters-settings:
 
 issues:
   exclude-use-default: false
+  exclude-dirs:
+    - node_modules
   max-issues-per-linter: 0
   max-same-issues: 0

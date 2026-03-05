@@ -48,9 +48,9 @@ tasks:
       - go build -ldflags="-s -w" -o bin/server ./cmd/server
 
   test:
-    desc: Run all tests (internal, tests, tools, and any other packages)
+    desc: Run all tests (cmd, internal, tests, tools; excludes node_modules)
     cmds:
-      - go test ./... -v
+      - go test ./cmd/... ./internal/... ./tests/... ./tools/benchmark/... -v
 
   test:short:
     desc: Run tests (short mode)
@@ -58,14 +58,14 @@ tasks:
       - go test ./cmd/... ./internal/... ./tests/... -short
 
   lint:
-    desc: Run golangci-lint
+    desc: Run golangci-lint (excludes node_modules)
     cmds:
       - golangci-lint run ./... && echo "Lint passed"
 
   fmt:
-    desc: Format code
+    desc: Format code (excludes node_modules under tools/ts/dashboard)
     cmds:
-      - go fmt ./...
+      - go fmt ./cmd/... ./internal/... ./tests/... ./tools/benchmark/...
 
   check:
     desc: Run all checks (fmt, lint, test)

@@ -27,6 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from tqdm import tqdm
+
 from request_log_stats import (
     ALL_SCORING_SIGNAL_IDS,
     _count_lines_in_files,
@@ -34,12 +36,8 @@ from request_log_stats import (
     iter_jsonl_files,
     read_jsonl_stream,
 )
-from request_log_stats_by_class import (
-    _behavioural_signal_flags,
-    _get_edges,
-    SIGNAL_NAMES as _BEHAVIORAL_SIGNAL_NAMES,
-)
-from tqdm import tqdm
+from request_log_stats_by_class import SIGNAL_NAMES as _BEHAVIORAL_SIGNAL_NAMES
+from request_log_stats_by_class import _behavioural_signal_flags, _get_edges
 
 # Display IDs for behavioural signals (prefixed for dashboard; same order as _BEHAVIORAL_SIGNAL_NAMES)
 BEHAVIORAL_SIGNAL_IDS = tuple("behavioral_" + s for s in _BEHAVIORAL_SIGNAL_NAMES)
@@ -63,17 +61,17 @@ WINDOW_SEC: dict[str, int | float] = {
 TIMELINE_DEFAULT_SEC = 600  # 10 minutes (baseline window)
 # Fixed number of bars for all granularities: 10 min with 10 sec step = 60 bars
 TIMELINE_BAR_COUNT = 60
-# If fraction of empty (total=0) bars exceeds this, cluster to next granularity
-TIMELINE_EMPTY_RATIO_THRESHOLD = 0.6
-# Min non-empty bars to keep current granularity; else cluster to 10-min
-TIMELINE_MIN_NONEMPTY_BARS = 3
+# If median of (total = bot+browser) per bar is below this, cluster to next granularity (1min, then 10min).
+TIMELINE_MEDIAN_TOTAL_THRESHOLD = 10
 # Bucket sizes: 10s (baseline), 1min, 10min. Window = TIMELINE_BAR_COUNT * bucket_sec.
 BUCKET_SEC_10SEC = 10
 BUCKET_SEC_MINUTE = 60
 BUCKET_SEC_10MIN = 600
 
 
-def load_behavioral_edges_from_config(config_path: Path | None = None) -> dict[str, float]:
+def load_behavioral_edges_from_config(
+    config_path: Path | None = None,
+) -> dict[str, float]:
     """Load behavioral_edges from config/scoring.json (same as production). Tries config_path, then cwd/config/scoring.json, then repo_root/config/scoring.json. Falls back to _get_edges() if missing."""
     candidates: list[Path] = []
     if config_path is not None:
@@ -92,9 +90,14 @@ def load_behavioral_edges_from_config(config_path: Path | None = None) -> dict[s
         be = data.get("behavioral_edges")
         if not isinstance(be, dict):
             continue
-        if all(k in be and isinstance(be[k], (int, float)) for k in BEHAVIORAL_EDGE_KEYS):
+        if all(
+            k in be and isinstance(be[k], (int, float)) for k in BEHAVIORAL_EDGE_KEYS
+        ):
             return {k: float(be[k]) for k in BEHAVIORAL_EDGE_KEYS}
-    print("Warning: behavioral_edges not found in config, using script defaults.", file=sys.stderr)
+    print(
+        "Warning: behavioral_edges not found in config, using script defaults.",
+        file=sys.stderr,
+    )
     return _get_edges()
 
 
@@ -117,7 +120,9 @@ def _parse_timestamp(ts: Any) -> float | None:
     return None
 
 
-def extract_dashboard_record(rec: Any, edges: dict[str, float] | None = None) -> dict[str, Any] | None:
+def extract_dashboard_record(
+    rec: Any, edges: dict[str, float] | None = None
+) -> dict[str, Any] | None:
     """Extract classification, timestamp (unix sec), score_signal_ids, behavioral_signal_ids. Skip if no timestamp or invalid classification. Uses edges for behavioural flags (defaults from _get_edges() if None)."""
     if not isinstance(rec, dict):
         return None
@@ -135,7 +140,9 @@ def extract_dashboard_record(rec: Any, edges: dict[str, float] | None = None) ->
     # Behavioral signals from request_metrics.ip_derived (METHODOLOGY Appendix M), computed with current edges
     effective_edges = edges if edges is not None else _get_edges()
     flags = _behavioural_signal_flags(rec.get("request_metrics"), effective_edges)
-    behavioral_signal_ids = {BEHAVIORAL_SIGNAL_IDS[i] for i in range(4) if flags[i]}  # behavioral_req_per_min, etc.
+    behavioral_signal_ids = {
+        BEHAVIORAL_SIGNAL_IDS[i] for i in range(4) if flags[i]
+    }  # behavioral_req_per_min, etc.
     return {
         "classification": classification,
         "ts": ts,
@@ -144,7 +151,9 @@ def extract_dashboard_record(rec: Any, edges: dict[str, float] | None = None) ->
     }
 
 
-def _count_window(records: list[dict[str, Any]], now: float, window_sec: int | float) -> dict[str, Any]:
+def _count_window(
+    records: list[dict[str, Any]], now: float, window_sec: int | float
+) -> dict[str, Any]:
     """Aggregate total/bot/browser for records with ts >= now - window_sec."""
     if window_sec == float("inf"):
         subset = records
@@ -209,32 +218,38 @@ def _build_timeline_for_window(
     return timeline
 
 
+def _median_total(timeline: list[dict[str, Any]]) -> float:
+    """Median of total (bot+browser) over timeline points. Returns 0 if empty."""
+    totals = [p["total"] for p in timeline]
+    if not totals:
+        return 0.0
+    totals_sorted = sorted(totals)
+    n = len(totals_sorted)
+    mid = (n - 1) / 2
+    lo, hi = int(mid), (n - 1) - int(mid)
+    return (totals_sorted[lo] + totals_sorted[hi]) / 2.0
+
+
 def _build_timeline(
     records: list[dict[str, Any]],
     now: float,
     last_sec: int,
 ) -> tuple[list[dict[str, Any]], int, int]:
-    """Build timeline with fixed bar count (60). Baseline: 10 min, 10 sec step. If too many empty bars, cluster to 1-min (1h window), then to 10-min (10h window). Returns (timeline, bucket_sec, window_sec)."""
+    """Build timeline with fixed bar count (60). Baseline: 10 min, 10 sec step. If median total per bar < threshold, cluster to 1-min (1h window), then to 10-min (10h window). Returns (timeline, bucket_sec, window_sec)."""
     bucket_sec = BUCKET_SEC_10SEC
     timeline = _build_timeline_for_window(records, now, bucket_sec)
     window_sec = TIMELINE_BAR_COUNT * bucket_sec
 
-    n = len(timeline)
-    n_empty = sum(1 for p in timeline if p["total"] == 0)
-    if n > 0:
-        empty_ratio = n_empty / n
-        if empty_ratio > TIMELINE_EMPTY_RATIO_THRESHOLD:
-            bucket_sec = BUCKET_SEC_MINUTE
+    median = _median_total(timeline)
+    if median < TIMELINE_MEDIAN_TOTAL_THRESHOLD:
+        bucket_sec = BUCKET_SEC_MINUTE
+        window_sec = TIMELINE_BAR_COUNT * bucket_sec
+        timeline = _build_timeline_for_window(records, now, bucket_sec)
+        median = _median_total(timeline)
+        if median < TIMELINE_MEDIAN_TOTAL_THRESHOLD:
+            bucket_sec = BUCKET_SEC_10MIN
             window_sec = TIMELINE_BAR_COUNT * bucket_sec
             timeline = _build_timeline_for_window(records, now, bucket_sec)
-            n = len(timeline)
-            n_empty = sum(1 for p in timeline if p["total"] == 0)
-            empty_ratio = n_empty / n if n else 0
-            n_nonempty = n - n_empty
-            if empty_ratio > TIMELINE_EMPTY_RATIO_THRESHOLD or n_nonempty < TIMELINE_MIN_NONEMPTY_BARS:
-                bucket_sec = BUCKET_SEC_10MIN
-                window_sec = TIMELINE_BAR_COUNT * bucket_sec
-                timeline = _build_timeline_for_window(records, now, bucket_sec)
 
     return (timeline, bucket_sec, window_sec)
 
@@ -268,14 +283,16 @@ def _build_signals(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     browser_s += 1
             bot_pct = round(100.0 * bot_s / total_s, 1) if total_s else 0.0
             browser_pct = round(100.0 * browser_s / total_s, 1) if total_s else 0.0
-            result_list.append({
-                "signal_id": signal_id,
-                "total": total_s,
-                "bot": bot_s,
-                "browser": browser_s,
-                "bot_pct": bot_pct,
-                "browser_pct": browser_pct,
-            })
+            result_list.append(
+                {
+                    "signal_id": signal_id,
+                    "total": total_s,
+                    "bot": bot_s,
+                    "browser": browser_s,
+                    "bot_pct": bot_pct,
+                    "browser_pct": browser_pct,
+                }
+            )
         return result_list
 
     # Transport-level signals (from score_breakdown)
@@ -303,7 +320,9 @@ def build_payload(
         windows[key] = _count_window(records, now, sec)
 
     if records:
-        timeline, timeline_bucket_sec, timeline_window_sec = _build_timeline(records, now, timeline_sec)
+        timeline, timeline_bucket_sec, timeline_window_sec = _build_timeline(
+            records, now, timeline_sec
+        )
     else:
         timeline = []
         timeline_bucket_sec = BUCKET_SEC_10SEC
@@ -332,7 +351,8 @@ def main() -> int:
         help="Glob mask(s) for JSONL files, e.g. logs/**/requests_*.jsonl",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=Path,
         default=None,
         help="Output file (default: stdout)",
@@ -390,7 +410,9 @@ def main() -> int:
     records: list[dict[str, Any]] = []
     skipped = 0
     no_ts = 0
-    for rec, _ in read_jsonl_stream(file_paths, progress_callback=on_progress if pbar else None):
+    for rec, _ in read_jsonl_stream(
+        file_paths, progress_callback=on_progress if pbar else None
+    ):
         if rec is None:
             break
         row = extract_dashboard_record(rec, edges)
@@ -408,9 +430,15 @@ def main() -> int:
         print(f"Read {len(records)} records.", file=sys.stderr)
 
     if no_ts:
-        print(f"Warning: {no_ts} record(s) with valid classification had no timestamp and were skipped.", file=sys.stderr)
+        print(
+            f"Warning: {no_ts} record(s) with valid classification had no timestamp and were skipped.",
+            file=sys.stderr,
+        )
     if skipped:
-        print(f"Warning: {skipped} record(s) with classification not bot/browser were skipped.", file=sys.stderr)
+        print(
+            f"Warning: {skipped} record(s) with classification not bot/browser were skipped.",
+            file=sys.stderr,
+        )
 
     timeline_sec = args.timeline_minutes * 60
     payload = build_payload(records, timeline_sec=timeline_sec, behavioral_edges=edges)
