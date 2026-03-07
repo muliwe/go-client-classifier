@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.4.1 (2026-03-07)
+
+### Dashboard: signals table intensity
+
+- **Signals table cell styling**: Browser and bot columns (counts and percentages) now use intensity levels by ratio: **95/5 and above** → maximum brightness (original green/red); **25/75 and above** → medium (darker green/red); **45–55%** → neutral (gray); **0 cases** → dark gray. The total column is also dark gray when total is 0. Makes strong browser vs bot signals easier to scan. See [METHODOLOGY Appendix N](docs/METHODOLOGY.md#appendix-n-dashboard-functionality).
+
 ## v1.4.0 (2026-03-05)
 
 ### Dashboard (React + payload script)

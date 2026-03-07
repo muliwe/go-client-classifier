@@ -5,6 +5,10 @@
   --dashboard-text: #c9d1d9;
   --dashboard-green: #3fb950;
   --dashboard-red: #f85149;
+  --dashboard-green-medium: #238636;
+  --dashboard-red-medium: #b62324;
+  --dashboard-signal-neutral: #8b949e;
+  --dashboard-signal-dark: #6e7681;
   --dashboard-line-height: 1.2;
 }
 
@@ -442,12 +446,35 @@
   white-space: nowrap;
 }
 
-.signals-table td.signals-table-cell--bot {
+/* Signal cell intensity: dark (0 cases), neutral (45–55%), medium (25–75+), max (95/5+). */
+.signals-table td.signals-table-cell--bot--dark,
+.signals-table td.signals-table-cell--browser--dark {
+  color: var(--dashboard-signal-dark);
+}
+
+.signals-table td.signals-table-cell--bot--neutral,
+.signals-table td.signals-table-cell--browser--neutral {
+  color: var(--dashboard-signal-neutral);
+}
+
+.signals-table td.signals-table-cell--bot--medium {
+  color: var(--dashboard-red-medium);
+}
+
+.signals-table td.signals-table-cell--browser--medium {
+  color: var(--dashboard-green-medium);
+}
+
+.signals-table td.signals-table-cell--bot--max {
   color: var(--dashboard-red);
 }
 
-.signals-table td.signals-table-cell--browser {
+.signals-table td.signals-table-cell--browser--max {
   color: var(--dashboard-green);
+}
+
+.signals-table td.signals-table-cell--total--dark {
+  color: var(--dashboard-signal-dark);
 }
 
 .signals-table-row--behavioral td {

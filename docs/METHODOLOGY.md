@@ -2278,11 +2278,24 @@ The dashboard consumes a **single JSON payload** produced by **[tools/python/bui
 
 The dashboard does not read logs or config itself; it only displays the precomputed JSON. All logic for windows, timeline buckets, and signal counts lives in the Python script.
 
+### Signal contrast: strong, weak, indistinguishable, not observed
+
+To interpret signal activation in the wild, we distinguish four levels of **contrast** (how well a signal separates bot from browser in observed traffic):
+
+| Level | Meaning | Criterion (bot% / browser% in activations) |
+|-------|---------|--------------------------------------------|
+| **Strong** | Signal clearly discriminates: when it fires, one class dominates. | ≥95% one side (e.g. 95/5 browser or 5/95 bot). |
+| **Weak** | Signal has discriminative power but with overlap. | ≥25% one side and not in the neutral band (e.g. 25/75 or 25/75). |
+| **Indistinguishable** | In this sample the signal does not separate the classes. | 45–55% (roughly even bot/browser when the signal fires). |
+| **Not observed** | No activations in the window; signal is not evaluable in practice. | 0 cases (total = 0). |
+
+These categories support operational and research use: which signals are reliable in production (strong), which need care (weak), which are uninformative in the current cohort (indistinguishable), and which did not appear at all (not observed). The dashboard **visualizes** this contrast in the signals table so operators can scan strong vs weak vs neutral vs absent at a glance.
+
 ### Main UI behaviour
 
 - **Time windows**: Summary cards show total / bot / browser counts and percentages for hour, day, week, month, and all time.
 - **Timeline**: 60 bars; section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as dark bars. **Granularity (10 s / 1 min / 10 min)** is chosen by the payload script: the script builds the timeline at 10 s buckets first; if the **median** of total (bot + browser) per bar over the 60 bars is below a threshold (default 10), it switches to 1 min buckets (1 h window) and, if the median is still below the threshold, to 10 min buckets (10 h window). This keeps typical bars visible instead of collapsing to mostly empty fine-grained bars when traffic is sparse.
-- **Signals table**: Sortable by column (signal_id, total, bot, browser, bot_pct, browser_pct); includes both transport and behavioural signal IDs.
+- **Signals table**: Sortable by signal_id, total, bot, browser, bot_pct, browser_pct; includes transport and behavioural signal IDs. **Contrast** is shown by colour: strong (bright green/red), weak (darker green/red), indistinguishable (gray), not observed (dark gray). See the table above for the thresholds.
 - **Behavioural edges block**: If `behavioral_edges` is present in the payload, the UI shows the four edge values (rate, median, std/mean, mean/median ratio) used for behavioural scoring (Appendix M).
 - **Auto-refresh**: After each successful fetch, the next load is scheduled at half the timeline bucket length (e.g. 5 s for 10 s buckets); the header shows “Auto-refresh every X sec/min”.
 

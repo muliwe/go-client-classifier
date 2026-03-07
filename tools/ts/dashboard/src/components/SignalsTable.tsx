@@ -12,6 +12,22 @@ type SortKey =
   | "browser_pct"
   | "bot_pct";
 
+/** Intensity of signal for table cell styling: 95/5+ max, 25/75+ medium, 45–55 neutral, 0 cases dark. */
+type SignalIntensity = "dark" | "neutral" | "medium" | "max";
+
+function getSignalCellIntensity(
+  s: SignalStat,
+  side: "browser" | "bot",
+): SignalIntensity {
+  if (s.total === 0) return "dark";
+  const pct = side === "browser" ? s.browser_pct : s.bot_pct;
+  if (side === "browser" && pct >= 95) return "max";
+  if (side === "bot" && pct >= 95) return "max";
+  if (pct >= 45 && pct <= 55) return "neutral";
+  if (pct >= 25) return "medium";
+  return "medium";
+}
+
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "signal_id", label: "signal_id" },
   { key: "total", label: "total" },
@@ -138,6 +154,8 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                 const isBehavioral = (s.signal_id ?? "").startsWith(
                   "behavioral_",
                 );
+                const browserIntensity = getSignalCellIntensity(s, "browser");
+                const botIntensity = getSignalCellIntensity(s, "bot");
                 return (
                   <tr
                     key={s.signal_id}
@@ -153,17 +171,33 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                         {String(s.signal_id ?? "")}
                       </span>
                     </td>
-                    <td>{formatInt(s.total)}</td>
-                    <td className="signals-table-cell--browser">
+                    <td
+                      className={
+                        s.total === 0
+                          ? "signals-table-cell--total signals-table-cell--total--dark"
+                          : "signals-table-cell--total"
+                      }
+                    >
+                      {formatInt(s.total)}
+                    </td>
+                    <td
+                      className={`signals-table-cell--browser signals-table-cell--browser--${browserIntensity}`}
+                    >
                       {formatInt(s.browser)}
                     </td>
-                    <td className="signals-table-cell--bot">
+                    <td
+                      className={`signals-table-cell--bot signals-table-cell--bot--${botIntensity}`}
+                    >
                       {formatInt(s.bot)}
                     </td>
-                    <td className="signals-table-cell--browser">
+                    <td
+                      className={`signals-table-cell--browser signals-table-cell--browser--${browserIntensity}`}
+                    >
                       {s.browser_pct.toFixed(1)}%
                     </td>
-                    <td className="signals-table-cell--bot">
+                    <td
+                      className={`signals-table-cell--bot signals-table-cell--bot--${botIntensity}`}
+                    >
                       {s.bot_pct.toFixed(1)}%
                     </td>
                     <td className="signals-table-cell--spacer" aria-hidden />
