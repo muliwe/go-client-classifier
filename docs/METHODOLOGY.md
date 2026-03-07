@@ -2280,13 +2280,13 @@ The dashboard does not read logs or config itself; it only displays the precompu
 
 ### Signal contrast: strong, weak, indistinguishable, not observed
 
-To interpret signal activation in the wild, we distinguish four levels of **contrast** (how well a signal separates bot from browser in observed traffic):
+To interpret signal activation in the wild, we distinguish four levels of **contrast** — how well a signal separates bot from browser in observed traffic. Contrast is evaluated **per side** (browser column vs bot column): each column shows the share of that class among activations of the signal (e.g. browser% = activations that were classified browser).
 
-| Level | Meaning | Criterion (bot% / browser% in activations) |
-|-------|---------|--------------------------------------------|
-| **Strong** | Signal clearly discriminates: when it fires, one class dominates. | ≥95% one side (e.g. 95/5 browser or 5/95 bot). |
-| **Weak** | Signal has discriminative power but with overlap. | ≥25% one side and not in the neutral band (e.g. 25/75 or 25/75). |
-| **Indistinguishable** | In this sample the signal does not separate the classes. | 45–55% (roughly even bot/browser when the signal fires). |
+| Level | Meaning | Criterion (per column: browser% or bot% among activations) |
+|-------|---------|------------------------------------------------------------|
+| **Strong** | When the signal fires, this class clearly dominates. | **Browser column:** ≥75% browser. **Bot column:** ≥95% bot. |
+| **Weak** | Signal has discriminative power but with overlap. | ≥25% that side and **outside** the neutral band (i.e. &lt;40% or &gt;60% that side). |
+| **Indistinguishable** | In this sample the signal does not separate the classes. | 40–60% (roughly even bot/browser when the signal fires). |
 | **Not observed** | No activations in the window; signal is not evaluable in practice. | 0 cases (total = 0). |
 
 These categories support operational and research use: which signals are reliable in production (strong), which need care (weak), which are uninformative in the current cohort (indistinguishable), and which did not appear at all (not observed). The dashboard **visualizes** this contrast in the signals table so operators can scan strong vs weak vs neutral vs absent at a glance.

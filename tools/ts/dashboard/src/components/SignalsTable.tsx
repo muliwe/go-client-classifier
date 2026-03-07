@@ -12,7 +12,7 @@ type SortKey =
   | "browser_pct"
   | "bot_pct";
 
-/** Intensity of signal for table cell styling: 95/5+ max, 25/75+ medium, 45–55 neutral, 0 cases dark. */
+/** Intensity: browser ≥75% max, bot ≥95% max; 25+ medium; 40–60% neutral; 0 cases dark. */
 type SignalIntensity = "dark" | "neutral" | "medium" | "max";
 
 function getSignalCellIntensity(
@@ -21,9 +21,9 @@ function getSignalCellIntensity(
 ): SignalIntensity {
   if (s.total === 0) return "dark";
   const pct = side === "browser" ? s.browser_pct : s.bot_pct;
-  if (side === "browser" && pct >= 95) return "max";
+  if (side === "browser" && pct >= 75) return "max";
   if (side === "bot" && pct >= 95) return "max";
-  if (pct >= 45 && pct <= 55) return "neutral";
+  if (pct >= 40 && pct <= 60) return "neutral";
   if (pct >= 25) return "medium";
   return "medium";
 }
