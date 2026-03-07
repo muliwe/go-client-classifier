@@ -59,7 +59,7 @@ WINDOW_SEC: dict[str, int | float] = {
     "all": float("inf"),
 }
 TIMELINE_DEFAULT_SEC = 600  # 10 minutes (baseline window)
-# Fixed number of bars for all granularities: 10 min with 10 sec step = 60 bars
+# Number of bars built per window; last bar is dropped as partial (current bucket), so 59 are returned
 TIMELINE_BAR_COUNT = 60
 # If median of (total = bot+browser) per bar is below this, cluster to next granularity (1min, then 10min).
 TIMELINE_MEDIAN_TOTAL_THRESHOLD = 10
@@ -197,7 +197,7 @@ def _build_timeline_for_window(
     bucket_sec: int,
     bar_count: int = TIMELINE_BAR_COUNT,
 ) -> list[dict[str, Any]]:
-    """Build timeline with exactly bar_count bars; window_sec = bar_count * bucket_sec. Returns list of { t, total, bot, browser }."""
+    """Build timeline with bar_count bars; window_sec = bar_count * bucket_sec. Returns bar_count - 1 bars: the last bar (current bucket) is always dropped as partial (current hour is often empty or has a single record). Each point: { t, total, bot, browser }."""
     window_sec = bar_count * bucket_sec
     cutoff = now - window_sec
     subset = [r for r in records if r["ts"] >= cutoff]
@@ -215,7 +215,8 @@ def _build_timeline_for_window(
         bot = sum(1 for r in group if r["classification"] == "bot")
         browser = total - bot
         timeline.append({"t": t, "total": total, "bot": bot, "browser": browser})
-    return timeline
+    # Last bar is the current bucket (partial: often empty or 1 record) — always drop it
+    return timeline[:-1]
 
 
 def _median_total(timeline: list[dict[str, Any]]) -> float:
@@ -235,7 +236,7 @@ def _build_timeline(
     now: float,
     last_sec: int,
 ) -> tuple[list[dict[str, Any]], int, int]:
-    """Build timeline with fixed bar count (60). Baseline: 10 min, 10 sec step. If median total per bar < threshold, cluster to 1-min (1h window), then to 10-min (10h window). Returns (timeline, bucket_sec, window_sec)."""
+    """Build timeline with 59 bars (last bar of the period dropped as partial). Baseline: 10 min, 10 sec step. If median total per bar < threshold, cluster to 1-min (1h window), then to 10-min (10h window). Returns (timeline, bucket_sec, window_sec)."""
     bucket_sec = BUCKET_SEC_10SEC
     timeline = _build_timeline_for_window(records, now, bucket_sec)
     window_sec = TIMELINE_BAR_COUNT * bucket_sec
