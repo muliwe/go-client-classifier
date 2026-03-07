@@ -111,6 +111,15 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                           br.
                         </span>
                       </>
+                    ) : key === "browser_pct" ? (
+                      <>
+                        <span className="signals-table-th-label-full">
+                          browser%
+                        </span>
+                        <span className="signals-table-th-label-short">
+                          br.%
+                        </span>
+                      </>
                     ) : (
                       label
                     )}
@@ -121,6 +130,7 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                     )}
                   </th>
                 ))}
+                <th className="signals-table-th--spacer" aria-hidden />
               </tr>
             </thead>
             <tbody>
@@ -156,6 +166,7 @@ export function SignalsTable({ signals }: SignalsTableProps) {
                     <td className="signals-table-cell--bot">
                       {s.bot_pct.toFixed(1)}%
                     </td>
+                    <td className="signals-table-cell--spacer" aria-hidden />
                   </tr>
                 );
               })}

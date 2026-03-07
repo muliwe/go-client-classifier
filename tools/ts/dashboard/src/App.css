@@ -385,14 +385,44 @@
   opacity: 0.9;
 }
 
-/* First column: signal_id — double width, ellipsis on overflow */
-.signals-table th:first-child,
-.signals-table td.signals-table-cell--id {
+/* Data columns: fixed widths so they don't shrink; spacer (last col) gets the rest */
+.signals-table th:nth-child(1),
+.signals-table td:nth-child(1) {
   width: 28ch;
   min-width: 28ch;
   max-width: 56ch;
-  font-family: inherit;
   box-sizing: border-box;
+}
+.signals-table th:nth-child(2),
+.signals-table td:nth-child(2) {
+  width: 14ch;
+  min-width: 14ch;
+}
+.signals-table th:nth-child(3),
+.signals-table td:nth-child(3) {
+  width: 14ch;
+  min-width: 14ch;
+}
+.signals-table th:nth-child(4),
+.signals-table td:nth-child(4) {
+  width: 12ch;
+  min-width: 12ch;
+}
+.signals-table th:nth-child(5),
+.signals-table td:nth-child(5) {
+  width: 12ch;
+  min-width: 12ch;
+}
+.signals-table th:nth-child(6),
+.signals-table td:nth-child(6) {
+  width: 12ch;
+  min-width: 12ch;
+}
+
+/* First column: signal_id — ellipsis on overflow */
+.signals-table th:first-child,
+.signals-table td.signals-table-cell--id {
+  font-family: inherit;
 }
 
 .signals-table th:first-child {
@@ -422,6 +452,15 @@
 
 .signals-table-row--behavioral td {
   color: #ffffff;
+}
+
+/* Spacer column: no width = takes all remaining space (table-layout: fixed) */
+.signals-table-th--spacer,
+.signals-table-cell--spacer {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 /* Short labels for small screens: "browser" → "br." (summary + table only) */
@@ -454,10 +493,22 @@
     width: 14ch;
     min-width: 14ch;
   }
+  .signals-table th:nth-child(2),
+  .signals-table td:nth-child(2),
   .signals-table th:nth-child(5),
-  .signals-table th:nth-child(6),
   .signals-table td:nth-child(5),
+  .signals-table th:nth-child(6),
   .signals-table td:nth-child(6) {
+    width: 9ch;
+    min-width: 9ch;
+  }
+  /* Hide browser (3), bot (4), spacer (7); keep signal_id, total, browser%, bot% */
+  .signals-table th:nth-child(3),
+  .signals-table th:nth-child(4),
+  .signals-table th:nth-child(7),
+  .signals-table td:nth-child(3),
+  .signals-table td:nth-child(4),
+  .signals-table td:nth-child(7) {
     display: none;
   }
 }
