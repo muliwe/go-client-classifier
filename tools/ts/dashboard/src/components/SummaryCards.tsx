@@ -15,8 +15,27 @@ interface SummaryCardsProps {
   windows: DashboardData["windows"];
 }
 
+const WINDOW_ORDER: TimeWindowKey[] = ["hour", "day", "week", "month", "all"];
+
+/** Leave only keys whose total differs from the previous window (first is always shown). */
+function keysWithDistinctTotals(
+  windows: DashboardData["windows"],
+): TimeWindowKey[] {
+  const result: TimeWindowKey[] = [];
+  let prevTotal: number | undefined;
+  for (const key of WINDOW_ORDER) {
+    const w = windows[key];
+    const total = w?.total ?? 0;
+    if (prevTotal === undefined || total !== prevTotal) {
+      result.push(key);
+      prevTotal = total;
+    }
+  }
+  return result;
+}
+
 export function SummaryCards({ windows }: SummaryCardsProps) {
-  const keys: TimeWindowKey[] = ["hour", "day", "week", "month", "all"];
+  const keys = keysWithDistinctTotals(windows);
   return (
     <section className="dashboard-section" aria-labelledby="summary-heading">
       <h2 id="summary-heading" className="dashboard-section-title">

@@ -56,7 +56,8 @@ export function SectionFrameTop({ title, titleNode }: SectionFrameTopProps) {
       role="presentation"
     >
       <span className="dashboard-section-frame-start" aria-hidden="true">
-        ┌─ {titleNode ?? title}{" "}
+        ┌─ {titleNode ?? title}
+        {"\u00A0"}
       </span>
       <div
         ref={lineRef}
