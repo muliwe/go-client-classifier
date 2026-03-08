@@ -4,7 +4,7 @@ Academic research project for classifying automated HTTP clients (bots, LLMs, cr
 
 **Live:** [Dashboard](https://www.invent.sale/dashboard/) · [Bot detector](https://antibot.invent.sale/)
 
-**Version**: 1.5.0 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
+**Version**: 1.5.1 | [Changelog](CHANGELOG.md) | [Methodology](docs/METHODOLOGY.md)
 
 ### Performance Highlights
 
@@ -347,7 +347,7 @@ Tests verify:
   "message": "You appear to be using a browser",
   "request_id": "uuid",
   "timestamp": "2026-02-18T12:00:00Z",
-  "version": "1.5.0"
+  "version": "1.5.1"
 }
 ```
 

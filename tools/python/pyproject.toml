@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "go-client-classifier-tools"
-version = "1.5.0"
+version = "1.5.1"
 description = "Python tools for go-client-classifier (antibot tests, etc.)"
 readme = "README.md"
 authors = []

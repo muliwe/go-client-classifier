@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.5.1 (2026-03-08)
+
+### Classifier: /favicon.ico not logged
+
+- **HandleClassify**: Requests to `/favicon.ico` now return 404 **without** being written to JSONL logs or recorded in metrics (IP/nonce frequency). This avoids cluttering frequency-based behavioral statistics with browser favicon requests.
+
 ## v1.5.0 (2026-03-08)
 
 ### sample_assessment.py: random sample for manual FP/FN assessment

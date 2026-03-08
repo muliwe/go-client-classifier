@@ -67,7 +67,7 @@ func stripHostPort(hostport string) string {
 	return host
 }
 
-const version = "1.5.0"
+const version = "1.5.1"
 
 // Response represents the API response
 type Response struct {
@@ -171,9 +171,14 @@ func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.Classi
 
 // HandleClassify handles the main classification endpoint.
 // Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
+// /favicon.ico is answered with 404 without logging or metrics to avoid cluttering frequency statistics.
 // When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (Appendix K).
 // When Redis and behavioral edges are configured, request_metrics are applied (Appendix M) before the challenge.
 func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/favicon.ico" {
+		http.NotFound(w, r)
+		return
+	}
 	startTime := time.Now()
 
 	fp := h.collector.Collect(r)
