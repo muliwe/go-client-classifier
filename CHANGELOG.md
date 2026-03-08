@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.5.0 (2026-03-08)
+
+### sample_assessment.py: random sample for manual FP/FN assessment
+
+- **New script** `tools/python/sample_assessment.py`: Builds a **random representative sample** from request JSONL for manual assessment of false positives and false negatives. Reads JSONL logs, excludes IPs in the top-10 and bottom-10 by request count (and IPs with fewer than 2 requests), then randomly selects 100 IPs that have at least one bot-labeled request and 100 IPs that have at least one browser-labeled request. For each selected IP outputs the **first 10 requests by time** with: time, **delta from previous request (ms)**, classification, url, client, cookies, referrer. Console output is human-readable (formatted sections per IP); optional `-o` writes full JSON (meta + samples with delta_ms). Options: `--bot-n`, `--browser-n`, `--seed` for reproducibility. See [tools/python/README.md](tools/python/README.md) and [METHODOLOGY Appendix O](docs/METHODOLOGY.md#appendix-o-manual-assessment-tactic).
+
+### METHODOLOGY Appendix O: Manual assessment tactic
+
+- **Appendix O**: New [METHODOLOGY.md Appendix O](docs/METHODOLOGY.md#appendix-o-manual-assessment-tactic) documents the **manual assessment tactic** for estimating FP/FN on current traffic: purpose (representative sample without top/bottom IPs), use of `sample_assessment.py`, and **current log volume** (example counts for last hour, 24 h, 7 days, 30 days — total, bot, browser and percentages) to size the sample and interpret results.
+
 ## v1.4.1 (2026-03-07)
 
 ### Dashboard: signals table intensity

@@ -1,6 +1,6 @@
 # Python tools
 
-Helper Python scripts for the go-client-classifier project (antibot bypass tests and more).
+Helper Python scripts for the go-client-classifier project (antibot bypass tests, request-log statistics, dashboard payload, and manual assessment sampling).
 
 ## Requirements
 
@@ -100,6 +100,16 @@ This runs pre-commit from the repo root, so the result is identical to `pre-comm
   ```
 
   Options: `-o` — output JSON (default: stdout); `--charts-dir` — directory for PNG charts; `--p-from`, `--p-to` — percentile bar range, 1-based (default: 1 and 99, i.e. p01–p99); `--no-progress`; `--req-per-min`, `--gap-median-sec`, `--gap-std-mean`, `--gap-mean-median` — edge thresholds for display on charts.
+
+- **sample_assessment.py** — builds a **random representative sample** from request JSONL for **manual FP/FN assessment**. Excludes IPs in the top-10 and bottom-10 by request count and IPs with fewer than 2 requests; randomly selects 100 bot-labeled IPs and 100 browser-labeled IPs (configurable), then for each IP outputs the first 10 requests by time with: time, **delta (ms)** from previous request, classification, url, client, cookies, referrer. Console output is human-readable; `-o` writes full JSON. See [METHODOLOGY Appendix O](docs/METHODOLOGY.md#appendix-o-manual-assessment-tactic).
+
+  ```bash
+  poetry run python sample_assessment.py "logs/requests.jsonl"
+  poetry run python sample_assessment.py -o sample.json --json "logs/requests.jsonl"
+  poetry run python sample_assessment.py --bot-n 50 --browser-n 50 --seed 42 "logs/**/requests_*.jsonl"
+  ```
+
+  Options: `-o` / `--output` — write full result JSON; `--json` — print JSON to stdout; `--bot-n`, `--browser-n` — number of IPs to sample per class (default 100 each); `--seed` — random seed for reproducibility.
 
 ## Dashboard payload (build_dashboard_payload.py)
 

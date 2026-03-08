@@ -27,6 +27,7 @@ Research documentation for transport-level HTTP client classification.
 - [Appendix L: Behavioural monitoring](#appendix-l-behavioural-monitoring)
 - [Appendix M: Behavioural-metrics edge values for bot scoring](#appendix-m-behavioural-metrics-edge-values-for-bot-scoring)
 - [Appendix N: Dashboard functionality](#appendix-n-dashboard-functionality)
+- [Appendix O: Manual assessment tactic](#appendix-o-manual-assessment-tactic)
 
 ---
 
@@ -2300,6 +2301,48 @@ These categories support operational and research use: which signals are reliabl
 - **Auto-refresh**: After each successful fetch, the next load is scheduled at half the timeline bucket length (e.g. 5 s for 10 s buckets); the header shows “Auto-refresh every X sec/min”.
 
 Deployment (building the frontend, exposing it and the payload in nginx, and running the statistics script in cron) is described in the main [README](../README.md) under **Dashboard deployment**.
+
+---
+
+## Appendix O: Manual assessment tactic
+
+Manual assessment is used to estimate **false positive** (FP) and **false negative** (FN) rates on current traffic: a reviewer labels a representative sample of requests as “true” bot or browser; comparison with classifier labels yields FP/FN counts and rates.
+
+### Tactic
+
+1. **Sample selection**
+   From request JSONL we do **not** take the busiest or quietest IPs (top-10 and bottom-10 by request count are excluded) so the sample is not dominated by a few heavy hitters or one-off probes. IPs with fewer than 2 requests are also excluded. From the remaining “middle” IPs we randomly choose:
+   - **100 IPs** that have at least one request classified as **bot**,
+   - **100 IPs** that have at least one request classified as **browser**.
+
+2. **Per-IP slice**
+   For each selected IP we take **all** its requests, sort by time. Each row includes: time, **delta from previous request (ms)**, classification (as in the log), url, client (User-Agent), cookies, referrer. Delta supports quick spotting of bot-like bursts (very small gaps) vs browser-like spacing.
+
+3. **Review**
+   The reviewer marks each request (or each IP) as “actually bot” or “actually browser”. Disagreements with the log classification are FP (classified bot, actually browser) or FN (classified browser, actually bot). Aggregating over the sample gives estimated FP/FN rates for the current classifier and traffic mix.
+
+### Tool
+
+The script **sample_assessment.py** ([tools/python/sample_assessment.py](../tools/python/sample_assessment.py)) implements this flow: it reads JSONL (e.g. `logs/**/requests_*.jsonl`), applies the filters above, and outputs either human-readable text to the console or full JSON to a file. See [tools/python/README.md](../tools/python/README.md).
+
+### Mathematical rationale and references
+
+We estimate **proportions**: in the stratum of classifier-labeled "bot" we estimate the **false positive rate** (share of those that are actually browser); in the "browser" stratum we estimate the **false negative rate** (share of those that are actually bot). With **stratified simple random sampling** — 100 IPs drawn at random from each stratum (after excluding top/bottom 10 by count and IPs with &lt;2 requests) — each stratum gives *n* = 100 (or more if the reviewer labels at request level, up to ~10× per IP).
+
+For a proportion *p* estimated from *n* independent binary labels, the **standard error** is SE(p̂) = √[*p*(1−*p*)/*n*]. At **95% confidence**, the margin of error is approximately 1.96×SE. In the worst case (*p* = 0.5), margin ≈ **±10%** for *n* = 100 and **±7%** for *n* = 200. So 100+100 IPs (or the corresponding number of request-level labels) yields FP/FN rate estimates with roughly ±10% precision per stratum, sufficient for operational monitoring and trend detection without requiring a full census [1].
+
+When the sample size *n* is small relative to the population size *N* (e.g. 100 vs ~30 000 bot requests in 30 days), the **finite-population correction** √[(*N*−*n*)/(*N*−1)] is close to 1, so the binomial SE above is appropriate [1]. Exclusion of top/bottom IPs by count avoids skewing the sample toward a few very active or one-off IPs and keeps the effective population for "middle" IPs large enough that the simple random sampling approximation holds.
+
+**References**
+
+- [1] **Cochran, W. G.** (1977). *Sampling Techniques*, 3rd ed. Wiley. Ch. 3–4: simple random sampling, estimation of proportions, standard error and confidence limits; finite population correction.
+- [2] **Brown, L. D., Cai, T. T., DasGupta, A.** (2001). Interval estimation for a binomial proportion. *Statistical Science*, 16(2), 101–133. (Alternative: Wilson score interval for better coverage when *p* is near 0 or 1; our ±10% margin is conservative.)
+
+### Current log volume (example)
+
+The following counts are an example of **current request volume** by window. They are used to **size the sample** (e.g. ~30k bot and ~28k browser in 30 days ⇒ random 100+100 IPs is a representative subset with margin of error on the order of ±10% per stratum; see [Mathematical rationale and references](#mathematical-rationale-and-references) above) and to **interpret FP/FN in context** (e.g. bot share in the last 30 days ~51% vs ~10% in the last hour).
+
+Re-running manual assessment periodically (e.g. after scoring or edge changes) with a new random sample keeps FP/FN estimates aligned with current traffic and classifier behaviour.
 
 ---
 

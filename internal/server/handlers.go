@@ -67,7 +67,7 @@ func stripHostPort(hostport string) string {
 	return host
 }
 
-const version = "1.4.1"
+const version = "1.5.0"
 
 // Response represents the API response
 type Response struct {
