@@ -149,7 +149,7 @@ export default function App() {
           {" · "}
           Data loaded {" · "} Total {formatInt(data.windows.all.total)}{" "}
           request(s) {" · "}
-          Auto-refresh every&nbsp;{refreshLabel}{" "}
+          Auto-refresh every&nbsp;&nbsp;{refreshLabel}{" "}
           <span className="dashboard-header-cursor" aria-hidden="true">
             ▌
           </span>
