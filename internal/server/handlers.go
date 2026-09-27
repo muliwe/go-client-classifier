@@ -169,13 +169,25 @@ func (h *Handler) recordAndLogRequest(r *http.Request, result fingerprint.Classi
 	return requestMetrics, challengeState
 }
 
+// validNotFoundPaths are routine browser URLs this service does not host.
+// They return 404 without classification, logging, or metrics, so they are not treated as bot probes.
+var validNotFoundPaths = map[string]struct{}{
+	"/favicon.ico": {},
+	"/robots.txt":  {},
+}
+
+func isValidNotFound(path string) bool {
+	_, ok := validNotFoundPaths[path]
+	return ok
+}
+
 // HandleClassify handles the main classification endpoint.
 // Classification and logging are done for every request; only GET / returns 200 JSON, other paths return 404.
-// /favicon.ico is answered with 404 without logging or metrics to avoid cluttering frequency statistics.
+// Paths in validNotFoundPaths are answered with 404 without logging or metrics to avoid cluttering frequency statistics.
 // When the Client Hints challenge is enabled, response may include Accept-CH, Critical-CH, Vary, and Set-Cookie (Appendix K).
 // When Redis and behavioral edges are configured, request_metrics are applied (Appendix M) before the challenge.
 func (h *Handler) HandleClassify(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/favicon.ico" {
+	if isValidNotFound(r.URL.Path) {
 		http.NotFound(w, r)
 		return
 	}

@@ -159,34 +159,39 @@ func TestServerHandleClassify_NotFoundStillLogs(t *testing.T) {
 	}
 }
 
-// TestServerHandleClassify_FaviconNoLog verifies that /favicon.ico returns 404 and is not logged (no JSONL, no metrics).
-func TestServerHandleClassify_FaviconNoLog(t *testing.T) {
-	tmpDir := t.TempDir()
-	logCfg := logger.Config{LogDir: tmpDir, FileName: "test.jsonl", Daily: false}
-	l, err := logger.New(logCfg)
-	if err != nil {
-		t.Fatalf("logger.New: %v", err)
-	}
-	defer func() { _ = l.Close() }()
+// TestServerHandleClassify_ValidNotFoundNoLog verifies that routine browser 404s
+// (/favicon.ico, /robots.txt) are not classified or logged.
+func TestServerHandleClassify_ValidNotFoundNoLog(t *testing.T) {
+	for _, path := range []string{"/favicon.ico", "/robots.txt"} {
+		t.Run(path, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			logCfg := logger.Config{LogDir: tmpDir, FileName: "test.jsonl", Daily: false}
+			l, err := logger.New(logCfg)
+			if err != nil {
+				t.Fatalf("logger.New: %v", err)
+			}
+			defer func() { _ = l.Close() }()
 
-	collector := fingerprint.NewCollector()
-	cls := classifier.New(classifier.DefaultConfig())
-	h := server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: cls, Logger: l})
-	h.SetQuiet(true)
+			collector := fingerprint.NewCollector()
+			cls := classifier.New(classifier.DefaultConfig())
+			h := server.NewHandler(server.HandlerOptions{Collector: collector, Classifier: cls, Logger: l})
+			h.SetQuiet(true)
 
-	req := httptest.NewRequest("GET", "/favicon.ico", nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", path, nil)
+			req.Header.Set("User-Agent", "Mozilla/5.0")
+			w := httptest.NewRecorder()
 
-	h.HandleClassify(w, req)
+			h.HandleClassify(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("HandleClassify(/favicon.ico) status = %d, want %d", w.Code, http.StatusNotFound)
-	}
-	logPath := filepath.Join(tmpDir, "test.jsonl")
-	data, _ := os.ReadFile(logPath)
-	if len(data) != 0 {
-		t.Errorf("favicon.ico must not be logged: log file has %d bytes", len(data))
+			if w.Code != http.StatusNotFound {
+				t.Errorf("HandleClassify(%s) status = %d, want %d", path, w.Code, http.StatusNotFound)
+			}
+			logPath := filepath.Join(tmpDir, "test.jsonl")
+			data, _ := os.ReadFile(logPath)
+			if len(data) != 0 {
+				t.Errorf("%s must not be logged: log file has %d bytes", path, len(data))
+			}
+		})
 	}
 }
 

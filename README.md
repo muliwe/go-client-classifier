@@ -497,7 +497,7 @@ Verify: `curl http://localhost:8080/health` and `curl -k https://localhost:8443/
   ```
   Or from the app directory: `tail -f logs/requests_*.jsonl` (today’s file).
 
-**Note:** Any request that hits the classify handler (including non-root paths like `/not-known`) is classified and written to the JSONL and console logs; only **GET /** returns 200 JSON, other paths return 404. **GET /health** and **GET /debug** are handled by other handlers and are not logged. If the log stays empty, check `journalctl -u go-client-classifier -f` for the "Logs:" path at startup and any "Error logging result" messages.
+**Note:** Any request that hits the classify handler (including non-root paths like `/not-known`) is classified and written to the JSONL and console logs; only **GET /** returns 200 JSON, other paths return 404. **GET /favicon.ico** and **GET /robots.txt** return 404 without classification or logging (routine browser requests, not treated as probes). **GET /health** and **GET /debug** are handled by other handlers and are not logged. If the log stays empty, check `journalctl -u go-client-classifier -f` for the "Logs:" path at startup and any "Error logging result" messages.
 
 **Environment variables**
 
