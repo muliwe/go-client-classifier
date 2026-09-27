@@ -94,6 +94,20 @@
   color: var(--dashboard-red);
 }
 
+.dashboard-stale {
+  margin: 0.55rem 0 0.35rem;
+  text-align: center;
+}
+
+.dashboard-stale-badge {
+  display: inline-block;
+  padding: 0.12rem 1.4ch;
+  border: 1px solid #d29922;
+  color: #e3b341;
+  background: #1c1508;
+  letter-spacing: 0.03em;
+}
+
 /* Sections */
 .dashboard-section {
   margin: 0;

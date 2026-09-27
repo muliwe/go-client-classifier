@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.5.2 (2026-09-28)
+
+### Dashboard: retry after a failed refresh
+
+- **Auto-refresh**: A failed fetch no longer stops the refresh loop. The next attempt is every **1 minute** until a load succeeds, then the interval returns to `timeline_bucket_sec / 2` from the JSON.
+- **Stale data**: If a refresh fails after data is already on screen, that snapshot stays. A badge at the top shows how old it is (`stale · N h MM min old`), counted from the last successful load and updated every second. The badge clears on the next success. If the first load never succeeds, the error screen remains and retries every minute.
+
+### Classifier: /robots.txt not logged
+
+- **HandleClassify**: `/robots.txt` is in the same valid-404 list as `/favicon.ico`. Both return 404 **without** classification, JSONL logging, or metrics, so routine browser requests are not treated as bot probes.
+
 ## v1.5.1 (2026-03-08)
 
 ### Classifier: /favicon.ico not logged

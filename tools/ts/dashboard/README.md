@@ -33,7 +33,7 @@ npm install
 npm run dev
 ```
 
-The app loads dashboard data from `/dashboard.json` by default (e.g. from `public/dashboard.json` during dev). After load it schedules the next fetch at half the timeline bar length (from `timeline_bucket_sec`); the header shows “Auto-refresh every X sec/min”.
+The app loads dashboard data from `/dashboard.json` by default (e.g. from `public/dashboard.json` during dev). After a successful load it schedules the next fetch at half the timeline bar length (from `timeline_bucket_sec`); the header shows “Auto-refresh every X sec/min”. A failed load retries every minute until it succeeds, then returns to that interval. If data is already on screen, a failed refresh keeps it and shows how old it is.
 
 ## Build
 
@@ -116,7 +116,7 @@ This JSON is intended to be produced by a generator such as **tools/python/build
 
 - **Timeline**: Bars are ordered **newest first** (most recent bucket at the top). Section title reflects window and granularity (e.g. “last 10 minutes, by 10 sec”). Empty buckets are drawn as a dark bar with no numbers.
 - **Signals table**: Click a column header to sort. Default sort is `signal_id` ascending; other columns sort descending on first click; click again to toggle direction. Indicator ▲/▼ shows current column and direction.
-- **Auto-refresh**: After each successful load, the next fetch is scheduled in `timeline_bucket_sec / 2` seconds (e.g. 5 s for 10 s bars, 30 min for 1 h bars). The header line shows “Auto-refresh every X sec/min”.
+- **Auto-refresh**: After each successful load, the next fetch is scheduled in `timeline_bucket_sec / 2` seconds (e.g. 5 s for 10 s bars, 30 min for 1 h bars). The header line shows “Auto-refresh every X sec/min”. If a fetch fails before any data is shown, the dashboard shows the error and retries every minute. If a fetch fails after data is already on screen, that data stays; a badge under the header shows how old it is (`stale · N h MM min old`) and retries continue every minute. A successful load clears the badge and resumes the interval from `timeline_bucket_sec`.
 
 ## Styling
 

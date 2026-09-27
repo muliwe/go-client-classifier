@@ -10,6 +10,7 @@ import type { DashboardData } from "./types/dashboard";
 import "./App.css";
 
 const DEFAULT_BUCKET_SEC = 10;
+const RETRY_INTERVAL_MS = 60_000;
 
 function formatRefreshInterval(bucketSec: number): string {
   const sec = Math.round(bucketSec / 2);
@@ -19,8 +20,18 @@ function formatRefreshInterval(bucketSec: number): string {
   return `${Math.round(min / 60)} h`;
 }
 
+function formatDataAge(ageMs: number): string {
+  const totalMin = Math.max(0, Math.floor(ageMs / 60_000));
+  const hours = Math.floor(totalMin / 60);
+  const minutes = totalMin % 60;
+  return `${hours} h ${String(minutes).padStart(2, "0")} min old`;
+}
+
 export default function App() {
-  const [result, setResult] = useState<LoadResult | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [viewportKey, setViewportKey] = useState(
     () => `${window.innerWidth}x${window.innerHeight}`,
   );
@@ -34,25 +45,44 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    loadDashboard().then((r) => {
-      if (!cancelled) setResult(r);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const schedule = (delayMs: number) => {
+      timer = setTimeout(() => {
+        loadDashboard().then((r: LoadResult) => {
+          if (cancelled) return;
+          if (r.ok) {
+            setData(r.data);
+            setLoadedAt(Date.now());
+            setError(null);
+            const bucketSec =
+              r.data.timeline_bucket_sec ?? DEFAULT_BUCKET_SEC;
+            schedule((bucketSec / 2) * 1000);
+            return;
+          }
+          setNow(Date.now());
+          setError(r.error);
+          schedule(RETRY_INTERVAL_MS);
+        });
+      }, delayMs);
+    };
+
+    schedule(0);
     return () => {
       cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
     };
   }, []);
 
-  useEffect(() => {
-    if (!result?.ok) return;
-    const bucketSec = result.data.timeline_bucket_sec ?? DEFAULT_BUCKET_SEC;
-    const delayMs = (bucketSec / 2) * 1000;
-    const id = setTimeout(() => {
-      loadDashboard().then(setResult);
-    }, delayMs);
-    return () => clearTimeout(id);
-  }, [result]);
+  const stale = data !== null && error !== null && loadedAt !== null;
 
-  if (result === null) {
+  useEffect(() => {
+    if (!stale || loadedAt === null) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [stale, loadedAt]);
+
+  if (data === null && error === null) {
     return (
       <div className="dashboard-root">
         <header className="dashboard-header">
@@ -86,7 +116,7 @@ export default function App() {
     );
   }
 
-  if (!result.ok) {
+  if (data === null) {
     return (
       <div className="dashboard-root">
         <header className="dashboard-header">
@@ -113,19 +143,27 @@ export default function App() {
         </header>
         <main className="dashboard-main">
           <p className="dashboard-message dashboard-message--error">
-            {result.error}
+            {error}
+            <br />
+            Retrying every 1 min…
           </p>
         </main>
       </div>
     );
   }
 
-  const data: DashboardData = result.data;
   const bucketSec = data.timeline_bucket_sec ?? DEFAULT_BUCKET_SEC;
   const refreshLabel = formatRefreshInterval(bucketSec);
+  const ageLabel =
+    stale && loadedAt !== null ? formatDataAge(now - loadedAt) : null;
   return (
     <div className="dashboard-root">
       <header className="dashboard-header">
+        {ageLabel && (
+          <p className="dashboard-stale" role="status">
+            <span className="dashboard-stale-badge">▲ stale · {ageLabel}</span>
+          </p>
+        )}
         <h1 className="dashboard-header-title">
           <SectionFrameTop title="Bot Detector Dashboard" />
         </h1>
