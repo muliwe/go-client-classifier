@@ -436,30 +436,13 @@ func parseHeaderCount(s string, result *int) (int, error) {
 // When TLS is from proxy, backend sees HTTP/1.x so JA4H version is "11"/"10"; is_http2 comes from ALPN.
 // We do not compare JA4H version vs is_http2 when from_proxy to avoid false inconsistency.
 func checkJA4HConsistency(s *Signals, fp Fingerprint) bool {
-	consistent := true
-
 	// HTTP/2 consistency (skip when from proxy: JA4H reflects backend HTTP/1.x, not client protocol)
-	if !fp.TLS.FromProxy && s.JA4HIsHTTP2 != s.IsHTTP2 {
-		consistent = false
-	}
-
-	// Cookie consistency
-	if s.JA4HHasCookies != fp.HTTP.HasCookies {
-		consistent = false
-	}
-
-	// Referer consistency
-	if s.JA4HHasReferer != fp.HTTP.HasReferer {
-		consistent = false
-	}
-
-	// Accept-Language consistency
+	http2OK := fp.TLS.FromProxy || s.JA4HIsHTTP2 == s.IsHTTP2
+	cookiesOK := s.JA4HHasCookies == fp.HTTP.HasCookies
+	refererOK := s.JA4HHasReferer == fp.HTTP.HasReferer
 	// If JA4H says "0000" (no language), HasAcceptLanguage should be false
-	if s.JA4HMissingLanguage && s.HasAcceptLanguage {
-		consistent = false
-	}
-
-	return consistent
+	languageOK := !s.JA4HMissingLanguage || !s.HasAcceptLanguage
+	return http2OK && cookiesOK && refererOK && languageOK
 }
 
 // addBrowser adds points for a browser signal key and appends to reasons if points > 0.
@@ -664,7 +647,7 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 
 	proxyHasClientTLS := fp.TLS.ALPN != "" || fp.TLS.JA3Hash != "" || fp.TLS.CipherSuite != ""
 	if s.UserAgentIsBrowser && !s.UserAgentIsBot && !fp.HTTP.HasCookies && s.JA4HZeroedCookieHashes &&
-		!(fp.TLS.FromProxy && !proxyHasClientTLS) {
+		(!fp.TLS.FromProxy || proxyHasClientTLS) {
 		botScore += addBot(&botReasons, "ja4h-no-cookies")
 	}
 
@@ -707,9 +690,9 @@ func calculateScores(s Signals, fp Fingerprint) (browserScore, botScore int, bre
 	// No smoking-gun bot signals → optional small browser bonus (tunable, default 0).
 	noSmokingGun := !s.TLSObsolete && !s.TLSExoticALPN && !s.RequestIsProbe &&
 		!s.UserAgentIsBot && s.HasUserAgent &&
-		!(s.UserAgentIsBrowser && !s.UserAgentIsBot && s.TLSKnownLibrary && !s.TLSKnownBrowser) &&
-		!(s.UserAgentIsBot && s.TLSKnownBrowser) &&
-		!(s.TLSFromProxy && proxyHasClientTLS && s.UserAgentIsBrowser && !s.UserAgentIsBot && !s.HasSSLGreased)
+		(!s.UserAgentIsBrowser || s.UserAgentIsBot || !s.TLSKnownLibrary || s.TLSKnownBrowser) &&
+		(!s.UserAgentIsBot || !s.TLSKnownBrowser) &&
+		(!s.TLSFromProxy || !proxyHasClientTLS || !s.UserAgentIsBrowser || s.UserAgentIsBot || s.HasSSLGreased)
 	if noSmokingGun {
 		browserScore += addBrowser(&browserReasons, "no-bot-red-flags")
 	}

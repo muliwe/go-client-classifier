@@ -1,32 +1,38 @@
+version: "2"
 run:
-  timeout: 5m
-  go: "1.22"
-
+  go: "1.24"
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - gofmt
-    - goimports
-    - misspell
     - bodyclose
     - gocritic
-
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/muliwe/go-client-classifier
-  misspell:
-    locale: US
-
+    - misspell
+  settings:
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    paths:
+      - node_modules
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-use-default: false
-  exclude-dirs:
-    - node_modules
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/muliwe/go-client-classifier
+  exclusions:
+    generated: lax
+    paths:
+      - node_modules
+      - third_party$
+      - builtin$
+      - examples$
